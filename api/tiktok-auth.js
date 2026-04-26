@@ -19,14 +19,15 @@ export default async function handler(req, res) {
     return res.status(400).send(errorPage('No authorization code received from TikTok.'));
   }
 
-  const clientKey    = process.env.TT_CLIENT_KEY;
-  const clientSecret = process.env.TT_CLIENT_SECRET;
+  // Accept either naming convention (TT_* or TIKTOK_*)
+  const clientKey    = process.env.TT_CLIENT_KEY    || process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TT_CLIENT_SECRET || process.env.TIKTOK_CLIENT_SECRET;
   const redirectUri  = 'https://paulferrante-dashboard-deploy.vercel.app/api/tiktok-auth';
   const baseUrl      = process.env.KV_REST_API_URL;
   const kvToken      = process.env.KV_REST_API_TOKEN;
 
   if (!clientKey || !clientSecret) {
-    return res.status(500).send(errorPage('TT_CLIENT_KEY or TT_CLIENT_SECRET not configured in Vercel.'));
+    return res.status(500).send(errorPage('TikTok client credentials not configured. Set TT_CLIENT_KEY/TT_CLIENT_SECRET (or TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET) in Vercel.'));
   }
 
   try {

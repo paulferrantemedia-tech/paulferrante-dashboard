@@ -1,5 +1,11 @@
 // /api/tiktok-stats.js — TikTok Content API analytics
 // Access token auto-refreshes using stored refresh token (valid 365 days)
+// GET  /api/tiktok-stats         → fetch (cached 30 min)
+// GET  /api/tiktok-stats?force=true → bypass cache
+// GET  /api/tiktok-stats?cron=1  → lightweight token-refresh ping (called by Vercel Cron daily)
+//
+// Env vars: accepts either TT_CLIENT_KEY/TT_CLIENT_SECRET (original)
+//           or TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET (Vercel-style names) — first match wins
 
 const TT_BASE   = 'https://open.tiktokapis.com/v2';
 const CACHE_KEY = 'pf_tt_stats_v1';
@@ -137,15 +143,31 @@ export default async function handler(req, res) {
 
   const baseUrl      = process.env.KV_REST_API_URL;
   const kvToken      = process.env.KV_REST_API_TOKEN;
-  const clientKey    = process.env.TT_CLIENT_KEY;
-  const clientSecret = process.env.TT_CLIENT_SECRET;
+  // Accept either naming convention so a rename in Vercel isn't required
+  const clientKey    = process.env.TT_CLIENT_KEY    || process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TT_CLIENT_SECRET || process.env.TIKTOK_CLIENT_SECRET;
   const force        = req.query?.force === 'true';
+  const cron         = req.query?.cron  === '1';
 
   if (!clientKey || !clientSecret) {
-    return res.status(400).json({ ok: false, error: 'TikTok credentials not configured', hint: 'Add TT_CLIENT_KEY and TT_CLIENT_SECRET to Vercel env vars' });
+    return res.status(400).json({ ok: false, error: 'TikTok credentials not configured', hint: 'Add TT_CLIENT_KEY/TT_CLIENT_SECRET (or TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET) to Vercel env vars' });
   }
   if (!baseUrl || !kvToken) {
     return res.status(400).json({ ok: false, error: 'Redis not configured' });
+  }
+
+  // Cron mode: lightweight token-refresh ping triggered daily by Vercel Cron.
+  // TikTok access tokens expire in 24h, so this MUST run at least daily to
+  // keep the dashboard's connection alive. Skips cache and stats fetch.
+  if (cron) {
+    const tokenData = await getValidToken(baseUrl, kvToken, clientKey, clientSecret);
+    const stored    = await kvGet(baseUrl, kvToken, TOKEN_KEY);
+    return res.status(200).json({
+      ok: !!tokenData,
+      refreshedAt: new Date().toISOString(),
+      hasStoredTokens: !!stored,
+      accessTokenValid: !!tokenData,
+    });
   }
 
   // Cache check

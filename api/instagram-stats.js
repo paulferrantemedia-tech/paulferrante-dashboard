@@ -1,7 +1,8 @@
 // /api/instagram-stats.js — Instagram Graph API analytics
-// GET  /api/instagram-stats        → fetch (cached 30 min)
-// GET  /api/instagram-stats?force=true → force refresh
-// GET  /api/instagram-stats?setup=true → return IG User ID from token (first-time setup helper)
+// GET  /api/instagram-stats              → fetch (cached 30 min)
+// GET  /api/instagram-stats?force=true   → force refresh (clears stored token, re-bootstraps from env)
+// GET  /api/instagram-stats?cron=1       → lightweight token-refresh ping (called by Vercel Cron daily)
+// GET  /api/instagram-stats?setup=true   → return IG User ID from token (first-time setup helper)
 
 const IG_BASE    = 'https://graph.facebook.com/v20.0';
 const CACHE_KEY  = 'pf_ig_stats_v1';
@@ -62,9 +63,10 @@ async function refreshLongLived(token) {
   return null;
 }
 
-async function getToken(baseUrl, kvToken) {
+async function getToken(baseUrl, kvToken, opts = {}) {
   const envToken = process.env.IG_ACCESS_TOKEN;
   const now      = Date.now();
+  const forceRefresh = opts.forceRefresh === true;
 
   if (baseUrl && kvToken) {
     const stored = await kvGet(baseUrl, kvToken, TOKEN_KEY);
@@ -74,8 +76,8 @@ async function getToken(baseUrl, kvToken) {
       const hoursSince  = (now - (stored.refreshedAt || 0)) / 3600000;
 
       if (stillValid) {
-        // Proactively refresh once per day to reset the 60-day clock
-        if (hoursSince >= 24) {
+        // Proactively refresh: daily on read, or always when called from cron (forceRefresh)
+        if (forceRefresh || hoursSince >= 24) {
           const refreshed = await refreshLongLived(stored.token);
           if (refreshed) {
             await kvSet(baseUrl, kvToken, TOKEN_KEY, refreshed);
@@ -210,6 +212,28 @@ export default async function handler(req, res) {
   const userId   = process.env.IG_USER_ID;
   const force    = req.query?.force === 'true';
   const setup    = req.query?.setup  === 'true';
+  const cron     = req.query?.cron   === '1';
+
+  // Cron mode: lightweight token-refresh ping triggered daily by Vercel Cron.
+  // Forces refresh of the stored long-lived token to reset the 60-day clock,
+  // even if the dashboard hasn't been opened. Skips cache and stats fetch
+  // to keep function compute minimal.
+  if (cron) {
+    if (!baseUrl || !kvToken) {
+      return res.status(500).json({ ok: false, error: 'KV not configured' });
+    }
+    const token   = await getToken(baseUrl, kvToken, { forceRefresh: true });
+    const stored  = await kvGet(baseUrl, kvToken, TOKEN_KEY);
+    const daysLeft = stored?.expiresAt
+      ? Math.round((stored.expiresAt - Date.now()) / 86400000)
+      : null;
+    return res.status(200).json({
+      ok: !!token,
+      refreshedAt: new Date().toISOString(),
+      tokenExpiresInDays: daysLeft,
+      hasStoredToken: !!stored?.token,
+    });
+  }
 
   // Setup mode: find IG User ID from token (first-time helper)
   if (setup) {

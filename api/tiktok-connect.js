@@ -2,12 +2,13 @@
 // Visit this URL in browser to connect your TikTok account
 
 export default function handler(req, res) {
-  const clientKey = process.env.TT_CLIENT_KEY;
+  // Accept either naming convention (TT_* or TIKTOK_*)
+  const clientKey = process.env.TT_CLIENT_KEY || process.env.TIKTOK_CLIENT_KEY;
   if (!clientKey) {
     return res.status(400).send(`
       <html><body style="background:#0a0a0a;color:#fff;font-family:sans-serif;padding:40px;max-width:500px">
-        <h2 style="color:#f87171">TT_CLIENT_KEY not set</h2>
-        <p>Add TT_CLIENT_KEY to your Vercel environment variables first, then redeploy.</p>
+        <h2 style="color:#f87171">TikTok client key not set</h2>
+        <p>Add TT_CLIENT_KEY (or TIKTOK_CLIENT_KEY) to your Vercel environment variables first, then redeploy.</p>
       </body></html>
     `);
   }
