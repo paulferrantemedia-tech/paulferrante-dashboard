@@ -76,9 +76,13 @@ async function getToken(baseUrl, kvToken, opts = {}) {
       const hoursSince  = (now - (stored.refreshedAt || 0)) / 3600000;
 
       if (stillValid) {
-        // Proactively refresh: daily on read, or always when called from cron (forceRefresh)
+        // Proactively refresh: daily on read, or always when called from cron (forceRefresh).
+        // Try ig_refresh_token first (works for IG Basic Display API tokens).
+        // Fall back to fb_exchange_token (works for IG Graph API / Business tokens
+        // linked through a Facebook Page — this is Paul's setup).
         if (forceRefresh || hoursSince >= 24) {
-          const refreshed = await refreshLongLived(stored.token);
+          let refreshed = await refreshLongLived(stored.token);
+          if (!refreshed) refreshed = await exchangeForLongLived(stored.token);
           if (refreshed) {
             await kvSet(baseUrl, kvToken, TOKEN_KEY, refreshed);
             return refreshed.token;
