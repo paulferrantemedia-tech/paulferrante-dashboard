@@ -97,6 +97,15 @@ function igBenchmark(followers) {
   return                          { likeRate: 1.2, commentRate: 0.2, saveRate: 0.6 };
 }
 
+function ttBenchmark(followers) {
+  // Typical TikTok benchmarks by follower tier — engagement is calculated against views
+  // (TikTok industry benchmarks; like/comment/share rate ÷ views)
+  if (followers < 10000)   return { engRate: 9.0, likeRate: 12,  commentRate: 0.7, shareRate: 1.5 };
+  if (followers < 100000)  return { engRate: 6.5, likeRate: 8,   commentRate: 0.4, shareRate: 0.8 };
+  if (followers < 1000000) return { engRate: 5.0, likeRate: 6,   commentRate: 0.3, shareRate: 0.6 };
+  return                           { engRate: 4.0, likeRate: 5,   commentRate: 0.2, shareRate: 0.5 };
+}
+
 function fmtViews(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
   if (n >= 1000)    return (n / 1000).toFixed(1)    + 'K';
@@ -2009,6 +2018,19 @@ export default function App() {
       .catch(() => {});
   }, []);
 
+  // ── TikTok follower count on startup ─────────────────────────
+  useEffect(() => {
+    fetch(`/api/tiktok-stats?t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && d.profile?.followerCount) {
+          setTtFollowers(d.profile.followerCount);
+          setTtConnected(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // ── YouTube Analytics (fetched when Analytics tab is opened) ──
   const loadIgAnalytics = (force = false) => {
     setIgAnalyticsLoading(true); setIgAnalyticsError(null);
@@ -2032,7 +2054,15 @@ export default function App() {
     setTtAnalyticsLoading(true); setTtAnalyticsError(null);
     fetch(`/api/tiktok-stats?t=${Date.now()}${force ? '&force=true' : ''}`, { cache:'no-store' })
       .then(r => r.json())
-      .then(d => { if (d.ok) setTtAnalytics(d); else if (!d.notConnected) setTtAnalyticsError(d.error || 'Failed'); })
+      .then(d => {
+        if (d.ok) {
+          setTtAnalytics(d);
+          setTtConnected(true);
+          if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
+        } else if (!d.notConnected) {
+          setTtAnalyticsError(d.error || 'Failed');
+        }
+      })
       .catch(() => setTtAnalyticsError('Network error'))
       .finally(() => setTtAnalyticsLoading(false));
   };
@@ -3726,6 +3756,18 @@ export default function App() {
                   )}
                   {ttAnalytics && (() => {
                     const { profile: ttP, videos: ttVids, aggregates: ttAgg } = ttAnalytics;
+                    // Compute per-video rates against views, averaged across the recent set
+                    const ttBench = ttBenchmark(ttP.followerCount || 0);
+                    const ttN = ttVids.length;
+                    const ttAvgLikeRate = ttN > 0
+                      ? parseFloat((ttVids.reduce((s,v) => s + (v.viewCount > 0 ? v.likeCount / v.viewCount * 100 : 0), 0) / ttN).toFixed(2)) : 0;
+                    const ttAvgCommentRate = ttN > 0
+                      ? parseFloat((ttVids.reduce((s,v) => s + (v.viewCount > 0 ? v.commentCount / v.viewCount * 100 : 0), 0) / ttN).toFixed(2)) : 0;
+                    const ttAvgShareRate = ttAgg.avgShareRate ?? 0;
+                    const ttEngScore     = scoreLabel(ttAgg.avgEngRate || 0, ttBench.engRate);
+                    const ttLikeScore    = scoreLabel(ttAvgLikeRate,         ttBench.likeRate);
+                    const ttCommentScore = scoreLabel(ttAvgCommentRate,      ttBench.commentRate);
+                    const ttShareScore   = scoreLabel(ttAvgShareRate,        ttBench.shareRate);
                     return (
                       <div>
                         <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:10, marginBottom:16 }}>
@@ -3741,6 +3783,37 @@ export default function App() {
                             </div>
                           ))}
                         </div>
+
+                        {/* ── Benchmark comparison ── */}
+                        <div style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', marginBottom:16, border:`1px solid ${OCEAN}44` }}>
+                          <div style={{ fontSize:10, color:'#69C9D0', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:14 }}>
+                            vs. Creators Your Size ({fmtFull(ttP.followerCount)} followers)
+                          </div>
+                          <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:isMobile?16:20 }}>
+                            {[
+                              { label:'Engagement Rate', val:ttAgg.avgEngRate || 0, score:ttEngScore,     bench:ttBench.engRate,     unit:'%', tip:'likes + comments + shares ÷ views' },
+                              { label:'Like Rate',       val:ttAvgLikeRate,         score:ttLikeScore,    bench:ttBench.likeRate,    unit:'%', tip:'likes ÷ views' },
+                              { label:'Comment Rate',    val:ttAvgCommentRate,      score:ttCommentScore, bench:ttBench.commentRate, unit:'%', tip:'comments ÷ views' },
+                              { label:'Share Rate',      val:ttAvgShareRate,        score:ttShareScore,   bench:ttBench.shareRate,   unit:'%', tip:'shares ÷ views' },
+                            ].map(({ label, val, score, bench: bv, unit, tip }) => (
+                              <div key={label}>
+                                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6 }}>
+                                  <div style={{ fontSize:12, fontWeight:700 }}>{label}</div>
+                                  <span style={{ fontSize:9, color:SLATE }}>{tip}</span>
+                                </div>
+                                <div style={{ display:'flex', alignItems:'baseline', gap:8, marginBottom:8 }}>
+                                  <div style={{ fontSize:24, fontWeight:900, letterSpacing:'-1px', color:score.color }}>{val}{unit}</div>
+                                  <Tag color={score.color}>{score.label}</Tag>
+                                </div>
+                                <div style={{ background:'#E0E6EF', borderRadius:4, height:6, overflow:'hidden' }}>
+                                  <div style={{ height:'100%', borderRadius:4, background:score.color, width:`${Math.min(100,(val/(bv*2))*100)}%`, transition:'width 0.6s ease' }} />
+                                </div>
+                                <div style={{ fontSize:10, color:SLATE, marginTop:4 }}>Benchmark: {bv}{unit}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
                         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
                           <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Top Videos by Views</div>
                           <span style={{ fontSize:10, color:SLATE }}>sorted by views · most recent 20</span>
