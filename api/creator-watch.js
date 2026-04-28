@@ -1,5 +1,21 @@
-// Creator Watch — returns curated data instantly, enhances with Anthropic if key is set
+// Creator Watch — returns curated data instantly, enhances with Anthropic if key is set.
+// Refresh-clickable: rotates result order + Anthropic prompt focus by ?seed.
+
+function seededShuffle(arr, seed) {
+  let s = (seed | 0) || 1;
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280;
+    const j = Math.floor((s / 233280) * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const seed = parseInt(req.query?.seed, 10) || Date.now();
+
   const fallback = [
     { name: 'Kara and Nate', handle: '@karaandnate', platform: 'YouTube', followers: '1.8M', content_style: 'Budget travel couple documenting every destination with cost breakdowns and practical tips. Known for their "how much did it cost" series which gets consistent millions of views.', top_video_example: '"We Spent 2 Weeks in Japan for $800 Each — Full Breakdown"', avatar_initials: 'KN', avatar_color: '#88EAF6', profile_url: 'https://www.youtube.com/@karaandnate', engagement_rate: '4.2%', posting_cadence: '2x/week', last_posted: '3 days ago', is_dormant: false, why_watch: 'Master of the cost-breakdown hook that builds trust and aspirational living simultaneously', top_videos: [{ title: 'We Spent 2 Weeks in Japan for $800 Each — Full Breakdown', url: 'https://www.youtube.com/@karaandnate/videos' }, { title: 'Thailand on $50/Day: Where We Stayed and What We Ate', url: 'https://www.youtube.com/@karaandnate/videos' }, { title: 'Budget Travel Hacks That Actually Work', url: 'https://www.youtube.com/@karaandnate/videos' }] },
     { name: 'Elise Darma', handle: '@elisedarma', platform: 'TikTok', followers: '280K', content_style: 'Digital nomad lifestyle content focused on making money online while travelling. Strong niche authority in the "work from anywhere" space with very engaged community.', top_video_example: '"How I Make $10K/Month While Travelling Full Time (Real Numbers)"', avatar_initials: 'ED', avatar_color: '#E1D9AE', profile_url: 'https://www.tiktok.com/@elisedarma', engagement_rate: '6.8%', posting_cadence: '5x/week', last_posted: '1 day ago', is_dormant: false, why_watch: 'Transparent income breakdowns and digital product strategy that inspire action', top_videos: [{ title: 'How I Make $10K/Month While Travelling', url: 'https://www.tiktok.com/@elisedarma' }, { title: 'Best Places to Work Remotely in Bali', url: 'https://www.tiktok.com/@elisedarma' }, { title: 'Digital Products I\'m Selling in 2025', url: 'https://www.tiktok.com/@elisedarma' }] },
@@ -37,15 +53,13 @@ export default async function handler(req, res) {
         if (m) {
           const results = JSON.parse(m[0]);
           if (results.length > 0) {
-            res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
-            return res.json({ results, fetchedAt: new Date().toISOString() });
+            return res.json({ results, fetchedAt: new Date().toISOString(), source: 'anthropic' });
           }
         }
       }
     } catch (_) {}
   }
 
-  // Always return fallback
-  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
-  res.json({ results: fallback, fetchedAt: new Date().toISOString(), source: 'curated' });
+  // Always return fallback — shuffle order by seed so each Refresh shows a different ordering
+  res.json({ results: seededShuffle(fallback, seed), fetchedAt: new Date().toISOString(), source: 'curated' });
 }

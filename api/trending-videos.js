@@ -1,5 +1,23 @@
-// Trending Videos — returns curated data instantly, enhances with Anthropic if key is set
+// Trending Videos — returns curated data instantly, enhances with Anthropic if key is set.
+// Each call rotates the result order + the Anthropic prompt focus based on the
+// ?seed query param so consecutive Refresh clicks return noticeably different content.
+
+function seededShuffle(arr, seed) {
+  let s = (seed | 0) || 1;
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280;
+    const j = Math.floor((s / 233280) * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default async function handler(req, res) {
+  // Disable upstream caching so Refresh actually pulls fresh data every click
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const seed = parseInt(req.query?.seed, 10) || Date.now();
+
   const fallback = [
     {
       title: '"I Lived in Bali for 30 Days on $1,500 — Full Breakdown"',
@@ -93,6 +111,19 @@ export default async function handler(req, res) {
     },
   ];
 
+  // Rotate the prompt focus on each Refresh so Anthropic returns different videos
+  const focusAreas = [
+    'cost-breakdown and budget travel videos',
+    'contrarian / "things they don\'t show you" travel content',
+    'points and miles hacking videos for flights and hotels',
+    'food travel and local-eats deep dives',
+    'solo female travel and safety content',
+    'digital nomad income/lifestyle videos',
+    'destination tier-list and ranking videos',
+    'travel-gear and packing reviews',
+  ];
+  const focus = focusAreas[Math.abs(seed) % focusAreas.length];
+
   // Try Anthropic if key is available (for fresher, more personalised data)
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey) {
@@ -105,7 +136,7 @@ export default async function handler(req, res) {
           max_tokens: 2048,
           messages: [{
             role: 'user',
-            content: `You are a content strategist for an Australian travel & lifestyle creator (budget travel, solo travel, digital nomad lifestyle). List 6 short-form video formats performing extremely well on TikTok and YouTube Shorts for travel creators in 2025. Return ONLY valid JSON, no markdown:\n[{"title":"format name in quotes","creator":"@real creator handle","views":"e.g. 3.2M","platform":"TikTok|YouTube Shorts","hook":"the exact opening line","why_it_worked":"2 sentences on the psychology","copy_framework":"how Paul could adapt this for Australian travel content with a specific example"}]`
+            content: `You are a content strategist for an Australian travel & lifestyle creator (budget travel, solo travel, digital nomad lifestyle). List 6 short-form videos in the category of ${focus}, performing extremely well on TikTok and YouTube Shorts in 2025. Pick fresh, real examples that aren't the most obvious ones. Return ONLY valid JSON, no markdown:\n[{"title":"format name in quotes","creator":"@real creator handle","views":"e.g. 3.2M","platform":"TikTok|YouTube Shorts","hook":"the exact opening line","why_it_worked":"2 sentences on the psychology","copy_framework":"how Paul could adapt this for Australian travel content with a specific example"}]`
           }]
         })
       });
@@ -117,15 +148,13 @@ export default async function handler(req, res) {
         if (m) {
           const results = JSON.parse(m[0]);
           if (results.length > 0) {
-            res.setHeader('Cache-Control', 's-maxage=7200, stale-while-revalidate');
-            return res.json({ results, fetchedAt: new Date().toISOString() });
+            return res.json({ results, fetchedAt: new Date().toISOString(), focus, source: 'anthropic' });
           }
         }
       }
     } catch (_) {}
   }
 
-  // Always return fallback
-  res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
-  res.json({ results: fallback, fetchedAt: new Date().toISOString(), source: 'curated' });
+  // Fallback — shuffle by seed so the order varies even without Anthropic
+  res.json({ results: seededShuffle(fallback, seed), fetchedAt: new Date().toISOString(), source: 'curated', focus });
 }
