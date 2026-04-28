@@ -3,10 +3,11 @@
 // ?seed query param so consecutive Refresh clicks return noticeably different content.
 
 function seededShuffle(arr, seed) {
-  let s = (seed | 0) || 1;
+  // Positive seed in 1..233279 — avoids negative-index swaps that produce nulls
+  let s = (((Math.abs(Number(seed) || 1)) % 233279) + 1) | 0;
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    s = (s * 9301 + 49297) % 233280;
+    s = ((s * 9301) + 49297) % 233280;
     const j = Math.floor((s / 233280) * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }

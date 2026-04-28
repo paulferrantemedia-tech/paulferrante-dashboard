@@ -6,10 +6,13 @@
 
 // Seeded shuffle (deterministic given a seed) so the same seed = same result
 function seededShuffle(arr, seed) {
-  let s = (seed | 0) || 1;
+  // Map any seed (including big Date.now() values) into a positive 1..233279 range.
+  // Without this, bitwise truncation can yield a negative integer, leading to
+  // negative `j` indices below and undefined → null entries in the output.
+  let s = (((Math.abs(Number(seed) || 1)) % 233279) + 1) | 0;
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    s = (s * 9301 + 49297) % 233280;
+    s = ((s * 9301) + 49297) % 233280;
     const j = Math.floor((s / 233280) * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
@@ -92,6 +95,22 @@ export default async function handler(req, res) {
         { subreddit: 'r/awardtravel', post_title: 'Best ways to use Qantas points in 2025 — actual value comparison', pain_point: 'Points value optimization', sentiment: 'seeking advice', content_angle: 'Qantas points hacks ranked by actual cents-per-point value', url: 'https://reddit.com/r/awardtravel' },
         { subreddit: 'r/JapanTravel', post_title: 'Hidden Tokyo neighborhoods locals actually go to', pain_point: 'Tourist-trap fatigue', sentiment: 'discussing', content_angle: 'Tokyo off the Shibuya/Shinjuku trail — the neighborhoods worth your time', url: 'https://reddit.com/r/JapanTravel' },
         { subreddit: 'r/onebag', post_title: 'My ultralight 7kg setup for 6 months traveling', pain_point: 'Overpacking', sentiment: 'excited', content_angle: 'Carry-on only for long trips — the gear list that actually works', url: 'https://reddit.com/r/onebag' },
+        { subreddit: 'r/digitalnomad', post_title: 'Why I left Bali after 6 months — honest review', pain_point: 'Nomad lifestyle expectations', sentiment: 'discussing', content_angle: 'The reality of long-term Bali nomad life: traffic, visas, costs creeping up, what nobody tells you', url: 'https://reddit.com/r/digitalnomad' },
+        { subreddit: 'r/IWantOut', post_title: 'How do you actually move abroad as an Australian?', pain_point: 'Visa and relocation logistics', sentiment: 'seeking advice', content_angle: 'Step-by-step relocation guide for Australians — visas, banking, healthcare, rental hurdles', url: 'https://reddit.com/r/IWantOut' },
+        { subreddit: 'r/expats', post_title: 'Cost of living shock moving from Sydney to Lisbon', pain_point: 'Cost-of-living shifts', sentiment: 'discussing', content_angle: 'Honest cost comparison: Sydney vs Lisbon down to groceries, rent, public transport, eating out', url: 'https://reddit.com/r/expats' },
+        { subreddit: 'r/shoestring', post_title: 'How I did 30 days in Vietnam for $850 total', pain_point: 'Budget travel stretch', sentiment: 'excited', content_angle: 'Day-by-day budget breakdown of a $30/day Vietnam trip — meals, transport, hostels, surprise costs', url: 'https://reddit.com/r/shoestring' },
+        { subreddit: 'r/backpacking', post_title: 'Most underrated backpacking destinations in 2025', pain_point: 'Bali/Thailand fatigue', sentiment: 'discussing', content_angle: '5 underrated countries replacing Bali/Thailand for backpackers — quieter, cheaper, equally beautiful', url: 'https://reddit.com/r/backpacking' },
+        { subreddit: 'r/roadtrip', post_title: 'Australian east-coast road trip in a campervan — full cost', pain_point: 'Australian travel logistics', sentiment: 'seeking advice', content_angle: 'Sydney → Cairns campervan trip cost breakdown: hire, fuel, parks, food, "would I do it again"', url: 'https://reddit.com/r/roadtrip' },
+        { subreddit: 'r/JapanTravel', post_title: 'JR Pass is no longer worth it for most trips — math inside', pain_point: 'Travel pass overspend', sentiment: 'discussing', content_angle: 'JR Pass dead? When it still saves money in 2025 vs when point-to-point tickets win', url: 'https://reddit.com/r/JapanTravel' },
+        { subreddit: 'r/thailandtourism', post_title: 'Thailand digital nomad visa — actual experience after 4 months', pain_point: 'Visa friction', sentiment: 'discussing', content_angle: 'Honest review of Thailand\'s DTV nomad visa: paperwork, banking, what works, what to avoid', url: 'https://reddit.com/r/thailandtourism' },
+        { subreddit: 'r/travelhacks', post_title: 'Got bumped from a flight — what you\'re entitled to', pain_point: 'Disrupted travel rights', sentiment: 'frustrated', content_angle: 'Australian flight compensation rules nobody knows — what airlines owe you when bumped/delayed', url: 'https://reddit.com/r/travelhacks' },
+        { subreddit: 'r/awardtravel', post_title: 'Velocity vs Qantas points — which actually beats the other in 2025', pain_point: 'Loyalty program choice', sentiment: 'seeking advice', content_angle: 'Qantas vs Velocity points: redemption value, sweet spots, transfer partners ranked', url: 'https://reddit.com/r/awardtravel' },
+        { subreddit: 'r/travel', post_title: 'Travel insurance saved me $7K — here\'s what actually mattered', pain_point: 'Insurance complexity', sentiment: 'excited', content_angle: 'When travel insurance pays out and when it doesn\'t — what to look for in your policy', url: 'https://reddit.com/r/travel' },
+        { subreddit: 'r/digitalnomad', post_title: 'Best 4 nomad cities I\'ve worked from in 2024–2025', pain_point: 'City selection paralysis', sentiment: 'discussing', content_angle: 'Reviewing 4 nomad cities head-to-head: wifi, cost, community, weather, would-I-go-back', url: 'https://reddit.com/r/digitalnomad' },
+        { subreddit: 'r/solotravel', post_title: 'Solo female travel — countries I\'d return to vs ones I wouldn\'t', pain_point: 'Solo safety judgment', sentiment: 'discussing', content_angle: 'Solo female-friendly countries ranked — vibes, safety, ease, the honest list', url: 'https://reddit.com/r/solotravel' },
+        { subreddit: 'r/flightdeals', post_title: 'How to actually use Google Flights price alerts in 2025', pain_point: 'Missing flight deals', sentiment: 'seeking advice', content_angle: 'Google Flights tricks: price graphs, flexible dates, hidden city, alert hacks that actually fire', url: 'https://reddit.com/r/flightdeals' },
+        { subreddit: 'r/travel', post_title: 'Underrated European cities that aren\'t Paris/Rome/Barcelona', pain_point: 'European overcrowding', sentiment: 'discussing', content_angle: 'Lesser-known European cities for first-timers tired of the headline spots', url: 'https://reddit.com/r/travel' },
+        { subreddit: 'r/onebag', post_title: 'Worth-it gear after 2 years of carry-on only travel', pain_point: 'Gear research', sentiment: 'excited', content_angle: 'My 12 most-used pieces of one-bag gear after 2 years — and 5 things I regret buying', url: 'https://reddit.com/r/onebag' },
       ];
       const shuffled = seededShuffle(fallbackPool, seed).slice(0, 8);
     return res.status(200).json({
