@@ -1869,10 +1869,20 @@ export default function App() {
     const setter = setters[section];
     setter(p => ({ ...p, loading: true, error: null }));
     try {
-      const r = await fetch(endpoints[section]);
+      // Fresh seed every call — backend uses it to rotate sources/windows/prompts.
+      // The &t= is a hard cache-buster so any intermediate cache is bypassed.
+      const seed = Date.now();
+      const r = await fetch(`${endpoints[section]}?seed=${seed}&t=${seed}`, { cache: 'no-store' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
-      setter({ data: d.results, loading: false, error: null, fetchedAt: d.fetchedAt });
+      // Defensive: drop any null/non-object entries before storing — previously crashed Content Intel
+      const rawResults = Array.isArray(d.results) ? d.results : [];
+      const results = rawResults.filter(x => x && typeof x === 'object');
+      if (results.length === 0) {
+        setter({ data: [], loading: false, error: 'No fresh content returned — try again in a moment.', fetchedAt: d.fetchedAt || new Date().toISOString() });
+        return;
+      }
+      setter({ data: results, loading: false, error: null, fetchedAt: d.fetchedAt });
     } catch (e) {
       setter(p => ({ ...p, loading: false, error: e.message }));
     }
@@ -2005,31 +2015,54 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Instagram follower count on startup ──────────────────────
+  // ── Instagram analytics on startup (powers Overview + auto post count) ──
   useEffect(() => {
     fetch(`/api/instagram-stats?t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(d => {
-        if (d.ok && d.profile?.followersCount) {
-          setIgFollowers(d.profile.followersCount);
+        if (d.ok) {
+          setIgAnalytics(d);
           setIgConnected(true);
+          if (d.profile?.followersCount) setIgFollowers(d.profile.followersCount);
         }
       })
       .catch(() => {});
   }, []);
 
-  // ── TikTok follower count on startup ─────────────────────────
+  // ── TikTok analytics on startup (powers Overview + auto post count) ──
   useEffect(() => {
     fetch(`/api/tiktok-stats?t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(d => {
-        if (d.ok && d.profile?.followerCount) {
-          setTtFollowers(d.profile.followerCount);
+        if (d.ok) {
+          setTtAnalytics(d);
           setTtConnected(true);
+          if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
         }
       })
       .catch(() => {});
   }, []);
+
+  // ── Auto-count posts published this week (Mon–Sun) across IG + TikTok + YouTube ──
+  // Cross-posts (same video posted to multiple platforms on the same day) count as ONE post.
+  // Dedupe by calendar day — matches Paul's workflow of posting the same video across platforms.
+  const weeklyAutoCount = (() => {
+    const weekStartMs = new Date(getWeekStart()).getTime();
+    const days = new Set();
+    const addIfThisWeek = (raw) => {
+      if (!raw) return;
+      const ms = new Date(raw).getTime();
+      if (!ms || ms < weekStartMs) return;
+      // Bucket by local calendar day so cross-posted videos on the same day collapse to 1
+      const d = new Date(ms);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      days.add(key);
+    };
+    (igAnalytics?.posts  || []).forEach(p => addIfThisWeek(p.timestamp));
+    (ttAnalytics?.videos || []).forEach(v => addIfThisWeek(v.createdAt));
+    (ytAnalytics?.videos || []).forEach(v => addIfThisWeek(v.publishedAt));
+    return days.size;
+  })();
 
   // ── YouTube Analytics (fetched when Analytics tab is opened) ──
   const loadIgAnalytics = (force = false) => {
@@ -2332,55 +2365,110 @@ export default function App() {
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:gutter }}>
               <Card>
                 <Label>milestones 🏆</Label>
-                {milestones.map(m => (
-                  <div key={m.id} style={{ padding:'10px 0',borderBottom:`1px solid ${BDR}` }}>
-                    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:m.done?0:8 }}>
-                      <div style={{ fontSize:12,color:m.done?'#fff':'#888' }}>
-                        <span style={{ marginRight:6 }}>{m.e}</span>{m.t}
-                      </div>
-                      {m.done && <span style={{ fontSize:9,color:'#4ade80',background:'#0d1a0d',padding:'2px 8px',borderRadius:20,fontWeight:700,flexShrink:0,marginLeft:8 }}>✓</span>}
+
+                {/* Completed milestones — full-width banners stacked at top */}
+                {milestones.filter(m => m.done).map(m => (
+                  <div key={m.id} style={{
+                    background:'#DCFCE7', border:'0.5px solid #86EFAC', borderRadius:8,
+                    padding:12, marginBottom:8,
+                    display:'flex', justifyContent:'space-between', alignItems:'center', gap:8,
+                  }}>
+                    <div style={{ fontSize:12, color:'#166534', fontWeight:500, lineHeight:1.4 }}>
+                      <span style={{ marginRight:6 }}>{m.e}</span>{m.t}
                     </div>
-                    {!m.done && (
-                      <>
-                        <div style={{ display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:5,alignItems:'center' }}>
-                          {editMsId === m.id ? (
-                            <div style={{ display:'flex',gap:6,alignItems:'center' }}>
-                              <input autoFocus value={editMsVal} onChange={e => setEditMsVal(e.target.value)}
-                                onKeyDown={e => { if(e.key==='Enter') saveMs(); if(e.key==='Escape') setEditMsId(null); }}
-                                style={{ width:90,background:'#FFFFFF',border:`1px solid ${BLUE}`,borderRadius:5,padding:'3px 7px',color:TEXT,fontSize:11,fontFamily:'inherit',outline:'none' }} />
-                              <button onClick={saveMs} style={{ fontSize:10,color:BLUE,background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0 }}>✓</button>
-                              <button onClick={() => setEditMsId(null)} style={{ fontSize:10,color:'#94A3B8',background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',padding:0 }}>✕</button>
-                            </div>
-                          ) : (
-                            <span onClick={() => startEditMs(m)} title="Click to update" style={{ color:'#64748B',cursor:'pointer',borderBottom:`1px dashed #333`,paddingBottom:1 }}>
-                              {m.cur} → {m.goal}
-                            </span>
-                          )}
-                          <span style={{ color:'#94A3B8' }}>{m.pct}%</span>
-                        </div>
-                        <div style={{ height:3,background:'#F7F9FC',borderRadius:2 }}>
-                          <div style={{ height:'100%',width:`${m.pct}%`,background:BLUE,borderRadius:2,transition:'width 0.4s' }} />
-                        </div>
-                      </>
-                    )}
+                    <span style={{
+                      background:'#166534', color:'#FFFFFF', fontSize:11, fontWeight:500,
+                      padding:'4px 12px', borderRadius:999,
+                      display:'inline-flex', alignItems:'center', gap:4, flexShrink:0,
+                    }}>
+                      <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:12, height:12 }}>
+                        <svg viewBox="0 0 12 12" width="12" height="12" fill="none">
+                          <path d="M2.5 6.2L5 8.7L9.5 4" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </span>
+                      Done
+                    </span>
                   </div>
                 ))}
-                {/* Feature 2: Posting cadence tracker */}
-                <div style={{ padding:'10px 0', borderTop:`1px solid ${BDR}`, marginTop:4 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
-                    <div style={{ fontSize:12, color:TEXT }}><span style={{ marginRight:6 }}>📅</span>Posts this week</div>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <button onClick={logPost} style={{ fontSize:10, color:BLUE, background:'none', border:`1px solid ${BLUE}44`, borderRadius:6, padding:'3px 10px', cursor:'pointer', fontFamily:'inherit' }}>+ Log Post</button>
-                      <span style={{ color:'#94A3B8', fontSize:10 }}>{Math.round((weeklyPosts.count/5)*100)}%</span>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, marginBottom:5, alignItems:'center' }}>
-                    <span style={{ color:'#64748B' }}>{weeklyPosts.count} posts → 5 goal</span>
-                  </div>
-                  <div style={{ height:3, background:'#E0E6EF', borderRadius:2 }}>
-                    <div style={{ height:'100%', width:`${Math.min((weeklyPosts.count/5)*100, 100)}%`, background:BLUE, borderRadius:2, transition:'width 0.4s' }} />
-                  </div>
+
+                {/* In-progress milestones — 2-column tile grid */}
+                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: milestones.some(m=>m.done) ? 4 : 0 }}>
+                  {milestones.filter(m => !m.done).map(m => {
+                    const label    = (m.t || '').split(':')[0];
+                    const ringLen  = 94.2; // 2 * π * 15
+                    const ringFill = ((m.pct || 0) / 100) * ringLen;
+                    return (
+                      <div key={m.id} style={{
+                        background:'#FFFFFF', border:'0.5px solid #E5E7EB', borderRadius:8,
+                        padding:14,
+                        display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
+                      }}>
+                        <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                            <span style={{ marginRight:5 }}>{m.e}</span>{label}
+                          </div>
+                          {editMsId === m.id ? (
+                            <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:2 }}>
+                              <input autoFocus value={editMsVal} onChange={e => setEditMsVal(e.target.value)}
+                                onKeyDown={e => { if(e.key==='Enter') saveMs(); if(e.key==='Escape') setEditMsId(null); }}
+                                style={{ width:90, background:'#FFFFFF', border:`1px solid ${BLUE}`, borderRadius:5, padding:'3px 7px', color:TEXT, fontSize:18, fontWeight:500, fontFamily:'inherit', outline:'none' }} />
+                              <button onClick={saveMs} style={{ fontSize:14, color:BLUE, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✓</button>
+                              <button onClick={() => setEditMsId(null)} style={{ fontSize:14, color:'#94A3B8', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✕</button>
+                            </div>
+                          ) : (
+                            <div onClick={() => startEditMs(m)} title="Click to update"
+                              style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1, cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                              {m.cur}
+                            </div>
+                          )}
+                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal {m.goal}</div>
+                        </div>
+                        <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
+                          <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
+                          <circle cx={18} cy={18} r={15} fill="none" stroke="#88EAF6" strokeWidth={3} strokeLinecap="round"
+                            strokeDasharray={`${ringFill} ${ringLen}`}
+                            transform="rotate(-90 18 18)" />
+                          <text x={18} y={18} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="500" fill={TEXT}>
+                            {m.pct}%
+                          </text>
+                        </svg>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Posts this week — auto-counted across IG + TikTok + YouTube, deduped by day (cross-posts = 1) */}
+                {(() => {
+                  const ringLen  = 94.2;
+                  const wkPct    = Math.min(100, Math.round((weeklyAutoCount / 5) * 100));
+                  const ringFill = (wkPct / 100) * ringLen;
+                  return (
+                    <div style={{
+                      background:'#FFFFFF', border:'0.5px solid #E5E7EB', borderRadius:8,
+                      padding:14, marginTop:8,
+                      display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
+                    }}>
+                      <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2 }}>
+                          <span style={{ marginRight:5 }}>📅</span>Posts this week
+                        </div>
+                        <div style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1 }}>
+                          {weeklyAutoCount}
+                        </div>
+                        <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal 5 · auto-tracked</div>
+                      </div>
+                      <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
+                        <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
+                        <circle cx={18} cy={18} r={15} fill="none" stroke="#88EAF6" strokeWidth={3} strokeLinecap="round"
+                          strokeDasharray={`${ringFill} ${ringLen}`}
+                          transform="rotate(-90 18 18)" />
+                        <text x={18} y={18} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="500" fill={TEXT}>
+                          {wkPct}%
+                        </text>
+                      </svg>
+                    </div>
+                  );
+                })()}
               </Card>
 
 
@@ -3968,10 +4056,16 @@ export default function App() {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
               <div>
                 <div style={{ fontSize:11, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600 }}>{title}</div>
-                {fetchedAt && <div style={{ fontSize:11, color:'#5A7A99', marginTop:2 }}>Updated {new Date(fetchedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</div>}
+                {fetchedAt && (
+                  <div style={{ fontSize:11, color:'#5A7A99', marginTop:2 }}>
+                    Last refreshed: {new Date(fetchedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}
+                    {' · '}
+                    {new Date(fetchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                  </div>
+                )}
               </div>
               <button onClick={onRefresh} disabled={loading} style={{ border:'1px solid #CDD4E0', background:'#FFFFFF', color:'#1A2744', borderRadius:8, padding:'6px 14px', fontSize:11, cursor:loading?'default':'pointer', fontFamily:'inherit', opacity:loading?0.6:1 }}>
-                {loading ? '↻ Loading...' : '↻ Refresh'}
+                {loading ? '↻ Loading…' : '↻ Refresh'}
               </button>
             </div>
           );
