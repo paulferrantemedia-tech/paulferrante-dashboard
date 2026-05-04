@@ -1708,6 +1708,394 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
 }
 
 
+
+// ─────────────────────────────────────────────────────────────
+// 🎬 REALITY TV CASTING — Phase 1 (feed + fit score + filters)
+// ─────────────────────────────────────────────────────────────
+const CASTING_FORMAT_BUCKETS = {
+  'social-strategy':       'yes',
+  'big-cast-hybrid':       'yes',
+  'race-travel':           'yes',
+  'couples-only':          'yes',
+  'creator-targeted':      'yes',
+  'hybrid-physical-social':'yes',
+  'one-off-game':          'maybe',
+  'stunt-physical':        'maybe',
+  'pure-athletic':         'no',
+  'cooking':               'no',
+  'creative-maker':        'no',
+  'talent':                'no',
+  'dating':                'no',
+  'renovation':            'no',
+  'business-pitch':        'no',
+  'therapy':               'no',
+  'fear-horror':           'no',
+};
+const CASTING_FORMAT_LABELS = {
+  'social-strategy':'Social Strategy','big-cast-hybrid':'Big-Cast Hybrid','race-travel':'Race / Travel',
+  'couples-only':'Couples','creator-targeted':'Creator-Targeted','hybrid-physical-social':'Hybrid Physical+Social',
+  'one-off-game':'One-off Game Show','stunt-physical':'Stunt Physical',
+};
+
+function castingFitScore(i) {
+  const bucket = CASTING_FORMAT_BUCKETS[i.formatType] || 'no';
+  if (bucket === 'no') {
+    return { score:1, bucket:'no', reasoning:`${CASTING_FORMAT_LABELS[i.formatType]||i.formatType} — auto-archived (format mismatch).` };
+  }
+  const t = Math.max(1, Math.min(10, 11 - Math.floor((i.timeCommitmentDays||14)/7)));
+  const n = Math.max(4, Math.min(10, 11 - Math.floor((i.ndaMonths||12)/3)));
+  const p = ({low:4,mid:6,high:8,top:10})[i.payTier] || 5;
+  const e = i.eligibility==='duo-only' ? 8 : 10;
+  let raw = (i.careerUpside??5)*0.25 + (i.exposureValue??5)*0.22 + (i.audienceOverlap??5)*0.12
+          + p*0.12 + (i.networkEcosystem??5)*0.10 + t*0.08 + (i.brandFit??5)*0.05 + n*0.03 + e*0.03;
+  if (bucket==='maybe') raw = Math.min(raw, 6);
+  const score = Math.round(raw*10)/10;
+  return { score, bucket, reasoning: castingReasoning(score, i, bucket) };
+}
+function castingReasoning(score, i, bucket) {
+  const hits = [];
+  if (bucket==='maybe') hits.push('format = maybe (DQ risk)');
+  if ((i.careerUpside??0)>=9) hits.push('career-launching');
+  else if ((i.careerUpside??0)>=7) hits.push('strong post-show upside');
+  if ((i.exposureValue??0)>=9) hits.push('massive reach');
+  else if ((i.exposureValue??0)>=7) hits.push(`high reach (${i.network||'top network'})`);
+  if ((i.networkEcosystem??0)>=8) hits.push('opens doors at this network');
+  if ((i.audienceOverlap??0)>=9) hits.push('exact audience match');
+  else if ((i.audienceOverlap??0)>=7) hits.push('audience overlap');
+  if (i.payTier==='top') hits.push('top payout');
+  else if (i.payTier==='high') hits.push('strong payout');
+  if (i.timeCommitmentDays && i.timeCommitmentDays<=14) hits.push('short shoot');
+  if (i.eligibility==='duo-only' || i.eligibility==='either') hits.push('Dan-eligible');
+  return `${score}: ${hits.slice(0,4).join(', ') || 'partial fit'}.`;
+}
+
+const CASTING_TODAY_REF = new Date('2026-05-03');
+const castingDaysFromNow = (d) => { const x = new Date(CASTING_TODAY_REF); x.setDate(x.getDate()+d); return x.toISOString().slice(0,10); };
+function makeCasting(c) {
+  const r = castingFitScore({ ...c.scoreInputs, formatType:c.formatType, network:c.network });
+  return { ...c, fitScore:r.score, fitReasoning:r.reasoning, bucket:r.bucket };
+}
+const SEED_CASTINGS = [
+  makeCasting({ id:'c1', showName:'The Traitors US — Season 5', network:'Peacock', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(4),  pipelineStatus:'researching', applyLink:'https://www.peacocktv.com/casting', oneLineWhy:'Lead format for social game readers. Squid Game finalist credit + creator audience = strong tape angle.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c2', showName:'The Amazing Race — Season 38 (US)', network:'CBS', formatType:'race-travel', market:'US', deadline:castingDaysFromNow(11), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/amazing_race/casting/', oneLineWhy:'Highest-fit show on the board. Travel creator + 10-yr Dan dynamic = exact CBS template.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
+  makeCasting({ id:'c3', showName:'Beast Games — Season 2', network:'Prime Video / MrBeast', formatType:'creator-targeted', market:'US', deadline:castingDaysFromNow(2), pipelineStatus:'researching', applyLink:'https://beastgames.com/apply', oneLineWhy:'Creator-first cast. 65k cross-platform + Squid Game pedigree fits the producer brief exactly.', flags:['solo','closing-soon'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:9, exposureValue:9, careerUpside:7, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c4', showName:'Squid Game: The Challenge — Season 3', network:'Netflix', formatType:'big-cast-hybrid', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Returning finalist angle + show alumni credibility. Watchlist now, prep tape early.', flags:['solo','annual','returnee-angle'], dqRisk:true, dqRiskNotes:'Confirm returnee policy with casting before tape — some Netflix series block S1 finalists.', scoreInputs:{ brandFit:9, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c5', showName:'The Amazing Race Australia — Season 8', network:'Channel 10', formatType:'race-travel', market:'AU', deadline:castingDaysFromNow(18), pipelineStatus:'researching', applyLink:'https://10play.com.au/the-amazing-race-australia/casting', oneLineWhy:'AU passport route. Travel + Dan duo + strong AU follower base = home-market home-run.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:10, exposureValue:8, careerUpside:8, networkEcosystem:7, timeCommitmentDays:30, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
+  makeCasting({ id:'c6', showName:'The Traitors Australia — Season 4', network:'Channel 10', formatType:'social-strategy', market:'AU', deadline:castingDaysFromNow(22), pipelineStatus:'applied', applyLink:'https://10play.com.au/the-traitors-australia/casting', oneLineWhy:'AU eligibility. Strong audience overlap (49% AU). Squid Game finalist = camera-ready credit.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c7', showName:'Big Brother — Season 27 (US)', network:'CBS', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(25), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/big_brother/casting/', oneLineWhy:'Long-form social game with massive fanbase. Time commitment is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c8', showName:'The Mole — Season 4', network:'Netflix', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(31), pipelineStatus:'researching', applyLink:'https://www.netflix.com/casting', oneLineWhy:'Pure deception game — character-driven, strong showreel material. Travel-shoot format suits travel creator.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:7, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c9', showName:'Race Across the World — Series 6 (UK/AU)', network:'BBC / SBS', formatType:'race-travel', market:'INTL', deadline:castingDaysFromNow(45), pipelineStatus:'researching', applyLink:'https://www.bbc.co.uk/programmes/articles/casting', oneLineWhy:'Slow-travel format — exactly the RGG Media brand. Dan duo angle is producer catnip.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
+  makeCasting({ id:'c10', showName:'Deal or No Deal Island — Season 3', network:'NBC', formatType:'big-cast-hybrid', market:'US', deadline:castingDaysFromNow(60), pipelineStatus:'researching', applyLink:'https://www.nbc.com/casting', oneLineWhy:'Travel-set big-cast hybrid. Tropical shoot + social strategy = high content cross-pollination.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:8, careerUpside:7, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c11', showName:'Pressure Cooker — Season 2', network:'Hulu', formatType:'hybrid-physical-social', market:'US', deadline:castingDaysFromNow(7), pipelineStatus:'researching', applyLink:'https://www.hulu.com/casting', oneLineWhy:'Hybrid social-strategy show with cooking layer. Verify food vs social weighting before committing tape time.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c12', showName:'The Quiz With Balls — Season 2', network:'Fox', formatType:'one-off-game', market:'US', deadline:castingDaysFromNow(10), pipelineStatus:'researching', applyLink:'https://foxcasting.com', oneLineWhy:'Low-time one-off. DQ risk for full-season casts — confirm before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
+  makeCasting({ id:'c13', showName:'The Challenge: Global Championship — Season 3', network:'CBS / Paramount+', formatType:'hybrid-physical-social', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Squid Game alumni route. Heavy physical but social strategy carries equal weight.', flags:['solo','annual','returnee-angle'], dqRisk:false, scoreInputs:{ brandFit:7, audienceOverlap:7, exposureValue:8, careerUpside:9, networkEcosystem:9, timeCommitmentDays:35, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
+];
+function castingDaysUntil(d) { if (!d) return null; return Math.ceil((new Date(d) - CASTING_TODAY_REF) / 86400000); }
+function castingDeadlineLabel(d) {
+  if (!d) return 'Annual cycle — TBA';
+  const days = castingDaysUntil(d);
+  if (days < 0)  return 'Closed';
+  if (days === 0) return 'Closes today';
+  if (days === 1) return 'Closes tomorrow';
+  if (days <= 7)  return `Closes in ${days} days`;
+  if (days <= 30) return `Closes ${d}`;
+  return `Open until ${d}`;
+}
+function castingScoreColor(s) {
+  if (s >= 8) return { bg:`${BLUE}33`, color:'#0E6A80', border:BLUE };
+  if (s >= 7) return { bg:`${YELL}55`, color:'#8A6A10', border:YELL };
+  if (s >= 6) return { bg:`${YELL}33`, color:'#8A6A10', border:`${YELL}AA` };
+  if (s >= 5) return { bg:'#F4F6F9',   color:SLATE,    border:BDR };
+  return        { bg:'#F4F6F9',         color:'#94A3B8', border:BDR };
+}
+
+function RealityCastingTab() {
+  const [cards, setCards] = useState(SEED_CASTINGS);
+  const [selected, setSelected] = useState(null);
+  const [activeTab, setActiveTab] = useState('open');
+  const [filters, setFilters] = useState({ market:'all', format:'all', deadline:'all', eligibility:'all', scoreFloor:5 });
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+
+  const visible = cards.filter(c => {
+    if (c.bucket === 'no') return false;
+    if (activeTab === 'open' && c.deadline === null) return false;
+    if (activeTab === 'closing' && (!c.deadline || castingDaysUntil(c.deadline) > 7 || castingDaysUntil(c.deadline) < 0)) return false;
+    if (activeTab === 'watchlist' && !c.flags.includes('watchlist') && !c.flags.includes('returnee-angle')) return false;
+    if (activeTab === 'annual' && c.deadline !== null) return false;
+    if (filters.market !== 'all' && c.market !== filters.market) return false;
+    if (filters.format !== 'all' && c.formatType !== filters.format) return false;
+    if (filters.eligibility === 'duo' && !c.flags.includes('duo-eligible') && !c.flags.includes('apply-with-dan')) return false;
+    if (filters.eligibility === 'solo' && (c.flags.includes('duo-eligible') || c.flags.includes('apply-with-dan'))) return false;
+    if (c.fitScore < filters.scoreFloor) return false;
+    if (filters.deadline !== 'all' && c.deadline) {
+      const d = castingDaysUntil(c.deadline);
+      if (filters.deadline === 'week' && d > 7) return false;
+      if (filters.deadline === 'month' && d > 30) return false;
+      if (filters.deadline === 'open' && d <= 30) return false;
+    }
+    return true;
+  }).sort((a,b) => b.fitScore - a.fitScore || (a.deadline ? castingDaysUntil(a.deadline) : 999) - (b.deadline ? castingDaysUntil(b.deadline) : 999));
+
+  const formatOptions = [...new Set(cards.filter(c => c.bucket !== 'no').map(c => c.formatType))];
+  const open       = cards.filter(c => c.bucket !== 'no' && c.deadline);
+  const inFlight   = cards.filter(c => ['applied','first-tape','callback','producer-interview'].includes(c.pipelineStatus));
+  const urgent     = open.filter(c => castingDaysUntil(c.deadline) <= 7 && castingDaysUntil(c.deadline) >= 0);
+  const topScore   = open.length ? Math.max(...open.map(c => c.fitScore)) : 0;
+  const topCard    = open.filter(c => c.fitScore === topScore).sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline))[0];
+  const avg        = open.length ? Math.round(open.reduce((s,c) => s + c.fitScore, 0) / open.length * 10) / 10 : 0;
+
+  const updatePipeline = (id, stage) => {
+    setCards(cards.map(c => c.id === id ? { ...c, pipelineStatus:stage } : c));
+    if (selected && selected.id === id) setSelected({ ...selected, pipelineStatus:stage });
+  };
+  const addQuickCasting = (text) => {
+    if (!text.trim()) return;
+    const newCard = makeCasting({
+      id: `c${Date.now()}`,
+      showName: text.split('\n')[0].slice(0,60) || 'Untitled casting',
+      network: 'TBD', formatType:'social-strategy', market:'US',
+      deadline: castingDaysFromNow(14), pipelineStatus:'researching',
+      applyLink: '', oneLineWhy:'Just added — review fields and adjust scoring inputs.',
+      flags:['solo'], dqRisk:false,
+      scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:6, careerUpside:6, networkEcosystem:6, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' }
+    });
+    setCards([newCard, ...cards]);
+  };
+
+  const Pill = ({ active, children, onClick }) => (
+    <button onClick={onClick} style={{
+      padding:'6px 12px', borderRadius:20, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+      background: active ? TEXT : '#FFFFFF', color: active ? '#FFFFFF' : SLATE,
+      border: `1px solid ${active ? TEXT : BDR}`, whiteSpace:'nowrap',
+    }}>{children}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ marginBottom:18 }}>
+        <Label>reality tv casting</Label>
+        <div style={{ fontSize:24, fontWeight:700, color:TEXT, lineHeight:1.1, letterSpacing:'-0.5px' }}>What's open. What scores. What you should tape this week.</div>
+      </div>
+
+      {/* Stat tiles */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:12, marginBottom:18 }}>
+        <div style={{ background:`linear-gradient(135deg, #B6F2F9 0%, ${BLUE} 100%)`, borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
+          <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Highest open fit score</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{topScore.toFixed(1)}</div>
+          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>this week</div>
+        </div>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Live applications</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{inFlight.length}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>in flight</div>
+        </Card>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Open castings</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{open.length}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>tracked</div>
+        </Card>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Avg fit score</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{avg.toFixed(1)}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>across open queue</div>
+        </Card>
+      </div>
+
+      {/* Persona summary */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>What's casting right now that fits you</div>
+        {topCard ? (
+          <>
+            <div style={{ fontSize:16, fontWeight:600, color:TEXT, lineHeight:1.4 }}>
+              Top of your queue this week: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}, {castingDeadlineLabel(topCard.deadline).toLowerCase()}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
+            </div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} open castings tracked · {urgent.length} closing in the next 7 days.</div>
+          </>
+        ) : (
+          <div style={{ fontSize:14, color:TEXT }}>Nothing in the open queue scores above your floor — quiet week. Watchlist below has annual cycles to prep tapes for.</div>
+        )}
+      </Card>
+
+      {/* Paste & score */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:14 }}>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Paste &amp; score</div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>Drop a casting URL or brief — gets scored against your profile and added to the feed.</div>
+          </div>
+          {!pasteOpen && <button onClick={() => setPasteOpen(true)} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:10, padding:'9px 18px', fontWeight:800, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>+ Add casting</button>}
+        </div>
+        {pasteOpen && (
+          <div style={{ marginTop:12 }}>
+            <textarea rows="3" placeholder="Paste a casting URL, producer email, or copied brief here..." value={pasteText} onChange={e => setPasteText(e.target.value)}
+              style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+              <button onClick={() => { setPasteOpen(false); setPasteText(''); }} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+              <button onClick={() => { addQuickCasting(pasteText); setPasteText(''); setPasteOpen(false); }} style={{ background:TEXT, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Score &amp; add</button>
+            </div>
+            <div style={{ fontSize:10, color:'#94A3B8', marginTop:6 }}>Phase 1: opens a quick-add stub. Phase 2 wires AI extraction so a URL auto-fills everything.</div>
+          </div>
+        )}
+      </Card>
+
+      {/* Sub-tabs */}
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BDR}`, marginBottom:14 }}>
+        {[['open','Open Now'],['closing','Closing Soon'],['watchlist','Watchlist'],['annual','Annual Cycles']].map(([k,l]) => (
+          <div key={k} onClick={() => setActiveTab(k)} style={{
+            padding:'10px 18px', fontSize:12, fontWeight:600, cursor:'pointer',
+            color: activeTab===k ? TEXT : SLATE, borderBottom: activeTab===k ? `2px solid ${TEXT}` : '2px solid transparent', marginBottom:'-1px',
+          }}>{l}</div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Filters</div>
+          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (auto-archived hidden)</div>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Market</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {['all','US','AU','CA','INTL'].map(m => <Pill key={m} active={filters.market===m} onClick={() => setFilters({...filters, market:m})}>{m==='all'?'All':m}</Pill>)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Format</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              <Pill active={filters.format==='all'} onClick={() => setFilters({...filters, format:'all'})}>All</Pill>
+              {formatOptions.map(f => <Pill key={f} active={filters.format===f} onClick={() => setFilters({...filters, format:f})}>{CASTING_FORMAT_LABELS[f]}</Pill>)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Deadline</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {[['all','Any'],['week','This week'],['month','This month'],['open','Open later']].map(([k,l]) => <Pill key={k} active={filters.deadline===k} onClick={() => setFilters({...filters, deadline:k})}>{l}</Pill>)}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:24, flexWrap:'wrap' }}>
+            <div>
+              <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Eligibility</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[['all','Any'],['solo','Solo'],['duo','+ Dan']].map(([k,l]) => <Pill key={k} active={filters.eligibility===k} onClick={() => setFilters({...filters, eligibility:k})}>{l}</Pill>)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Fit score floor</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[3,5,7,8].map(n => <Pill key={n} active={filters.scoreFloor===n} onClick={() => setFilters({...filters, scoreFloor:n})}>{n}+</Pill>)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Feed */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px,1fr))', gap:14 }}>
+        {visible.length === 0 ? (
+          <Card style={{ gridColumn:'1/-1', textAlign:'center', padding:40 }}>
+            <div style={{ color:SLATE, fontSize:13 }}>Nothing matches these filters. Try lowering the fit score floor or switching tabs.</div>
+          </Card>
+        ) : visible.map(c => {
+          const sc = castingScoreColor(c.fitScore);
+          const sev = !c.deadline ? 'open' : (castingDaysUntil(c.deadline) <= 7 ? 'urgent' : (castingDaysUntil(c.deadline) <= 21 ? 'soon' : 'open'));
+          const dlColor = sev==='urgent' ? '#A32D2D' : sev==='soon' ? '#8A6A10' : SLATE;
+          return (
+            <Card key={c.id} style={{ cursor:'pointer', padding:16 }}>
+              <div onClick={() => setSelected(c)} style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+                <div style={{ width:42, height:42, borderRadius:'50%', background:sc.bg, color:sc.color, border:`2px solid ${sc.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, flexShrink:0 }}>{c.fitScore}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{c.showName}</div>
+                      <div style={{ fontSize:11, color:SLATE, marginTop:2 }}>{c.network} · {c.market}</div>
+                    </div>
+                    {c.dqRisk && <Tag color="#A32D2D">DQ risk</Tag>}
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
+                    <Tag color={SLATE}>{CASTING_FORMAT_LABELS[c.formatType]}</Tag>
+                    <Tag color={dlColor}>{castingDeadlineLabel(c.deadline)}</Tag>
+                    {c.flags.includes('apply-with-dan') && <Tag color={SLATE}>+ Dan</Tag>}
+                    {c.flags.includes('annual') && <Tag color={SLATE}>Annual</Tag>}
+                  </div>
+                  <div style={{ fontSize:12, color:SLATE, marginTop:10, lineHeight:1.4 }}>{c.oneLineWhy}</div>
+                  <div style={{ fontSize:10, color:'#94A3B8', marginTop:8, fontStyle:'italic' }}>{c.fitReasoning}</div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize:10, color:'#94A3B8', marginTop:18, paddingBottom:8 }}>
+        Phase 1 — feed, fit score, filters. Auto-archived shows (cooking / dating / athletic / etc.) hidden by default.
+      </div>
+
+      {/* Detail modal */}
+      {selected && (
+        <div onClick={() => setSelected(null)} style={{ position:'fixed', inset:0, background:'rgba(26,39,68,0.5)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'5vh 16px', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#FFFFFF', borderRadius:12, maxWidth:620, width:'100%', boxShadow:'0 20px 50px -10px rgba(26,39,68,0.3)' }}>
+            <div style={{ padding:24, borderBottom:`1px solid ${BDR}`, display:'flex', alignItems:'flex-start', gap:14 }}>
+              <div style={{ width:42, height:42, borderRadius:'50%', background:castingScoreColor(selected.fitScore).bg, color:castingScoreColor(selected.fitScore).color, border:`2px solid ${castingScoreColor(selected.fitScore).border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, flexShrink:0 }}>{selected.fitScore}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:18, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{selected.showName}</div>
+                <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>{selected.network} · {selected.market}</div>
+              </div>
+              <button onClick={() => setSelected(null)} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Close</button>
+            </div>
+            <div style={{ padding:24 }}>
+              <div style={{ marginBottom:18 }}>
+                <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Why this scored</div>
+                <div style={{ fontSize:13, color:TEXT }}>{selected.fitReasoning}</div>
+                <div style={{ fontSize:13, color:SLATE, marginTop:8 }}>{selected.oneLineWhy}</div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:18 }}>
+                {[
+                  ['Format', CASTING_FORMAT_LABELS[selected.formatType]],
+                  ['Deadline', castingDeadlineLabel(selected.deadline)],
+                  ['Career upside', `${selected.scoreInputs.careerUpside ?? '—'}/10`],
+                  ['Exposure value', `${selected.scoreInputs.exposureValue}/10`],
+                  ['Network ecosystem', `${selected.scoreInputs.networkEcosystem ?? '—'}/10`],
+                  ['Audience overlap', `${selected.scoreInputs.audienceOverlap}/10`],
+                  ['Brand fit', `${selected.scoreInputs.brandFit}/10`],
+                  ['Pay tier', selected.scoreInputs.payTier],
+                  ['Eligibility', selected.scoreInputs.eligibility],
+                  ['Time commitment', `${selected.scoreInputs.timeCommitmentDays} days`],
+                  ['NDA length', `${selected.scoreInputs.ndaMonths} months`],
+                ].map(([k,v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600 }}>{k}</div>
+                    <div style={{ fontSize:13, color:TEXT, marginTop:3 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {selected.dqRisk && (
+                <div style={{ background:'#FBF1DC', border:'1px solid #ECD9AC', borderRadius:8, padding:12, marginBottom:18 }}>
+                  <div style={{ fontSize:10, color:'#8A6A10', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700 }}>DQ risk</div>
+                  <div style={{ fontSize:12, color:TEXT, marginTop:4 }}>{selected.dqRiskNotes}</div>
+                </div>
+              )}
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Pipeline stage</div>
+                <select value={selected.pipelineStatus} onChange={e => updatePipeline(selected.id, e.target.value)}
+                  style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
+                  {['researching','applied','first-tape','callback','producer-interview','booked','rejected','ghosted'].map(s => <option key={s} value={s}>{s.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}</option>)}
+                </select>
+              </div>
+              {selected.applyLink && (
+                <a href={selected.applyLink} target="_blank" rel="noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>Open apply link →</a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function App() {
   const width = useWindowWidth();
   const isMobile = width < 768;
@@ -2144,7 +2532,7 @@ export default function App() {
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
-  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables']];
+  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
 
   return (
     <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Inter', system-ui, sans-serif" }}>
@@ -4386,6 +4774,9 @@ export default function App() {
             </div>
           );
         })()}
+
+        {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
+        {tab === 'reality-casting' && <RealityCastingTab />}
 
         </div>
       </div>
