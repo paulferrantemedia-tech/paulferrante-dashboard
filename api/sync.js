@@ -158,11 +158,12 @@ function objectToRow(obj, headers) {
 // ─────────────────────────────────────────────────────────────
 async function driveDownloadFile(token, fileId) {
   // returns { mimeType, base64, fileName }
-  // Anthropic vision caps images at 5 MB. For oversized images, use Drive's
-  // thumbnailLink (Google auto-generates a smaller JPEG of any image) and
-  // upsize the size suffix on the thumbnail URL to get a high-res version
-  // that's still under the cap. PDFs always go through the normal path.
+  // Anthropic vision caps images at 5 MB. For oversized images, try to get
+  // a smaller version via several Drive URL strategies in order of preference.
+  // PDFs always go through the normal path (Anthropic accepts larger PDFs).
   const ANTHROPIC_MAX = 5_242_880; // 5 MB in bytes
+  const RESIZE_THRESHOLD = 4_500_000; // start trying smaller versions above this
+
   const meta = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,thumbnailLink`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -173,20 +174,61 @@ async function driveDownloadFile(token, fileId) {
   const isImage = m.mimeType && m.mimeType.startsWith('image/');
   const sizeBytes = Number(m.size || 0);
 
-  // Oversized image path: use Drive thumbnail upsized to 2000px
-  if (isImage && sizeBytes > ANTHROPIC_MAX - 200_000 && m.thumbnailLink) {
-    const sizes = ['=s2000', '=s1600', '=s1200'];
-    for (const sizeSuffix of sizes) {
-      const thumbUrl = m.thumbnailLink.replace(/=s\d+$/, sizeSuffix);
-      const thumbRes = await fetch(thumbUrl);
-      if (thumbRes.ok) {
-        const tbuf = Buffer.from(await thumbRes.arrayBuffer());
-        if (tbuf.length < ANTHROPIC_MAX) {
-          return { mimeType: 'image/jpeg', base64: tbuf.toString('base64'), fileName: m.name };
+  // Helper: try to fetch a candidate URL with several auth strategies.
+  // Returns a Buffer if it works and the result is under the cap, else null.
+  async function tryFetchUnderCap(url, label) {
+    const tries = [
+      { headers: { Authorization: `Bearer ${token}` } },
+      { headers: {} }, // unauthed (works for thumbnail URLs that bake auth in)
+    ];
+    for (const init of tries) {
+      try {
+        const r = await fetch(url, init);
+        if (!r.ok) continue;
+        const tbuf = Buffer.from(await r.arrayBuffer());
+        if (tbuf.length > 0 && tbuf.length < ANTHROPIC_MAX) {
+          console.log(`[resize] ${label} succeeded: ${tbuf.length} bytes`);
+          return tbuf;
         }
+      } catch (_) { /* try next */ }
+    }
+    return null;
+  }
+
+  // Oversized image path: try multiple resize strategies
+  if (isImage && sizeBytes > RESIZE_THRESHOLD) {
+    console.log(`[resize] image ${m.name} is ${sizeBytes} bytes — attempting downsize. thumbnailLink: ${m.thumbnailLink ? 'present' : 'MISSING'}`);
+
+    const candidates = [];
+    // Strategy 1: thumbnailLink with various size suffixes (covers =sNNN and =wNNN-hNNN formats)
+    if (m.thumbnailLink) {
+      for (const sz of [2000, 1800, 1600, 1400, 1200]) {
+        candidates.push({
+          url: m.thumbnailLink
+            .replace(/=s\d+(?:[^&]*)?$/, `=s${sz}`)
+            .replace(/=w\d+-h\d+(?:[^&]*)?$/, `=w${sz}-h${sz}`),
+          label: `thumbnailLink=s${sz}`,
+        });
       }
     }
-    // Thumbnails all failed — fall through to full download (Anthropic will reject if still too big)
+    // Strategy 2: drive.google.com/thumbnail constructed URL at multiple sizes
+    for (const sz of [2000, 1800, 1600, 1400, 1200]) {
+      candidates.push({
+        url: `https://drive.google.com/thumbnail?id=${fileId}&sz=w${sz}`,
+        label: `drive.google.com/thumbnail&sz=w${sz}`,
+      });
+    }
+    // Strategy 3: googleusercontent direct via fileId
+    candidates.push({
+      url: `https://lh3.googleusercontent.com/d/${fileId}=s2000`,
+      label: 'lh3.googleusercontent.com=s2000',
+    });
+
+    for (const c of candidates) {
+      const buf = await tryFetchUnderCap(c.url, c.label);
+      if (buf) return { mimeType: 'image/jpeg', base64: buf.toString('base64'), fileName: m.name };
+    }
+    console.log('[resize] all downsize strategies failed for', m.name);
   }
 
   const dl = await fetch(
@@ -196,9 +238,9 @@ async function driveDownloadFile(token, fileId) {
   if (!dl.ok) throw new Error(`Drive download failed: ${dl.status}`);
   const buf = Buffer.from(await dl.arrayBuffer());
 
-  // Last-resort guard: image still too big and no thumbnail worked
+  // Last-resort guard: image still too big and no resize strategy worked
   if (isImage && buf.length > ANTHROPIC_MAX) {
-    throw new Error(`Image too large: ${buf.length} bytes (max ${ANTHROPIC_MAX}). Compress before uploading.`);
+    throw new Error(`Image too large: ${buf.length} bytes (max ${ANTHROPIC_MAX}). All Drive thumbnail strategies failed — file may be too new for thumbnails. Wait 60s and retry, or compress before uploading.`);
   }
 
   return { mimeType: m.mimeType, base64: buf.toString('base64'), fileName: m.name };
