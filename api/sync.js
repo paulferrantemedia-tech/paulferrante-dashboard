@@ -158,12 +158,36 @@ function objectToRow(obj, headers) {
 // ─────────────────────────────────────────────────────────────
 async function driveDownloadFile(token, fileId) {
   // returns { mimeType, base64, fileName }
+  // Anthropic vision caps images at 5 MB. For oversized images, use Drive's
+  // thumbnailLink (Google auto-generates a smaller JPEG of any image) and
+  // upsize the size suffix on the thumbnail URL to get a high-res version
+  // that's still under the cap. PDFs always go through the normal path.
+  const ANTHROPIC_MAX = 5_242_880; // 5 MB in bytes
   const meta = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,thumbnailLink`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   if (!meta.ok) throw new Error(`Drive metadata failed: ${meta.status}`);
   const m = await meta.json();
+
+  const isImage = m.mimeType && m.mimeType.startsWith('image/');
+  const sizeBytes = Number(m.size || 0);
+
+  // Oversized image path: use Drive thumbnail upsized to 2000px
+  if (isImage && sizeBytes > ANTHROPIC_MAX - 200_000 && m.thumbnailLink) {
+    const sizes = ['=s2000', '=s1600', '=s1200'];
+    for (const sizeSuffix of sizes) {
+      const thumbUrl = m.thumbnailLink.replace(/=s\d+$/, sizeSuffix);
+      const thumbRes = await fetch(thumbUrl);
+      if (thumbRes.ok) {
+        const tbuf = Buffer.from(await thumbRes.arrayBuffer());
+        if (tbuf.length < ANTHROPIC_MAX) {
+          return { mimeType: 'image/jpeg', base64: tbuf.toString('base64'), fileName: m.name };
+        }
+      }
+    }
+    // Thumbnails all failed — fall through to full download (Anthropic will reject if still too big)
+  }
 
   const dl = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
@@ -171,6 +195,12 @@ async function driveDownloadFile(token, fileId) {
   );
   if (!dl.ok) throw new Error(`Drive download failed: ${dl.status}`);
   const buf = Buffer.from(await dl.arrayBuffer());
+
+  // Last-resort guard: image still too big and no thumbnail worked
+  if (isImage && buf.length > ANTHROPIC_MAX) {
+    throw new Error(`Image too large: ${buf.length} bytes (max ${ANTHROPIC_MAX}). Compress before uploading.`);
+  }
+
   return { mimeType: m.mimeType, base64: buf.toString('base64'), fileName: m.name };
 }
 
