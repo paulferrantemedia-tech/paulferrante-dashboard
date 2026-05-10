@@ -1,9 +1,32 @@
 // /api/sync — cross-device state sync via Upstash Redis
-// GET  /api/sync  → load dashboard state
-// POST /api/sync  → save dashboard state
+// PLUS Books module (consolidated to keep Vercel Hobby at 12/12 functions)
+//
+// Routes:
+//   GET  /api/sync                                → load dashboard state (existing)
+//   POST /api/sync                                → save dashboard state (existing)
+//   POST /api/sync?action=process-receipt         → AI-extract a receipt from Drive, write to Sheet  [Apps Script calls this]
+//   GET  /api/sync?action=books-data&year=2026    → read all Books rows (Expenses, Deals, etc.) for a year
+//   POST /api/sync?action=update-expense          → patch a single Expenses row (review confirms, edits)
+//   POST /api/sync?action=upsert-deal             → create/update a Deals row
+//   POST /api/sync?action=manual-expense          → manual-entry expense (no AI extraction)
+//   POST /api/sync?action=year-export&kind=csv    → returns CSV string for CPA
+//   POST /api/sync?action=year-export&kind=audit  → returns audit-binder data
+//
+// Required env vars (existing): KV_REST_API_URL, KV_REST_API_TOKEN, ANTHROPIC_API_KEY
+// New env vars for Books:
+//   GOOGLE_SHEETS_ID                — the spreadsheet ID for RGG_Books
+//   GOOGLE_SERVICE_ACCOUNT_EMAIL    — from the service account JSON
+//   GOOGLE_SERVICE_ACCOUNT_KEY      — private_key from the service account JSON (preserve newlines)
+//   GOOGLE_DRIVE_INBOX_ID           — folder ID of RGG_Receipts/<YEAR>/_inbox/
+//   GOOGLE_DRIVE_PROCESSED_ID       — folder ID of RGG_Receipts/<YEAR>/_processed/
+//   GOOGLE_DRIVE_FAILED_ID          — folder ID of RGG_Receipts/<YEAR>/_failed/
+//   APPS_SCRIPT_SHARED_SECRET       — random string; Apps Script must send this in X-Books-Secret header
 
 const KEY = 'pf_dashboard_state';
 
+// ─────────────────────────────────────────────────────────────
+// Existing Redis helpers (unchanged)
+// ─────────────────────────────────────────────────────────────
 async function kvGet(baseUrl, token) {
   const res = await fetch(`${baseUrl}/get/${KEY}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -11,7 +34,6 @@ async function kvGet(baseUrl, token) {
   if (!res.ok) throw new Error(`Redis GET failed: ${res.status}`);
   const data = await res.json();
   if (!data.result) return null;
-  // result may be a string (parse it) or already an object
   if (typeof data.result === 'string') {
     try { return JSON.parse(data.result); } catch { return null; }
   }
@@ -19,32 +41,689 @@ async function kvGet(baseUrl, token) {
 }
 
 async function kvSet(baseUrl, token, value) {
-  // Use pipeline format so value is stored as a plain JSON string — no double-encoding
   const res = await fetch(`${baseUrl}/pipeline`, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify([['SET', KEY, JSON.stringify(value)]]),
   });
   if (!res.ok) throw new Error(`Redis SET failed: ${res.status}`);
   return res.json();
 }
 
+// ─────────────────────────────────────────────────────────────
+// Google API auth (service-account JWT — no extra deps)
+// ─────────────────────────────────────────────────────────────
+async function getGoogleAccessToken() {
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const rawKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (!email || !rawKey) throw new Error('Google service account env vars missing');
+  const privateKey = rawKey.replace(/\\n/g, '\n');
+
+  const now = Math.floor(Date.now() / 1000);
+  const claim = {
+    iss: email,
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive',
+    aud: 'https://oauth2.googleapis.com/token',
+    exp: now + 3600,
+    iat: now,
+  };
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const unsigned = `${enc(header)}.${enc(claim)}`;
+
+  // Sign with RS256 using node:crypto
+  const { createSign, createPrivateKey } = await import('node:crypto');
+  const keyObj = createPrivateKey(privateKey);
+  const signer = createSign('RSA-SHA256');
+  signer.update(unsigned);
+  const signature = signer.sign(keyObj).toString('base64url');
+  const jwt = `${unsigned}.${signature}`;
+
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`Google token exchange failed: ${r.status} ${t}`);
+  }
+  const j = await r.json();
+  return j.access_token;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sheets helpers
+// ─────────────────────────────────────────────────────────────
+async function sheetsGet(token, sheetId, range) {
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!r.ok) throw new Error(`Sheets GET ${range} failed: ${r.status} ${await r.text()}`);
+  const j = await r.json();
+  return j.values || [];
+}
+
+async function sheetsAppend(token, sheetId, range, values) {
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    }
+  );
+  if (!r.ok) throw new Error(`Sheets APPEND ${range} failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+async function sheetsUpdate(token, sheetId, range, values) {
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    }
+  );
+  if (!r.ok) throw new Error(`Sheets UPDATE ${range} failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+// Convert a sheet (rows of values, first row = headers) into objects
+function rowsToObjects(values) {
+  if (!values || values.length < 2) return [];
+  const headers = values[0];
+  return values.slice(1).map((row, i) => {
+    const o = { _rowIndex: i + 2 }; // 1-indexed; row 1 is headers
+    headers.forEach((h, idx) => { o[h] = row[idx] ?? ''; });
+    return o;
+  });
+}
+
+// Convert an object into an ordered row array following a header list
+function objectToRow(obj, headers) {
+  return headers.map((h) => {
+    const v = obj[h];
+    if (v === undefined || v === null) return '';
+    if (Array.isArray(v)) return v.join(',');
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drive helpers
+// ─────────────────────────────────────────────────────────────
+async function driveDownloadFile(token, fileId) {
+  // returns { mimeType, base64, fileName }
+  const meta = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!meta.ok) throw new Error(`Drive metadata failed: ${meta.status}`);
+  const m = await meta.json();
+
+  const dl = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!dl.ok) throw new Error(`Drive download failed: ${dl.status}`);
+  const buf = Buffer.from(await dl.arrayBuffer());
+  return { mimeType: m.mimeType, base64: buf.toString('base64'), fileName: m.name };
+}
+
+async function driveMoveFile(token, fileId, newParentId, oldParentId) {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${oldParentId}&fields=id,parents,webViewLink`;
+  const r = await fetch(url, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error(`Drive move failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
+
+async function driveGetWebLink(token, fileId) {
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=webViewLink`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.webViewLink || null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Anthropic vision extraction
+// ─────────────────────────────────────────────────────────────
+const EXTRACTION_PROMPT = `You are extracting structured data from a receipt for tax purposes for a US-based LLC (RGG Media, a creator/media business).
+Return ONLY a JSON object with this exact schema, no preamble:
+{
+  "vendor": string,
+  "date": "YYYY-MM-DD",
+  "amount_total": number,
+  "currency": "USD" | "AUD" | "EUR" | etc.,
+  "tax_amount": number | null,
+  "tip_amount": number | null,
+  "payment_method": string | null,
+  "line_items": [ { "description": string, "amount": number } ],
+  "category_suggestion": string,
+  "category_reasoning": string,
+  "confidence": "high" | "medium" | "low",
+  "confidence_notes": string | null,
+  "is_business_likely": boolean,
+  "raw_text": string
+}
+CATEGORY OPTIONS (pick exactly one for category_suggestion):
+- Equipment & Hardware
+- Software & Subscriptions
+- Travel - Lodging
+- Travel - Transportation
+- Travel - Meals
+- Meals & Entertainment
+- Home Office
+- Professional Services
+- Marketing & Advertising
+- Internet & Phone
+- Production Costs
+- Education & Research
+- Bank & Payment Fees
+- Office Supplies
+- Other
+Rules:
+- If the receipt is unreadable or not a receipt, return all fields null with confidence "low" and explain in confidence_notes.
+- Hotels/Airbnbs → "Travel - Lodging".
+- Flights/Uber/Lyft/gas/rental cars → "Travel - Transportation".
+- Restaurant meals where the date suggests travel → "Travel - Meals" (50% deductible).
+- Local restaurant meals → "Meals & Entertainment" (50% deductible).
+- Adobe/Notion/Canva/CapCut/Figma/hosting → "Software & Subscriptions".
+- Cameras, mics, smart glasses, computers, storage drives → "Equipment & Hardware".
+- If unsure, pick "Other" and explain.
+
+EDGE CASES:
+- Multi-page PDFs: extract from all pages and return a single consolidated total. Use the final/grand total, not subtotals from individual pages.
+- Multiple receipts in one image: return the most prominent receipt. Set confidence to "low" and put "multiple receipts detected — extracted the most prominent" in confidence_notes.
+- Foreign currency: extract the currency field accurately (USD, AUD, EUR, etc.). Do NOT convert. Keep amount_total in the original currency.
+- Handwritten receipts: extract what you can. Set confidence to "low" and note "handwritten" in confidence_notes.
+- Email confirmations (Airbnb, Uber, hotel/flight confirmations): treat them as receipts. Extract vendor, date, amount, currency normally.
+- Screenshots of mobile order confirmations: extract normally — these are valid receipts.
+- Tip vs total: amount_total is ALWAYS the final paid amount INCLUDING tip. If tip is shown separately, also populate tip_amount, but amount_total stays as the final-paid value.
+- If image quality is too poor to read key fields with confidence: set confidence to "low" and explain in confidence_notes (blurry, glare, partial cutoff, etc.).`;
+
+async function anthropicExtract(base64, mimeType) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY missing');
+
+  // Map mime types: images go in image content block; PDFs go in document block
+  const isPdf = mimeType === 'application/pdf';
+  const isImg = mimeType && mimeType.startsWith('image/');
+  if (!isPdf && !isImg) {
+    return { ok: false, error: `Unsupported mime ${mimeType}`, parsed: null };
+  }
+
+  const fileBlock = isPdf
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+    : { type: 'image',    source: { type: 'base64', media_type: mimeType,         data: base64 } };
+
+  const body = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1500,
+    messages: [{
+      role: 'user',
+      content: [ fileBlock, { type: 'text', text: EXTRACTION_PROMPT } ],
+    }],
+  };
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      // For PDF support
+      'anthropic-beta': 'pdfs-2024-09-25',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const txt = await r.text();
+    return { ok: false, error: `Anthropic ${r.status}: ${txt}`, parsed: null };
+  }
+  const j = await r.json();
+  const text = j?.content?.[0]?.text || '';
+  // Strip code fences if present
+  const clean = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  let parsed = null;
+  try { parsed = JSON.parse(clean); } catch (e) {
+    return { ok: false, error: `JSON parse failed: ${e.message}`, parsed: null, raw: text };
+  }
+  return { ok: true, parsed };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Books column schemas
+// ─────────────────────────────────────────────────────────────
+const EXPENSE_HEADERS = [
+  'expense_id','date','vendor','amount','currency',
+  'category_auto','category','category_reasoning','payment_method','business_purpose',
+  'receipt_url','auto_linked_deal_id','linked_deal_id','linked_deal_id_2',
+  'extraction_confidence','confidence_notes','extracted_text',
+  'entered_by','extracted_at','flags','reviewed','notes',
+];
+const DEAL_HEADERS = [
+  'deal_id','brand','deal_value','status','platform',
+  'deliverable_url','invoice_url','shoot_start_date','shoot_end_date',
+  'usage_rights','paid_date','notes',
+];
+const VENDOR_HEADERS = ['vendor_normalized','category','confirmation_count','last_confirmed_at'];
+const LOG_HEADERS = ['log_id','file_name','file_id','started_at','completed_at','status','error_message','expense_id'];
+
+const CATEGORIES = [
+  'Equipment & Hardware','Software & Subscriptions','Travel - Lodging','Travel - Transportation',
+  'Travel - Meals','Meals & Entertainment','Home Office','Professional Services',
+  'Marketing & Advertising','Internet & Phone','Production Costs','Education & Research',
+  'Bank & Payment Fees','Office Supplies','Other',
+];
+const TRAVEL_CATEGORIES = ['Travel - Lodging','Travel - Transportation','Travel - Meals'];
+
+function uuid() {
+  // RFC 4122 v4-ish; not cryptographically perfect but fine for IDs here
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function nowIso() { return new Date().toISOString(); }
+
+function normalizeVendor(v) {
+  return String(v || '').toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+function computeFlags(row, vendorMemorySet) {
+  const flags = [];
+  if (row.extraction_confidence === '__failed__') flags.push('extraction_failed');
+  if (row.extraction_confidence === 'low')        flags.push('low_confidence_extraction');
+  if (!row.business_purpose || String(row.business_purpose).trim().length < 10) flags.push('missing_purpose');
+  if (row.auto_linked_deal_id && String(row.reviewed).toLowerCase() !== 'true') flags.push('auto_link_pending');
+  if (Number(row.amount) > 200 && !row.linked_deal_id && TRAVEL_CATEGORIES.includes(row.category)
+      && String(row.reviewed).toLowerCase() !== 'true') flags.push('unlinked_high_value');
+  if (row.category === 'Other') flags.push('category_other');
+  if (vendorMemorySet && row.vendor && !vendorMemorySet.has(normalizeVendor(row.vendor))
+      && row.extraction_confidence !== 'high') flags.push('vendor_unknown');
+  if (row.extracted_at) {
+    const days = (Date.now() - new Date(row.extracted_at).getTime()) / 86400000;
+    if (days > 30 && String(row.reviewed).toLowerCase() !== 'true') flags.push('over_30_days_unreviewed');
+  }
+  return flags;
+}
+
+// ─────────────────────────────────────────────────────────────
+// process-receipt action (called by Apps Script)
+// ─────────────────────────────────────────────────────────────
+async function handleProcessReceipt(req, res) {
+  // Apps Script must send this header
+  if ((req.headers['x-books-secret'] || '') !== (process.env.APPS_SCRIPT_SHARED_SECRET || '__unset__')) {
+    return res.status(401).json({ error: 'invalid shared secret' });
+  }
+
+  const { fileId, fileName } = req.body || {};
+  if (!fileId) return res.status(400).json({ error: 'fileId required' });
+
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
+  const processedId = process.env.GOOGLE_DRIVE_PROCESSED_ID;
+  const failedId = process.env.GOOGLE_DRIVE_FAILED_ID;
+  if (!sheetId || !inboxId || !processedId || !failedId) {
+    return res.status(500).json({ error: 'Books env vars missing' });
+  }
+
+  const logId = uuid();
+  const startedAt = nowIso();
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  // Append a "started" log row first so we have a paper trail
+  try {
+    await sheetsAppend(token, sheetId, 'ProcessingLog!A1', [[
+      logId, fileName || '', fileId, startedAt, '', 'started', '', '',
+    ]]);
+  } catch (_) { /* logging failures should not block extraction */ }
+
+  let extractRes, fileMeta;
+  try {
+    fileMeta = await driveDownloadFile(token, fileId);
+    extractRes = await anthropicExtract(fileMeta.base64, fileMeta.mimeType);
+  } catch (e) {
+    // Move to _failed/
+    try { await driveMoveFile(token, fileId, failedId, inboxId); } catch (_) {}
+    await logComplete(token, sheetId, logId, 'failed', e.message, '');
+    return res.status(500).json({ error: e.message, logId });
+  }
+
+  if (!extractRes.ok) {
+    try { await driveMoveFile(token, fileId, failedId, inboxId); } catch (_) {}
+    // Still write a row marked extraction_failed so Paul can manually fix
+    const expenseId = uuid();
+    const row = {
+      expense_id: expenseId, date: '', vendor: fileName || '(unknown)', amount: '',
+      currency: 'USD', category_auto: '', category: '', category_reasoning: '',
+      payment_method: '', business_purpose: '',
+      receipt_url: await driveGetWebLink(token, fileId) || '',
+      auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '',
+      extraction_confidence: '__failed__', confidence_notes: extractRes.error || 'extraction failed',
+      extracted_text: extractRes.raw || '',
+      entered_by: 'ai', extracted_at: nowIso(), flags: 'extraction_failed', reviewed: 'FALSE', notes: '',
+    };
+    await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
+    await logComplete(token, sheetId, logId, 'failed', extractRes.error || 'unknown', expenseId);
+    return res.status(200).json({ ok: false, expense_id: expenseId, error: extractRes.error });
+  }
+
+  const p = extractRes.parsed || {};
+  // VendorMemory lookup — overrides AI category if confirmed before
+  let categoryFinal = p.category_suggestion || 'Other';
+  let categoryAuto = p.category_suggestion || 'Other';
+  let vendorOverride = null;
+  try {
+    const vm = await sheetsGet(token, sheetId, 'VendorMemory!A1:D');
+    const vmObjs = rowsToObjects(vm);
+    const norm = normalizeVendor(p.vendor);
+    const hit = vmObjs.find((r) => normalizeVendor(r.vendor_normalized) === norm);
+    if (hit && hit.category) { categoryFinal = hit.category; vendorOverride = hit.category; }
+  } catch (_) {}
+
+  // Auto-deal-linking
+  let autoLinkedDealId = '';
+  try {
+    const deals = rowsToObjects(await sheetsGet(token, sheetId, 'Deals!A1:L'));
+    const recDate = p.date;
+    if (recDate) {
+      const overlap = deals.filter((d) =>
+        d.shoot_start_date && d.shoot_end_date &&
+        d.shoot_start_date <= recDate && recDate <= d.shoot_end_date
+      );
+      if (overlap.length === 1) autoLinkedDealId = overlap[0].deal_id;
+      else if (overlap.length > 1) {
+        // multiple — pick highest-value
+        overlap.sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0));
+        autoLinkedDealId = overlap[0].deal_id;
+      }
+    }
+  } catch (_) {}
+
+  // Move file to _processed/
+  let receiptUrl = '';
+  try {
+    await driveMoveFile(token, fileId, processedId, inboxId);
+    receiptUrl = await driveGetWebLink(token, fileId) || '';
+  } catch (_) {}
+
+  const expenseId = uuid();
+  const row = {
+    expense_id: expenseId,
+    date: p.date || '',
+    vendor: p.vendor || '',
+    amount: p.amount_total ?? '',
+    currency: p.currency || 'USD',
+    category_auto: categoryAuto,
+    category: categoryFinal,
+    category_reasoning: vendorOverride
+      ? `VendorMemory override (${vendorOverride}). AI suggested: ${p.category_suggestion}. ${p.category_reasoning || ''}`
+      : (p.category_reasoning || ''),
+    payment_method: p.payment_method || '',
+    business_purpose: '',
+    receipt_url: receiptUrl,
+    auto_linked_deal_id: autoLinkedDealId,
+    linked_deal_id: autoLinkedDealId, // default to auto, Paul can change
+    linked_deal_id_2: '',
+    extraction_confidence: p.confidence || 'medium',
+    confidence_notes: p.confidence_notes || '',
+    extracted_text: p.raw_text || '',
+    entered_by: 'ai',
+    extracted_at: nowIso(),
+    flags: '', // computed on read
+    reviewed: 'FALSE',
+    notes: '',
+  };
+  await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
+  await logComplete(token, sheetId, logId,
+    p.confidence === 'low' ? 'low_confidence' : 'success', '', expenseId);
+
+  return res.status(200).json({ ok: true, expense_id: expenseId, parsed: p, auto_linked_deal_id: autoLinkedDealId });
+}
+
+async function logComplete(token, sheetId, logId, status, errMsg, expenseId) {
+  // Append a "completed" log row (we don't try to update the started row — append-only is simpler)
+  try {
+    await sheetsAppend(token, sheetId, 'ProcessingLog!A1', [[
+      logId, '', '', '', nowIso(), status, errMsg || '', expenseId || '',
+    ]]);
+  } catch (_) {}
+}
+
+// ─────────────────────────────────────────────────────────────
+// books-data action (read for the dashboard)
+// ─────────────────────────────────────────────────────────────
+async function handleBooksData(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+  const year = req.query.year || new Date().getFullYear();
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  try {
+    const [eVals, dVals, vVals] = await Promise.all([
+      sheetsGet(token, sheetId, 'Expenses!A1:V'),
+      sheetsGet(token, sheetId, 'Deals!A1:L'),
+      sheetsGet(token, sheetId, 'VendorMemory!A1:D'),
+    ]);
+    const expenses = rowsToObjects(eVals).filter((r) => !r.date || String(r.date).startsWith(String(year)));
+    const deals = rowsToObjects(dVals);
+    const vendorMemory = rowsToObjects(vVals);
+    const vmSet = new Set(vendorMemory.map((v) => normalizeVendor(v.vendor_normalized)));
+    expenses.forEach((r) => { r.flags_computed = computeFlags(r, vmSet); });
+
+    return res.status(200).json({ ok: true, year: Number(year), expenses, deals, vendorMemory });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// update-expense action
+// ─────────────────────────────────────────────────────────────
+async function handleUpdateExpense(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const { expense_id, patch, confirm_vendor_category } = req.body || {};
+  if (!sheetId || !expense_id || !patch) return res.status(400).json({ error: 'expense_id and patch required' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  try {
+    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:V');
+    const objs = rowsToObjects(vals);
+    const target = objs.find((r) => r.expense_id === expense_id);
+    if (!target) return res.status(404).json({ error: 'expense not found' });
+
+    const merged = { ...target, ...patch };
+    // Strip helpers
+    delete merged._rowIndex; delete merged.flags_computed;
+    const rowArr = objectToRow(merged, EXPENSE_HEADERS);
+    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:V${target._rowIndex}`, [rowArr]);
+
+    // VendorMemory learning loop
+    if (confirm_vendor_category && merged.vendor && merged.category) {
+      await upsertVendorMemory(token, sheetId, merged.vendor, merged.category);
+    }
+
+    return res.status(200).json({ ok: true, expense: merged });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+async function upsertVendorMemory(token, sheetId, vendor, category) {
+  const norm = normalizeVendor(vendor);
+  const vals = await sheetsGet(token, sheetId, 'VendorMemory!A1:D');
+  const objs = rowsToObjects(vals);
+  const hit = objs.find((r) => normalizeVendor(r.vendor_normalized) === norm);
+  if (hit) {
+    const newRow = [norm, category, String(Number(hit.confirmation_count || 0) + 1), nowIso()];
+    await sheetsUpdate(token, sheetId, `VendorMemory!A${hit._rowIndex}:D${hit._rowIndex}`, [newRow]);
+  } else {
+    await sheetsAppend(token, sheetId, 'VendorMemory!A1', [[norm, category, '1', nowIso()]]);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// upsert-deal action
+// ─────────────────────────────────────────────────────────────
+async function handleUpsertDeal(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const deal = req.body || {};
+  if (!sheetId || !deal.brand) return res.status(400).json({ error: 'brand required' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  try {
+    const vals = await sheetsGet(token, sheetId, 'Deals!A1:L');
+    const objs = rowsToObjects(vals);
+    const dealId = deal.deal_id || uuid();
+    const merged = { ...deal, deal_id: dealId };
+    const hit = objs.find((r) => r.deal_id === dealId);
+    const rowArr = objectToRow(merged, DEAL_HEADERS);
+    if (hit) {
+      await sheetsUpdate(token, sheetId, `Deals!A${hit._rowIndex}:L${hit._rowIndex}`, [rowArr]);
+    } else {
+      await sheetsAppend(token, sheetId, 'Deals!A1', [rowArr]);
+    }
+    return res.status(200).json({ ok: true, deal: merged });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// manual-expense action
+// ─────────────────────────────────────────────────────────────
+async function handleManualExpense(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const exp = req.body || {};
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  const expenseId = exp.expense_id || uuid();
+  const row = {
+    expense_id: expenseId,
+    date: exp.date || '',
+    vendor: exp.vendor || '',
+    amount: exp.amount || '',
+    currency: exp.currency || 'USD',
+    category_auto: '',
+    category: exp.category || 'Other',
+    category_reasoning: 'manual entry',
+    payment_method: exp.payment_method || '',
+    business_purpose: exp.business_purpose || '',
+    receipt_url: exp.receipt_url || '',
+    auto_linked_deal_id: '',
+    linked_deal_id: exp.linked_deal_id || '',
+    linked_deal_id_2: exp.linked_deal_id_2 || '',
+    extraction_confidence: 'high',
+    confidence_notes: '',
+    extracted_text: '',
+    entered_by: exp.entered_by || 'paul',
+    extracted_at: nowIso(),
+    flags: '',
+    reviewed: 'TRUE',
+    notes: exp.notes || '',
+  };
+  try {
+    await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
+    return res.status(200).json({ ok: true, expense_id: expenseId });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// year-export action — CSV for CPA
+// ─────────────────────────────────────────────────────────────
+function csvEscape(v) {
+  if (v == null) return '';
+  const s = String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+async function handleYearExport(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const year = req.query.year || new Date().getFullYear();
+  const kind = req.query.kind || 'csv';
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:V'))
+    .filter((r) => String(r.date || '').startsWith(String(year)));
+
+  if (kind === 'csv') {
+    const cols = ['date','vendor','amount','currency','category','business_purpose','payment_method','receipt_url','linked_deal_id','reviewed'];
+    const lines = [cols.join(',')];
+    // Sorted by category, then date
+    expenses.sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.date || '').localeCompare(b.date || ''));
+    expenses.forEach((r) => lines.push(cols.map((c) => csvEscape(r[c])).join(',')));
+    // Append totals per category
+    const totals = {};
+    expenses.forEach((r) => { totals[r.category || 'Uncategorized'] = (totals[r.category || 'Uncategorized'] || 0) + Number(r.amount || 0); });
+    lines.push('');
+    lines.push('CATEGORY TOTALS');
+    Object.keys(totals).sort().forEach((c) => lines.push(`${csvEscape(c)},${totals[c].toFixed(2)}`));
+    res.setHeader('Content-Type', 'text/csv');
+    return res.status(200).send(lines.join('\n'));
+  }
+
+  // Audit binder data — front-end will render the PDF
+  const deals = rowsToObjects(await sheetsGet(token, sheetId, 'Deals!A1:L'));
+  return res.status(200).json({ ok: true, year: Number(year), expenses, deals });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main handler — dispatches based on action query param
+// ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  // Prevent any layer (browser, CDN, Vercel edge) from caching sync responses
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Books-Secret');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  const action = (req.query.action || '').toString();
+
+  // Books actions take precedence when action= is set
+  if (action === 'process-receipt') return handleProcessReceipt(req, res);
+  if (action === 'books-data')      return handleBooksData(req, res);
+  if (action === 'update-expense')  return handleUpdateExpense(req, res);
+  if (action === 'upsert-deal')     return handleUpsertDeal(req, res);
+  if (action === 'manual-expense')  return handleManualExpense(req, res);
+  if (action === 'year-export')     return handleYearExport(req, res);
+
+  // Original behavior: GET/POST dashboard state via Redis
   const baseUrl = process.env.KV_REST_API_URL;
   const token   = process.env.KV_REST_API_TOKEN;
-
   if (!baseUrl || !token) {
     return res.status(500).json({ error: 'KV not configured', hint: 'KV_REST_API_URL and KV_REST_API_TOKEN must be set' });
   }
@@ -61,9 +740,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     try {
       const state = req.body;
-      if (!state || typeof state !== 'object') {
-        return res.status(400).json({ error: 'Body must be a JSON object' });
-      }
+      if (!state || typeof state !== 'object') return res.status(400).json({ error: 'Body must be a JSON object' });
       await kvSet(baseUrl, token, { ...state, _savedAt: Date.now() });
       return res.status(200).json({ ok: true });
     } catch (e) {
