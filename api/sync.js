@@ -397,7 +397,7 @@ const EXPENSE_HEADERS = [
   'category_auto','category','category_reasoning','payment_method','business_purpose',
   'receipt_url','auto_linked_deal_id','linked_deal_id','linked_deal_id_2',
   'extraction_confidence','confidence_notes','extracted_text',
-  'entered_by','extracted_at','flags','reviewed','notes',
+  'entered_by','extracted_at','flags','reviewed','notes','personal_suspect',
 ];
 const DEAL_HEADERS = [
   'deal_id','brand','deal_value','status','platform',
@@ -441,6 +441,9 @@ function computeFlags(row, vendorMemorySet) {
   if (row.category === 'Other') flags.push('category_other');
   if (vendorMemorySet && row.vendor && !vendorMemorySet.has(normalizeVendor(row.vendor))
       && row.extraction_confidence !== 'high') flags.push('vendor_unknown');
+  if (String(row.personal_suspect).toLowerCase() === 'true' && String(row.reviewed).toLowerCase() !== 'true') {
+    flags.push('personal_suspect');
+  }
   if (row.extracted_at) {
     const days = (Date.now() - new Date(row.extracted_at).getTime()) / 86400000;
     if (days > 30 && String(row.reviewed).toLowerCase() !== 'true') flags.push('over_30_days_unreviewed');
@@ -623,11 +626,16 @@ async function handleBooksData(req, res) {
 
   try {
     const [eVals, dVals, vVals] = await Promise.all([
-      sheetsGet(token, sheetId, 'Expenses!A1:V'),
+      sheetsGet(token, sheetId, 'Expenses!A1:W'),
       sheetsGet(token, sheetId, 'Deals!A1:L'),
       sheetsGet(token, sheetId, 'VendorMemory!A1:E'),
     ]);
-    const expenses = rowsToObjects(eVals).filter((r) => !r.date || String(r.date).startsWith(String(year)));
+    // Filter out deleted (blank) rows AND rows outside the requested year
+    const expenses = rowsToObjects(eVals).filter((r) => {
+      if (!r.expense_id) return false; // blank/deleted row
+      if (!r.date) return false; // no date — skip from year view
+      return String(r.date).startsWith(String(year));
+    });
     const deals = rowsToObjects(dVals);
     const vendorMemory = rowsToObjects(vVals);
     const vmSet = new Set(vendorMemory.map((v) => normalizeVendor(v.vendor_normalized)));
@@ -652,7 +660,7 @@ async function handleUpdateExpense(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:V');
+    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:W');
     const objs = rowsToObjects(vals);
     const target = objs.find((r) => r.expense_id === expense_id);
     if (!target) return res.status(404).json({ error: 'expense not found' });
@@ -661,7 +669,7 @@ async function handleUpdateExpense(req, res) {
     // Strip helpers
     delete merged._rowIndex; delete merged.flags_computed;
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
-    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:V${target._rowIndex}`, [rowArr]);
+    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:W${target._rowIndex}`, [rowArr]);
 
     // VendorMemory learning loop — saves both category AND business purpose for this vendor
     if (confirm_vendor_category && merged.vendor && merged.category) {
@@ -785,7 +793,7 @@ async function handleYearExport(req, res) {
   try { token = await getGoogleAccessToken(); }
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
-  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:V'))
+  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W'))
     .filter((r) => String(r.date || '').startsWith(String(year)));
 
   if (kind === 'csv') {
@@ -810,6 +818,266 @@ async function handleYearExport(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// bulk-import-csv action — import a chunk of credit-card-statement rows
+// Body: { csvChunk: string (CSV text), year: number, headerLine: string }
+// Frontend splits a large CSV into chunks and POSTs each separately to keep
+// each call under Vercel Hobby's 10s function timeout.
+// ─────────────────────────────────────────────────────────────
+const BULK_IMPORT_PROMPT = `You are parsing a chunk of a credit card statement for RGG Media (a creator/media business: TikTok, IG, YouTube, UGC, brand partnerships, travel/lifestyle content). The cardholder uses this card almost exclusively for business — flag any transaction that looks personal so it can be reviewed.
+
+Return ONLY a JSON array. Each item has this exact shape:
+{
+  "date": "YYYY-MM-DD",
+  "vendor": string,                  // Cleaned merchant name (strip transaction ID suffixes, location codes, etc)
+  "amount": number,                  // Positive for charges, negative for refunds/credits
+  "currency": "USD",
+  "category_suggestion": string,     // Pick from category list
+  "category_reasoning": string,      // One sentence
+  "suggested_business_purpose": string,
+  "is_likely_personal": boolean,     // True if this looks like a personal expense (groceries, personal streaming, gas station purchase that's not travel-related, etc)
+  "personal_reason": string | null,  // Why you flagged it personal (null if not flagged)
+  "skip": boolean,                   // True ONLY if this row isn't a real transaction (header row, payment-to-card row, fee disclosure, etc)
+  "skip_reason": string | null
+}
+
+CATEGORY OPTIONS:
+- Equipment & Hardware
+- Software & Subscriptions
+- Travel - Lodging
+- Travel - Transportation
+- Travel - Meals
+- Meals & Entertainment
+- Home Office
+- Professional Services
+- Marketing & Advertising
+- Internet & Phone
+- Production Costs
+- Education & Research
+- Bank & Payment Fees
+- Office Supplies
+- Other
+
+CATEGORIZATION RULES:
+- Hotels/Airbnbs/lodging → "Travel - Lodging"
+- Flights/Uber/Lyft/gas/rental cars → "Travel - Transportation"
+- Restaurant meals where vendor or context suggests travel → "Travel - Meals"
+- Local restaurant meals, coffee → "Meals & Entertainment"
+- Adobe/Notion/Canva/CapCut/Figma/hosting/SaaS → "Software & Subscriptions"
+- Cameras, mics, lights, smart glasses, computers, drives → "Equipment & Hardware"
+- AT&T/T-Mobile/Verizon/Spectrum/Comcast → "Internet & Phone"
+- Bank fees/card fees/ATM fees → "Bank & Payment Fees"
+- If unsure → "Other"
+
+PERSONAL-EXPENSE DETECTION (flag is_likely_personal=true if):
+- Grocery stores (Whole Foods, Trader Joe's, Vons, Ralphs) unless tagged for travel context
+- Pharmacy / drugstore / personal-care purchases
+- Personal subscriptions: Netflix, Hulu, Disney+, HBO, Spotify (UNLESS clearly business — Spotify could be production music)
+- Personal medical / dental / fitness (gym, yoga, spa)
+- Pet supplies, vet bills
+- Clothing / department stores (Nordstrom, Target, Macy's)
+- Home utilities (water, gas, electric — unless clear home office allocation)
+- Personal restaurants on weekends in home city without travel context
+- Anything that doesn't have a plausible RGG Media content-creation justification
+
+Be ASSERTIVE about flagging — Paul wants to err on the side of flagging suspicious items so he can review. He'd rather see false positives than miss personal charges.
+
+SKIP rows that aren't real transactions:
+- Header rows (first row of CSV with column names)
+- Payment-to-card rows ("PAYMENT THANK YOU" / "AUTOPAY" / similar)
+- Adjustment/fee disclosure rows that aren't charges
+- Empty rows
+
+SUGGESTED BUSINESS PURPOSE GUIDANCE (only if NOT skipped):
+- Coffee/restaurants: "Working session — content planning" or "Meeting with collaborator"
+- Software: "{Product name} subscription used for editing RGG Media content"
+- Travel: "Travel for content production / brand shoot"
+- Equipment: "{Item} used for video production for RGG Media"
+- Generic fallback: "Business expense for RGG Media content production / operations"
+
+Return only the JSON array, no preamble.`;
+
+async function handleBulkImportCsv(req, res) {
+  const { csvChunk, headerLine, year } = req.body || {};
+  if (!csvChunk) return res.status(400).json({ error: 'csvChunk required (CSV text body)' });
+
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  // Send chunk to Claude for parsing + categorization
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'ANTHROPIC_API_KEY missing' });
+
+  const userText = `Year filter: only include transactions dated within ${year}. Skip everything outside that year.\n\nHeader line:\n${headerLine || '(none provided — infer from chunk)'}\n\nCSV chunk:\n${csvChunk}`;
+  const body = {
+    model: 'claude-sonnet-4-6',
+    max_tokens: 4000,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: BULK_IMPORT_PROMPT },
+      { type: 'text', text: userText },
+    ] }],
+  };
+
+  let parsed;
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      return res.status(500).json({ error: `Anthropic ${r.status}: ${txt}` });
+    }
+    const j = await r.json();
+    let text = (j?.content?.[0]?.text || '').trim();
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error('Claude did not return an array');
+  } catch (e) {
+    return res.status(500).json({ error: `Parse failed: ${e.message}` });
+  }
+
+  // Load existing data for dedup + VendorMemory
+  let existing = [];
+  let vendorMemoryObjs = [];
+  let dealsByDate = [];
+  try {
+    [existing, vendorMemoryObjs, dealsByDate] = await Promise.all([
+      sheetsGet(token, sheetId, 'Expenses!A1:W').then(rowsToObjects),
+      sheetsGet(token, sheetId, 'VendorMemory!A1:E').then(rowsToObjects),
+      sheetsGet(token, sheetId, 'Deals!A1:L').then(rowsToObjects),
+    ]);
+  } catch (e) {
+    return res.status(500).json({ error: `Sheet read failed: ${e.message}` });
+  }
+  const existingKeys = new Set(existing.map((r) =>
+    `${String(r.date).trim()}|${normalizeVendor(r.vendor)}|${Number(r.amount || 0).toFixed(2)}`
+  ));
+  const vmMap = new Map(vendorMemoryObjs.map((v) => [normalizeVendor(v.vendor_normalized), v]));
+
+  const newRows = [];
+  const stats = { imported: 0, skipped_duplicate: 0, skipped_other_year: 0, skipped_not_transaction: 0, flagged_personal: 0 };
+
+  for (const item of parsed) {
+    if (item.skip) { stats.skipped_not_transaction++; continue; }
+    if (!item.date || !String(item.date).startsWith(String(year))) { stats.skipped_other_year++; continue; }
+    if (item.amount == null || isNaN(Number(item.amount))) continue;
+
+    const key = `${String(item.date).trim()}|${normalizeVendor(item.vendor)}|${Number(item.amount).toFixed(2)}`;
+    if (existingKeys.has(key)) { stats.skipped_duplicate++; continue; }
+    existingKeys.add(key); // prevent dup within the same chunk too
+
+    // VendorMemory override
+    let categoryFinal = item.category_suggestion || 'Other';
+    let purposeFinal = item.suggested_business_purpose || '';
+    const norm = normalizeVendor(item.vendor);
+    const memHit = vmMap.get(norm);
+    if (memHit) {
+      if (memHit.category) categoryFinal = memHit.category;
+      if (memHit.business_purpose_template) purposeFinal = memHit.business_purpose_template;
+    }
+
+    // Auto-deal-link if shoot window matches
+    let autoDeal = '';
+    const overlap = dealsByDate.filter((d) => d.shoot_start_date && d.shoot_end_date
+      && d.shoot_start_date <= item.date && item.date <= d.shoot_end_date);
+    if (overlap.length === 1) autoDeal = overlap[0].deal_id;
+    else if (overlap.length > 1) {
+      overlap.sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0));
+      autoDeal = overlap[0].deal_id;
+      // override purpose for deal-linked rows
+      const brand = overlap[0].brand || '(brand)';
+      const platform = overlap[0].platform || '';
+      purposeFinal = `Production expense for ${brand} deal${platform ? ` (${platform})` : ''}.`;
+    } else if (overlap.length === 1) {
+      const brand = overlap[0].brand || '(brand)';
+      const platform = overlap[0].platform || '';
+      purposeFinal = `Production expense for ${brand} deal${platform ? ` (${platform})` : ''}.`;
+    }
+
+    const expenseId = uuid();
+    const isPersonal = !!item.is_likely_personal;
+    if (isPersonal) stats.flagged_personal++;
+
+    const rowObj = {
+      expense_id: expenseId,
+      date: item.date,
+      vendor: item.vendor || '',
+      amount: item.amount,
+      currency: item.currency || 'USD',
+      category_auto: item.category_suggestion || 'Other',
+      category: categoryFinal,
+      category_reasoning: item.category_reasoning || '',
+      payment_method: 'Card statement',
+      business_purpose: purposeFinal,
+      receipt_url: '',
+      auto_linked_deal_id: autoDeal,
+      linked_deal_id: autoDeal,
+      linked_deal_id_2: '',
+      extraction_confidence: isPersonal ? 'medium' : 'high',
+      confidence_notes: isPersonal && item.personal_reason ? `Personal-suspect: ${item.personal_reason}` : '',
+      extracted_text: '',
+      entered_by: 'csv_import',
+      extracted_at: nowIso(),
+      flags: '',
+      reviewed: 'FALSE',
+      notes: '',
+      personal_suspect: isPersonal ? 'TRUE' : 'FALSE',
+    };
+    newRows.push(objectToRow(rowObj, EXPENSE_HEADERS));
+    stats.imported++;
+  }
+
+  if (newRows.length > 0) {
+    try {
+      await sheetsAppend(token, sheetId, 'Expenses!A1', newRows);
+    } catch (e) {
+      return res.status(500).json({ error: `Sheet append failed: ${e.message}` });
+    }
+  }
+
+  return res.status(200).json({ ok: true, ...stats });
+}
+
+// ─────────────────────────────────────────────────────────────
+// delete-expense / bulk-delete-expenses actions
+// Body: { expense_id } or { expense_ids: [...] }
+// Strategy: clear the row's cells (we don't physically delete the row to avoid
+// shifting row indexes that other concurrent operations might rely on).
+// The row will not appear in books-data because we filter blank rows on read.
+// ─────────────────────────────────────────────────────────────
+async function handleDeleteExpense(req, res) {
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const ids = req.body?.expense_ids || (req.body?.expense_id ? [req.body.expense_id] : []);
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+  if (!ids.length) return res.status(400).json({ error: 'expense_id or expense_ids required' });
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  try {
+    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W'));
+    const idSet = new Set(ids);
+    const targets = objs.filter((r) => idSet.has(r.expense_id));
+    if (targets.length === 0) return res.status(404).json({ error: 'no matching expense ids' });
+
+    // Clear each target row by writing an empty row in its place
+    const blankRow = EXPENSE_HEADERS.map(() => '');
+    for (const target of targets) {
+      await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:W${target._rowIndex}`, [blankRow]);
+    }
+    return res.status(200).json({ ok: true, deleted: targets.length });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Main handler — dispatches based on action query param
 // ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
@@ -824,12 +1092,15 @@ export default async function handler(req, res) {
   const action = (req.query.action || '').toString();
 
   // Books actions take precedence when action= is set
-  if (action === 'process-receipt') return handleProcessReceipt(req, res);
-  if (action === 'books-data')      return handleBooksData(req, res);
-  if (action === 'update-expense')  return handleUpdateExpense(req, res);
-  if (action === 'upsert-deal')     return handleUpsertDeal(req, res);
-  if (action === 'manual-expense')  return handleManualExpense(req, res);
-  if (action === 'year-export')     return handleYearExport(req, res);
+  if (action === 'process-receipt')  return handleProcessReceipt(req, res);
+  if (action === 'books-data')       return handleBooksData(req, res);
+  if (action === 'update-expense')   return handleUpdateExpense(req, res);
+  if (action === 'upsert-deal')      return handleUpsertDeal(req, res);
+  if (action === 'manual-expense')   return handleManualExpense(req, res);
+  if (action === 'year-export')      return handleYearExport(req, res);
+  if (action === 'bulk-import-csv')  return handleBulkImportCsv(req, res);
+  if (action === 'delete-expense')   return handleDeleteExpense(req, res);
+  if (action === 'bulk-delete-expenses') return handleDeleteExpense(req, res);
 
   // Original behavior: GET/POST dashboard state via Redis
   const baseUrl = process.env.KV_REST_API_URL;

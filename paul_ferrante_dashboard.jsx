@@ -2603,12 +2603,36 @@ function withinYear(row, year) { return String(row.date || '').startsWith(String
 // ─────────────────────────────────────────────────────────────────────────────
 // BooksTab — top-level component
 // ─────────────────────────────────────────────────────────────────────────────
+// sessionStorage helpers — let state survive parent remounts (a Books-tab
+// remount used to lose the current sub-tab and any in-progress text edits).
+const SS_KEY_SUB    = 'books_sub_tab';
+const SS_KEY_YEAR   = 'books_year';
+const SS_KEY_DRAFTS = 'books_inbox_drafts'; // map of expense_id → edit object
+function ssGet(key, fallback) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return fallback;
+    const v = window.sessionStorage.getItem(key);
+    if (v == null) return fallback;
+    try { return JSON.parse(v); } catch { return v; }
+  } catch { return fallback; }
+}
+function ssSet(key, value) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    window.sessionStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch { /* quota or privacy mode — silently ignore */ }
+}
+
 function BooksTab({ isMobile, showToast }) {
-  const [year, setYear]         = useState(new Date().getFullYear());
-  const [sub, setSub]           = useState('inbox');
-  const [data, setData]         = useState({ expenses: [], deals: [], vendorMemory: [] });
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState(null);
+  const [year, setYearState] = useState(() => Number(ssGet(SS_KEY_YEAR, new Date().getFullYear())));
+  const [sub, setSubState]   = useState(() => ssGet(SS_KEY_SUB, 'inbox'));
+  const [data, setData]      = useState({ expenses: [], deals: [], vendorMemory: [] });
+  const [loading, setLoading]= useState(true);
+  const [error, setError]    = useState(null);
+
+  // Persist sub + year to sessionStorage so a parent remount doesn't snap back to Inbox / current year
+  const setYear = (y) => { ssSet(SS_KEY_YEAR, y); setYearState(y); };
+  const setSub  = (s) => { ssSet(SS_KEY_SUB,  s); setSubState(s);  };
 
   const reload = async () => {
     setLoading(true);
@@ -2810,13 +2834,33 @@ function InboxTab({ data, reload, isMobile, showToast }) {
 }
 
 function InboxCard({ row, deals, reload, isMobile, showToast }) {
-  const [edit, setEdit] = useState({
+  // Edit drafts are persisted in sessionStorage so a parent remount doesn't wipe in-progress typing.
+  const draftFromStorage = (() => {
+    const all = ssGet(SS_KEY_DRAFTS, {}) || {};
+    return all[row.expense_id];
+  })();
+  const [edit, setEditState] = useState(() => draftFromStorage || {
     vendor: row.vendor || '', date: row.date || '', amount: row.amount || '',
     category: row.category || 'Other', business_purpose: row.business_purpose || '',
     linked_deal_id: row.linked_deal_id || '',
   });
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const flags = row.flags_computed || [];
+
+  // Wrap setEdit to persist the draft on every keystroke
+  const setEdit = (next) => {
+    const value = typeof next === 'function' ? next(edit) : next;
+    setEditState(value);
+    const all = ssGet(SS_KEY_DRAFTS, {}) || {};
+    all[row.expense_id] = value;
+    ssSet(SS_KEY_DRAFTS, all);
+  };
+  const clearDraft = () => {
+    const all = ssGet(SS_KEY_DRAFTS, {}) || {};
+    delete all[row.expense_id];
+    ssSet(SS_KEY_DRAFTS, all);
+  };
 
   const confirm = async () => {
     setSaving(true);
@@ -2829,12 +2873,30 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
           confirm_vendor_category: true,
         },
       });
+      clearDraft();
       showToast && showToast('Confirmed');
       reload();
     } catch (e) {
       alert('Save failed: ' + e.message);
     }
     setSaving(false);
+  };
+
+  const deleteRow = async () => {
+    if (!window.confirm(`Delete this row? (${row.vendor || 'no vendor'} · ${row.amount || '—'})`)) return;
+    setDeleting(true);
+    try {
+      await booksApi('delete-expense', {
+        method: 'POST',
+        body: { expense_id: row.expense_id },
+      });
+      clearDraft();
+      showToast && showToast('Deleted');
+      reload();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+    setDeleting(false);
   };
 
   const dealOptions = deals
@@ -2916,9 +2978,13 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
         </Field>
 
         <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
-          <button onClick={confirm} disabled={saving}
+          <button onClick={confirm} disabled={saving || deleting}
             style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 16px', fontSize:12, fontWeight:700, cursor: saving?'wait':'pointer', fontFamily:'inherit', opacity: saving?0.6:1 }}>
             {saving ? 'Saving…' : '✓ Confirm & mark reviewed'}
+          </button>
+          <button onClick={deleteRow} disabled={saving || deleting}
+            style={{ background:'transparent', color:'#DC2626', border:'1px solid #FECACA', borderRadius:8, padding:'8px 12px', fontSize:12, fontWeight:600, cursor: deleting?'wait':'pointer', fontFamily:'inherit', opacity: deleting?0.6:1 }}>
+            {deleting ? 'Deleting…' : 'Delete'}
           </button>
           <div style={{ flex:1 }} />
           <div style={{ alignSelf:'center', fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>
@@ -2965,6 +3031,9 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
   const [search, setSearch]               = useState('');
   const [selected, setSelected]           = useState(null);
   const [showManual, setShowManual]       = useState(false);
+  const [showImport, setShowImport]       = useState(false);
+  const [selectedIds, setSelectedIds]     = useState(new Set());
+  const [bulkDeleting, setBulkDeleting]   = useState(false);
 
   const filtered = data.expenses.filter((r) => {
     if (filterCat && r.category !== filterCat) return false;
@@ -2981,6 +3050,28 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
 
   const filterStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink };
 
+  const toggleSelected = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filtered.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map((r) => r.expense_id)));
+  };
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} expense${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      await booksApi('bulk-delete-expenses', { method:'POST', body: { expense_ids: Array.from(selectedIds) } });
+      showToast && showToast(`Deleted ${selectedIds.size}`);
+      setSelectedIds(new Set());
+      reload();
+    } catch (e) { alert('Bulk delete failed: ' + e.message); }
+    setBulkDeleting(false);
+  };
+
   return (
     <div>
       {/* Filter bar */}
@@ -2993,6 +3084,7 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
         <select value={filterEntered} onChange={(e) => setFilterEntered(e.target.value)} style={filterStyle}>
           <option value="">All sources</option>
           <option value="ai">AI extracted</option>
+          <option value="csv_import">CSV import</option>
           <option value="paul">Paul (manual)</option>
           <option value="husband">Husband (manual)</option>
         </select>
@@ -3003,11 +3095,30 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
           <input type="checkbox" checked={filterUnrev} onChange={(e) => setFilterUnrev(e.target.checked)} /> Unreviewed only
         </label>
         <div style={{ flex:1 }} />
+        <button onClick={() => setShowImport(true)}
+          style={{ background:'transparent', color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          ↑ Import statement
+        </button>
         <button onClick={() => setShowManual(true)}
           style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
           + Add manually
         </button>
       </div>
+
+      {/* Bulk action bar (visible when rows selected) */}
+      {selectedIds.size > 0 && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#FEF3C7', border:'1px solid #FDE68A', borderRadius:8, marginBottom:10 }}>
+          <span style={{ fontSize:12, color:'#78350F', fontWeight:600 }}>{selectedIds.size} selected</span>
+          <button onClick={bulkDelete} disabled={bulkDeleting}
+            style={{ background:'#DC2626', color:'#FFFFFF', border:'none', borderRadius:6, padding:'5px 12px', fontSize:11, fontWeight:600, cursor:bulkDeleting?'wait':'pointer', fontFamily:'inherit', opacity:bulkDeleting?0.6:1 }}>
+            {bulkDeleting ? 'Deleting…' : 'Delete selected'}
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            style={{ background:'transparent', color:'#78350F', border:'1px solid #FDE68A', borderRadius:6, padding:'5px 10px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>
+            Clear
+          </button>
+        </div>
+      )}
 
       <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:8 }}>
         Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + Number(r.amount || 0), 0))}
@@ -3015,9 +3126,13 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
 
       {/* Table */}
       <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:10, overflow:'hidden', overflowX:'auto' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, minWidth: isMobile ? 700 : 'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, minWidth: isMobile ? 760 : 'auto' }}>
           <thead style={{ background:BOOKS.surface }}>
             <tr style={{ textAlign:'left' }}>
+              <th style={{ ...thStyle, width:32 }}>
+                <input type="checkbox" checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={toggleSelectAll} aria-label="Select all" />
+              </th>
               <th style={thStyle}>Date</th>
               <th style={thStyle}>Vendor</th>
               <th style={{ ...thStyle, textAlign:'right' }}>Amount</th>
@@ -3030,20 +3145,24 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
           </thead>
           <tbody>
             {filtered.map((r) => (
-              <tr key={r.expense_id} onClick={() => setSelected(r)}
-                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent' }}>
-                <td style={tdStyle}>{fmtDate(r.date)}</td>
-                <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}</td>
-                <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
-                <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
-                <td style={tdStyle}>{linkedDealLabel(r.linked_deal_id, data.deals)}</td>
-                <td style={tdStyle}><ConfidenceBadge level={r.extraction_confidence} /></td>
-                <td style={tdStyle}>{String(r.reviewed).toLowerCase() === 'true' ? '✓' : '—'}</td>
-                <td style={tdStyle}><FlagDots flags={r.flags_computed} /></td>
+              <tr key={r.expense_id}
+                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : (selectedIds.has(r.expense_id) ? '#FEF9E7' : 'transparent') }}>
+                <td style={{ ...tdStyle, width:32 }} onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" checked={selectedIds.has(r.expense_id)}
+                    onChange={() => toggleSelected(r.expense_id)} aria-label="Select row" />
+                </td>
+                <td style={tdStyle} onClick={() => setSelected(r)}>{fmtDate(r.date)}</td>
+                <td style={tdStyle} onClick={() => setSelected(r)}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }} onClick={() => setSelected(r)}>{fmtMoney(r.amount, r.currency)}</td>
+                <td style={tdStyle} onClick={() => setSelected(r)}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={tdStyle} onClick={() => setSelected(r)}>{linkedDealLabel(r.linked_deal_id, data.deals)}</td>
+                <td style={tdStyle} onClick={() => setSelected(r)}><ConfidenceBadge level={r.extraction_confidence} /></td>
+                <td style={tdStyle} onClick={() => setSelected(r)}>{String(r.reviewed).toLowerCase() === 'true' ? '✓' : '—'}</td>
+                <td style={tdStyle} onClick={() => setSelected(r)}><FlagDots flags={r.flags_computed} /></td>
               </tr>
             ))}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign:'center', padding:'40px 0', color:BOOKS.muted, fontSize:13 }}>No expenses match these filters.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign:'center', padding:'40px 0', color:BOOKS.muted, fontSize:13 }}>No expenses match these filters.</td></tr>
             )}
           </tbody>
         </table>
@@ -3051,6 +3170,145 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
 
       {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
       {showManual && <ManualExpenseModal deals={data.deals} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
+      {showImport && <ImportStatementModal onClose={() => setShowImport(false)} reload={reload} showToast={showToast} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ImportStatementModal — credit card statement CSV uploader
+// Reads a .csv file via FileReader, splits into 25-row chunks, POSTs each
+// chunk to /api/sync?action=bulk-import-csv. Aggregates results.
+// ─────────────────────────────────────────────────────────────────────────────
+function ImportStatementModal({ onClose, reload, showToast }) {
+  const [file, setFile]                   = useState(null);
+  const [year, setYear]                   = useState(new Date().getFullYear());
+  const [running, setRunning]             = useState(false);
+  const [progress, setProgress]           = useState({ chunksDone: 0, chunksTotal: 0 });
+  const [results, setResults]             = useState(null);
+  const [error, setError]                 = useState(null);
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  const handleFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) setFile(f);
+  };
+
+  const startImport = async () => {
+    if (!file) return;
+    setRunning(true); setError(null); setResults(null);
+    try {
+      const text = await new Promise((resolve, reject) => {
+        const fr = new FileReader();
+        fr.onload = () => resolve(fr.result);
+        fr.onerror = () => reject(fr.error);
+        fr.readAsText(file);
+      });
+      const lines = String(text).split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length < 2) { setError('CSV appears empty or has no data rows.'); setRunning(false); return; }
+      const headerLine = lines[0];
+      const dataLines  = lines.slice(1);
+      const CHUNK_SIZE = 25;
+      const chunks = [];
+      for (let i = 0; i < dataLines.length; i += CHUNK_SIZE) chunks.push(dataLines.slice(i, i + CHUNK_SIZE));
+      setProgress({ chunksDone: 0, chunksTotal: chunks.length });
+
+      const totals = { imported: 0, skipped_duplicate: 0, skipped_other_year: 0, skipped_not_transaction: 0, flagged_personal: 0, errors: [] };
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          const r = await booksApi('bulk-import-csv', {
+            method: 'POST',
+            body: { csvChunk: chunks[i].join('\n'), headerLine, year },
+          });
+          totals.imported            += r.imported || 0;
+          totals.skipped_duplicate   += r.skipped_duplicate || 0;
+          totals.skipped_other_year  += r.skipped_other_year || 0;
+          totals.skipped_not_transaction += r.skipped_not_transaction || 0;
+          totals.flagged_personal    += r.flagged_personal || 0;
+        } catch (e) {
+          totals.errors.push(`Chunk ${i + 1}: ${e.message}`);
+        }
+        setProgress({ chunksDone: i + 1, chunksTotal: chunks.length });
+      }
+      setResults(totals);
+      reload();
+    } catch (e) {
+      setError(e.message);
+    }
+    setRunning(false);
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(520px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>Import credit card statement</div>
+        <div style={{ fontSize:11, color:BOOKS.muted, marginBottom:16, lineHeight:1.5 }}>
+          Upload a CSV exported from your card's web portal. Claude parses each transaction, suggests categories and business purposes, flags anything that looks personal, and dedupes against existing rows. Only transactions in the selected year get imported.
+        </div>
+
+        {!results && (
+          <div style={{ display:'grid', gap:12 }}>
+            <Field label="Year">
+              <select style={inputStyle} value={year} onChange={(e) => setYear(Number(e.target.value))} disabled={running}>
+                {Array.from({ length: (new Date().getFullYear() - 2024) + 1 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="CSV file">
+              <input type="file" accept=".csv,text/csv" onChange={handleFile} disabled={running}
+                style={{ ...inputStyle, padding:'7px 4px' }} />
+              {file && <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>Selected: {file.name} ({Math.round(file.size / 1024)} KB)</div>}
+            </Field>
+          </div>
+        )}
+
+        {running && (
+          <div style={{ marginTop:16 }}>
+            <div style={{ fontSize:12, color:BOOKS.ink, marginBottom:6 }}>
+              Processing chunk {progress.chunksDone} of {progress.chunksTotal}…
+            </div>
+            <div style={{ height:8, background:BOOKS.surface, borderRadius:4, overflow:'hidden' }}>
+              <div style={{ width: progress.chunksTotal ? `${(progress.chunksDone / progress.chunksTotal) * 100}%` : '0%', height:'100%', background:BOOKS.ink, transition:'width 0.3s' }} />
+            </div>
+          </div>
+        )}
+
+        {error && <div style={{ marginTop:14, padding:'10px 14px', background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', borderRadius:8, fontSize:12 }}>Error: {error}</div>}
+
+        {results && (
+          <div style={{ marginTop:14, padding:14, background:BOOKS.surface, borderRadius:10 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink, marginBottom:8 }}>Import complete</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 12px', fontSize:12, color:BOOKS.ink }}>
+              <span>Imported</span><span style={{ fontWeight:700, textAlign:'right' }}>{results.imported}</span>
+              <span style={{ color:'#B45309' }}>Flagged personal</span><span style={{ fontWeight:700, textAlign:'right', color:'#B45309' }}>{results.flagged_personal}</span>
+              <span style={{ color:BOOKS.muted }}>Skipped — duplicate</span><span style={{ textAlign:'right', color:BOOKS.muted }}>{results.skipped_duplicate}</span>
+              <span style={{ color:BOOKS.muted }}>Skipped — other year</span><span style={{ textAlign:'right', color:BOOKS.muted }}>{results.skipped_other_year}</span>
+              <span style={{ color:BOOKS.muted }}>Skipped — non-transaction</span><span style={{ textAlign:'right', color:BOOKS.muted }}>{results.skipped_not_transaction}</span>
+            </div>
+            {results.errors && results.errors.length > 0 && (
+              <div style={{ marginTop:10, fontSize:11, color:'#991B1B' }}>
+                {results.errors.length} chunk{results.errors.length === 1 ? '' : 's'} errored:
+                <ul style={{ margin:'4px 0 0 18px', padding:0 }}>{results.errors.map((er, i) => <li key={i}>{er}</li>)}</ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop:18, display:'flex', gap:8 }}>
+          {!results && (
+            <button onClick={startImport} disabled={!file || running}
+              style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor: (!file||running)?'not-allowed':'pointer', fontFamily:'inherit', opacity: (!file||running)?0.5:1 }}>
+              {running ? 'Importing…' : 'Start import'}
+            </button>
+          )}
+          <button onClick={onClose} disabled={running}
+            style={{ flex: results ? 1 : 0, background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:running?'wait':'pointer', fontFamily:'inherit' }}>
+            {results ? 'Done' : 'Cancel'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
