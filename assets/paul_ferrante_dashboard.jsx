@@ -2144,6 +2144,42 @@ export default function App() {
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
+  // ── Biggest deal (replaces hardcoded American Airlines $2,000) ──
+  const biggestPaidDeal = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
+  const biggestAnyDeal  = deals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
+  const biggestDeal     = biggestPaidDeal || (biggestAnyDeal && (biggestAnyDeal.v || 0) > 0 ? biggestAnyDeal : null);
+
+  // ── Live milestone values (auto-tracked from deals/followers) ──
+  // Parses goal strings like '$45K', '90K', '24' → numbers.
+  // Returns derived { cur, pct, isAuto } for milestones we can compute live;
+  // returns null for milestones still manually edited (e.g. Content posts).
+  const totalAudience = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
+  const parseGoalNum = g => {
+    if (!g) return 1;
+    const s = String(g).replace(/[$,\s]/g, '').trim();
+    const mt = s.match(/^([0-9.]+)([kKmM]?)$/);
+    if (!mt) return parseFloat(s) || 1;
+    const n = parseFloat(mt[1]);
+    const u = mt[2].toLowerCase();
+    return u === 'k' ? n * 1000 : u === 'm' ? n * 1000000 : n;
+  };
+  const liveMilestone = m => {
+    const goalN = parseGoalNum(m.goal);
+    const make = (val, fmt) => ({
+      cur: fmt(val),
+      pct: Math.min(100, Math.round((val / goalN) * 100)),
+      isAuto: true,
+    });
+    switch (m.id) {
+      case 3: return make(totalRevenue,        v => usd(v));         // Revenue: $45K
+      case 4: return make(paidDeals.length,    v => String(v));      // Deals: 24
+      case 5: return make(totalAudience,       v => fmtFull(v));     // Total Audience: 90K
+      case 7: return make(ttFollowers || 0,    v => fmtFull(v));     // TikTok: 100K
+      case 8: return make(igFollowers || 0,    v => fmtFull(v));     // Instagram: 20K
+      default: return null;                                          // Content (id 6) stays manual
+    }
+  };
+
   // ── Deliverables visibility (soft-delete on Decline) ─────────
   // A deliverable is hidden from the Deliverables tab when its brand has at
   // least one matching deal AND every matching deal is in 'Declined' status.
@@ -2377,8 +2413,8 @@ export default function App() {
               {!isMobile && (
                 <Card style={{ borderLeft:`3px solid #5DBF8A` }}>
                   <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
-                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>$2,000</div>
-                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>American Airlines ✈️</div>
+                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '—'}</div>
+                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'No deals yet'}</div>
                 </Card>
               )}
             </div>
@@ -2417,8 +2453,12 @@ export default function App() {
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: milestones.some(m=>m.done) ? 4 : 0 }}>
                   {milestones.filter(m => !m.done).map(m => {
                     const label    = (m.t || '').split(':')[0];
+                    const live     = liveMilestone(m);
+                    const cur      = live ? live.cur : m.cur;
+                    const pct      = live ? live.pct : (m.pct || 0);
+                    const isAuto   = !!live;
                     const ringLen  = 94.2; // 2 * π * 15
-                    const ringFill = ((m.pct || 0) / 100) * ringLen;
+                    const ringFill = (pct / 100) * ringLen;
                     return (
                       <div key={m.id} style={{
                         background:'#FFFFFF', border:'0.5px solid #E5E7EB', borderRadius:8,
@@ -2429,7 +2469,7 @@ export default function App() {
                           <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                             <span style={{ marginRight:5 }}>{m.e}</span>{label}
                           </div>
-                          {editMsId === m.id ? (
+                          {editMsId === m.id && !isAuto ? (
                             <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:2 }}>
                               <input autoFocus value={editMsVal} onChange={e => setEditMsVal(e.target.value)}
                                 onKeyDown={e => { if(e.key==='Enter') saveMs(); if(e.key==='Escape') setEditMsId(null); }}
@@ -2438,12 +2478,15 @@ export default function App() {
                               <button onClick={() => setEditMsId(null)} style={{ fontSize:14, color:'#94A3B8', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✕</button>
                             </div>
                           ) : (
-                            <div onClick={() => startEditMs(m)} title="Click to update"
-                              style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1, cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                              {m.cur}
+                            <div onClick={isAuto ? undefined : () => startEditMs(m)}
+                              title={isAuto ? 'Auto-tracked from your deals/analytics' : 'Click to update'}
+                              style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1, cursor:isAuto?'default':'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                              {cur}
                             </div>
                           )}
-                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal {m.goal}</div>
+                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>
+                            goal {m.goal}{isAuto && <span style={{ marginLeft:6, color:'#22c55e', fontWeight:600 }}>· auto</span>}
+                          </div>
                         </div>
                         <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
                           <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
@@ -2451,7 +2494,7 @@ export default function App() {
                             strokeDasharray={`${ringFill} ${ringLen}`}
                             transform="rotate(-90 18 18)" />
                           <text x={18} y={18} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="500" fill={TEXT}>
-                            {m.pct}%
+                            {pct}%
                           </text>
                         </svg>
                       </div>
