@@ -237,6 +237,7 @@ Return ONLY a JSON object with this exact schema, no preamble:
   "line_items": [ { "description": string, "amount": number } ],
   "category_suggestion": string,
   "category_reasoning": string,
+  "suggested_business_purpose": string,
   "confidence": "high" | "medium" | "low",
   "confidence_notes": string | null,
   "is_business_likely": boolean,
@@ -276,7 +277,25 @@ EDGE CASES:
 - Email confirmations (Airbnb, Uber, hotel/flight confirmations): treat them as receipts. Extract vendor, date, amount, currency normally.
 - Screenshots of mobile order confirmations: extract normally — these are valid receipts.
 - Tip vs total: amount_total is ALWAYS the final paid amount INCLUDING tip. If tip is shown separately, also populate tip_amount, but amount_total stays as the final-paid value.
-- If image quality is too poor to read key fields with confidence: set confidence to "low" and explain in confidence_notes (blurry, glare, partial cutoff, etc.).`;
+- If image quality is too poor to read key fields with confidence: set confidence to "low" and explain in confidence_notes (blurry, glare, partial cutoff, etc.).
+
+SUGGESTED BUSINESS PURPOSE GUIDANCE:
+The owner runs RGG Media — a creator and media business focused on TikTok, Instagram, YouTube, UGC, brand partnerships, and travel/lifestyle content. Write a SPECIFIC, audit-defensible draft business purpose tied to that work. One sentence. Avoid generic phrases like "business expense" or "business meal" — be concrete about what the receipt likely supports.
+
+Examples by category:
+- Coffee shop / café (small ticket, single person implied): "Working session — content planning and scripting for RGG Media."
+- Restaurant or coffee with multiple items implying two people: "Meeting with collaborator or brand contact — content partnership discussion."
+- Hotel / Airbnb: "Lodging during content production trip to {city if visible from receipt}."
+- Flight / Uber / Lyft / rental car: "Travel for content production / brand shoot."
+- Adobe / Notion / Canva / CapCut / Figma / hosting / SaaS: "{Product name} subscription used for editing and producing RGG Media content."
+- Camera / mic / lens / smart glasses / SD cards / drives: "{Item} used for video production for RGG Media TikTok / IG / YouTube content."
+- Office supplies / home office: "Home office supply for content production workspace."
+- Marketing & advertising: "Promotion / advertising spend for RGG Media content distribution."
+- Internet / phone bill: "Internet / phone service used for RGG Media content production and brand outreach."
+- Education / books / courses: "Educational material for content / business skills development."
+- Bank / payment fee: "Bank or payment processing fee on RGG Media business account."
+- Professional services (legal, CPA, contractor): "Professional services for RGG Media operations."
+- If category is "Other" or you genuinely cannot infer a plausible business use: write "REVIEW NEEDED — unable to infer business purpose from receipt." Paul will fill it in.`;
 
 async function anthropicExtract(base64, mimeType) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -343,7 +362,7 @@ const DEAL_HEADERS = [
   'deliverable_url','invoice_url','shoot_start_date','shoot_end_date',
   'usage_rights','paid_date','notes',
 ];
-const VENDOR_HEADERS = ['vendor_normalized','category','confirmation_count','last_confirmed_at'];
+const VENDOR_HEADERS = ['vendor_normalized','category','confirmation_count','last_confirmed_at','business_purpose_template'];
 const LOG_HEADERS = ['log_id','file_name','file_id','started_at','completed_at','status','error_message','expense_id'];
 
 const CATEGORIES = [
@@ -451,20 +470,23 @@ async function handleProcessReceipt(req, res) {
   }
 
   const p = extractRes.parsed || {};
-  // VendorMemory lookup — overrides AI category if confirmed before
+  // VendorMemory lookup — overrides AI category AND business purpose if confirmed before
   let categoryFinal = p.category_suggestion || 'Other';
   let categoryAuto = p.category_suggestion || 'Other';
   let vendorOverride = null;
+  let purposeFromMemory = null;
   try {
-    const vm = await sheetsGet(token, sheetId, 'VendorMemory!A1:D');
+    const vm = await sheetsGet(token, sheetId, 'VendorMemory!A1:E');
     const vmObjs = rowsToObjects(vm);
     const norm = normalizeVendor(p.vendor);
     const hit = vmObjs.find((r) => normalizeVendor(r.vendor_normalized) === norm);
     if (hit && hit.category) { categoryFinal = hit.category; vendorOverride = hit.category; }
+    if (hit && hit.business_purpose_template) { purposeFromMemory = hit.business_purpose_template; }
   } catch (_) {}
 
   // Auto-deal-linking
   let autoLinkedDealId = '';
+  let linkedDealForPurpose = null;
   try {
     const deals = rowsToObjects(await sheetsGet(token, sheetId, 'Deals!A1:L'));
     const recDate = p.date;
@@ -473,14 +495,27 @@ async function handleProcessReceipt(req, res) {
         d.shoot_start_date && d.shoot_end_date &&
         d.shoot_start_date <= recDate && recDate <= d.shoot_end_date
       );
-      if (overlap.length === 1) autoLinkedDealId = overlap[0].deal_id;
+      if (overlap.length === 1) { autoLinkedDealId = overlap[0].deal_id; linkedDealForPurpose = overlap[0]; }
       else if (overlap.length > 1) {
         // multiple — pick highest-value
         overlap.sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0));
         autoLinkedDealId = overlap[0].deal_id;
+        linkedDealForPurpose = overlap[0];
       }
     }
   } catch (_) {}
+
+  // Business purpose precedence: deal-link > VendorMemory template > AI suggestion > blank
+  let businessPurpose = '';
+  if (linkedDealForPurpose) {
+    const brand = linkedDealForPurpose.brand || '(brand)';
+    const platform = linkedDealForPurpose.platform || '';
+    businessPurpose = `Production expense for ${brand} deal${platform ? ` (${platform})` : ''}.`;
+  } else if (purposeFromMemory) {
+    businessPurpose = purposeFromMemory;
+  } else if (p.suggested_business_purpose) {
+    businessPurpose = p.suggested_business_purpose;
+  }
 
   // Move file to _processed/
   let receiptUrl = '';
@@ -502,7 +537,7 @@ async function handleProcessReceipt(req, res) {
       ? `VendorMemory override (${vendorOverride}). AI suggested: ${p.category_suggestion}. ${p.category_reasoning || ''}`
       : (p.category_reasoning || ''),
     payment_method: p.payment_method || '',
-    business_purpose: '',
+    business_purpose: businessPurpose,
     receipt_url: receiptUrl,
     auto_linked_deal_id: autoLinkedDealId,
     linked_deal_id: autoLinkedDealId, // default to auto, Paul can change
@@ -548,7 +583,7 @@ async function handleBooksData(req, res) {
     const [eVals, dVals, vVals] = await Promise.all([
       sheetsGet(token, sheetId, 'Expenses!A1:V'),
       sheetsGet(token, sheetId, 'Deals!A1:L'),
-      sheetsGet(token, sheetId, 'VendorMemory!A1:D'),
+      sheetsGet(token, sheetId, 'VendorMemory!A1:E'),
     ]);
     const expenses = rowsToObjects(eVals).filter((r) => !r.date || String(r.date).startsWith(String(year)));
     const deals = rowsToObjects(dVals);
@@ -586,9 +621,9 @@ async function handleUpdateExpense(req, res) {
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
     await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:V${target._rowIndex}`, [rowArr]);
 
-    // VendorMemory learning loop
+    // VendorMemory learning loop — saves both category AND business purpose for this vendor
     if (confirm_vendor_category && merged.vendor && merged.category) {
-      await upsertVendorMemory(token, sheetId, merged.vendor, merged.category);
+      await upsertVendorMemory(token, sheetId, merged.vendor, merged.category, merged.business_purpose || '');
     }
 
     return res.status(200).json({ ok: true, expense: merged });
@@ -597,16 +632,19 @@ async function handleUpdateExpense(req, res) {
   }
 }
 
-async function upsertVendorMemory(token, sheetId, vendor, category) {
+async function upsertVendorMemory(token, sheetId, vendor, category, businessPurposeTemplate) {
   const norm = normalizeVendor(vendor);
-  const vals = await sheetsGet(token, sheetId, 'VendorMemory!A1:D');
+  const purposeTpl = (businessPurposeTemplate || '').toString();
+  const vals = await sheetsGet(token, sheetId, 'VendorMemory!A1:E');
   const objs = rowsToObjects(vals);
   const hit = objs.find((r) => normalizeVendor(r.vendor_normalized) === norm);
   if (hit) {
-    const newRow = [norm, category, String(Number(hit.confirmation_count || 0) + 1), nowIso()];
-    await sheetsUpdate(token, sheetId, `VendorMemory!A${hit._rowIndex}:D${hit._rowIndex}`, [newRow]);
+    // Keep existing purpose template if new one is blank — don't overwrite a learned purpose with empty
+    const finalPurpose = purposeTpl || hit.business_purpose_template || '';
+    const newRow = [norm, category, String(Number(hit.confirmation_count || 0) + 1), nowIso(), finalPurpose];
+    await sheetsUpdate(token, sheetId, `VendorMemory!A${hit._rowIndex}:E${hit._rowIndex}`, [newRow]);
   } else {
-    await sheetsAppend(token, sheetId, 'VendorMemory!A1', [[norm, category, '1', nowIso()]]);
+    await sheetsAppend(token, sheetId, 'VendorMemory!A1', [[norm, category, '1', nowIso(), purposeTpl]]);
   }
 }
 
