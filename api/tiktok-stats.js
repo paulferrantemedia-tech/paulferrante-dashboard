@@ -1,8 +1,8 @@
-// /api/tiktok-stats.js — TikTok Content API analytics
+// /api/tiktok-stats.js — TikTok Content API analytics + daily snapshot writer
 // Access token auto-refreshes using stored refresh token (valid 365 days)
 // GET  /api/tiktok-stats         → fetch (cached 30 min)
 // GET  /api/tiktok-stats?force=true → bypass cache
-// GET  /api/tiktok-stats?cron=1  → lightweight token-refresh ping (called by Vercel Cron daily)
+// GET  /api/tiktok-stats?cron=1  → daily: refresh TT token + write tt section of daily snapshot
 //
 // Env vars: accepts either TT_CLIENT_KEY/TT_CLIENT_SECRET (original)
 //           or TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET (Vercel-style names) — first match wins
@@ -11,6 +11,7 @@ const TT_BASE   = 'https://open.tiktokapis.com/v2';
 const CACHE_KEY = 'pf_tt_stats_v1';
 const TOKEN_KEY = 'pf_tt_tokens_v1';
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
+const SNAP_TTL_S = 100 * 86400;   // 100 days TTL on snapshot rows
 
 // ── Redis helpers ───────────────────────────────────────────────
 async function kvGet(baseUrl, token, key) {
@@ -30,6 +31,19 @@ async function kvSet(baseUrl, token, key, value) {
     });
   } catch {}
 }
+async function kvSetWithTtl(baseUrl, token, key, value, ttlSeconds) {
+  try {
+    await fetch(`${baseUrl}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', key, JSON.stringify(value), 'EX', ttlSeconds]]),
+    });
+  } catch {}
+}
+
+// ── Snapshot key helpers ────────────────────────────────────────
+function snapKey(dateStr) { return `pf_snap_${dateStr}`; }
+function todayUtc() { return new Date().toISOString().split('T')[0]; }
 
 // ── Token management (auto-refresh access token using refresh token) ──
 async function getValidToken(baseUrl, kvToken, clientKey, clientSecret) {
@@ -156,17 +170,39 @@ export default async function handler(req, res) {
     return res.status(400).json({ ok: false, error: 'Redis not configured' });
   }
 
-  // Cron mode: lightweight token-refresh ping triggered daily by Vercel Cron.
-  // TikTok access tokens expire in 24h, so this MUST run at least daily to
-  // keep the dashboard's connection alive. Skips cache and stats fetch.
+  // Cron mode: refresh TT token + write tt section of today's snapshot
   if (cron) {
     const tokenData = await getValidToken(baseUrl, kvToken, clientKey, clientSecret);
     const stored    = await kvGet(baseUrl, kvToken, TOKEN_KEY);
+
+    // Daily snapshot — merge tt section into today's row.
+    // The IG cron writes ig + yt sections separately into the same key.
+    let snapshotWritten = false;
+    if (tokenData) {
+      try {
+        const ttData = await fetchTtData(tokenData);
+        const date = todayUtc();
+        const key  = snapKey(date);
+        const existing = (await kvGet(baseUrl, kvToken, key)) || { date, ts: 0 };
+        existing.tt = {
+          followers:  ttData.profile.followerCount  || 0,
+          avgViews:   ttData.aggregates.avgViews    || 0,
+          avgEngRate: ttData.aggregates.avgEngRate  || 0,
+        };
+        existing.ts = Date.now();
+        await kvSetWithTtl(baseUrl, kvToken, key, existing, SNAP_TTL_S);
+        // Also refresh the cache so dashboard sees fresh TT data immediately
+        await kvSet(baseUrl, kvToken, CACHE_KEY, ttData);
+        snapshotWritten = true;
+      } catch {}
+    }
+
     return res.status(200).json({
       ok: !!tokenData,
       refreshedAt: new Date().toISOString(),
       hasStoredTokens: !!stored,
       accessTokenValid: !!tokenData,
+      snapshotWritten,
     });
   }
 

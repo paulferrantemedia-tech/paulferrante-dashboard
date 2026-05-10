@@ -1,13 +1,21 @@
-// /api/instagram-stats.js — Instagram Graph API analytics
+// /api/instagram-stats.js — Instagram Graph API analytics + daily snapshot system
 // GET  /api/instagram-stats              → fetch (cached 30 min)
 // GET  /api/instagram-stats?force=true   → force refresh (clears stored token, re-bootstraps from env)
-// GET  /api/instagram-stats?cron=1       → lightweight token-refresh ping (called by Vercel Cron daily)
+// GET  /api/instagram-stats?cron=1       → daily: refresh IG token + write IG + YT snapshot row
 // GET  /api/instagram-stats?setup=true   → return IG User ID from token (first-time setup helper)
+// GET  /api/instagram-stats?snapshots=1  → return last 90 days of daily snapshots (IG + TT + YT)
 
 const IG_BASE    = 'https://graph.facebook.com/v20.0';
 const CACHE_KEY  = 'pf_ig_stats_v1';
 const TOKEN_KEY  = 'pf_ig_token_v1';
 const CACHE_TTL  = 30 * 60 * 1000;  // 30 min
+const SNAP_TTL_S = 100 * 86400;     // 100 days — slightly more than 90-day target
+
+// YT inlined here so the IG cron can write a YT snapshot too — Hobby plan
+// caps at 2 cron jobs total and IG + TikTok already use both slots.
+const YT_KEY        = 'AIzaSyBw6nbEtl_ZN_aaijpp4njYgXT6enGj-pU';
+const YT_CHANNEL_ID = 'UCpi1tHHbTLZmGvOoREHZDsw';
+const YT_BASE       = 'https://www.googleapis.com/youtube/v3';
 
 // ── Redis helpers ───────────────────────────────────────────────
 async function kvGet(baseUrl, token, key) {
@@ -27,16 +35,42 @@ async function kvSet(baseUrl, token, key, value) {
     });
   } catch {}
 }
+async function kvSetWithTtl(baseUrl, token, key, value, ttlSeconds) {
+  try {
+    await fetch(`${baseUrl}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', key, JSON.stringify(value), 'EX', ttlSeconds]]),
+    });
+  } catch {}
+}
+async function kvMget(baseUrl, token, keys) {
+  if (!keys.length) return [];
+  try {
+    const body = keys.map(k => ['GET', k]);
+    const r = await fetch(`${baseUrl}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    return (data || []).map(row => {
+      const v = row?.result;
+      if (!v) return null;
+      try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return null; }
+    });
+  } catch { return []; }
+}
+
+// ── Snapshot key/date helpers ───────────────────────────────────
+function snapKey(dateStr) { return `pf_snap_${dateStr}`; }
+function todayUtc() { return new Date().toISOString().split('T')[0]; }
+function dateNDaysAgo(n) {
+  const d = new Date(); d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().split('T')[0];
+}
 
 // ── Token management ───────────────────────────────────────────
-// Strategy:
-//  1. Redis has a valid long-lived token → use it; refresh daily to reset 60-day clock
-//  2. Redis token expired / missing → use IG_ACCESS_TOKEN env var
-//  3. If env var is short-lived (1h) → exchange via fb_exchange_token (needs IG_APP_ID + IG_APP_SECRET)
-//  4. If env var is already long-lived → refresh via ig_refresh_token
-//  5. Either way, store result in Redis so it auto-renews forever
-
-// Convert a short-lived token into a 60-day long-lived token
 async function exchangeForLongLived(shortToken) {
   const appId     = process.env.IG_APP_ID;
   const appSecret = process.env.IG_APP_SECRET;
@@ -51,7 +85,6 @@ async function exchangeForLongLived(shortToken) {
   return null;
 }
 
-// Extend an existing long-lived token for another 60 days
 async function refreshLongLived(token) {
   try {
     const res  = await fetch(`${IG_BASE}/oauth/access_token?grant_type=ig_refresh_token&access_token=${token}`);
@@ -76,10 +109,6 @@ async function getToken(baseUrl, kvToken, opts = {}) {
       const hoursSince  = (now - (stored.refreshedAt || 0)) / 3600000;
 
       if (stillValid) {
-        // Proactively refresh: daily on read, or always when called from cron (forceRefresh).
-        // Try ig_refresh_token first (works for IG Basic Display API tokens).
-        // Fall back to fb_exchange_token (works for IG Graph API / Business tokens
-        // linked through a Facebook Page — this is Paul's setup).
         if (forceRefresh || hoursSince >= 24) {
           let refreshed = await refreshLongLived(stored.token);
           if (!refreshed) refreshed = await exchangeForLongLived(stored.token);
@@ -90,23 +119,19 @@ async function getToken(baseUrl, kvToken, opts = {}) {
         }
         return stored.token;
       }
-      // Stored token is expired — fall through to re-bootstrap from env var
     }
   }
 
-  // No valid token in Redis → bootstrap from env var
   if (!envToken) return null;
 
-  // Try to extend/refresh — handles both short-lived and long-lived env var tokens
-  const refreshed = await refreshLongLived(envToken);   // works if already long-lived
-  const exchanged = refreshed || await exchangeForLongLived(envToken); // works if short-lived
+  const refreshed = await refreshLongLived(envToken);
+  const exchanged = refreshed || await exchangeForLongLived(envToken);
 
   if (exchanged && baseUrl && kvToken) {
     await kvSet(baseUrl, kvToken, TOKEN_KEY, exchanged);
     return exchanged.token;
   }
 
-  // Fallback: use env var token as-is
   if (baseUrl && kvToken) {
     const toStore = { token: envToken, expiresAt: now + (60 * 86400000), refreshedAt: now };
     await kvSet(baseUrl, kvToken, TOKEN_KEY, toStore);
@@ -114,7 +139,7 @@ async function getToken(baseUrl, kvToken, opts = {}) {
   return envToken;
 }
 
-// ── Safely extract insight value from either API format ─────────
+// ── Insight helpers ─────────────────────────────────────────────
 function extractInsightValue(metric, insightsData) {
   const found = (insightsData || []).find(m => m.name === metric);
   if (!found) return 0;
@@ -123,25 +148,21 @@ function extractInsightValue(metric, insightsData) {
   return 0;
 }
 
-// ── Main data fetch ─────────────────────────────────────────────
+// ── Main IG data fetch ─────────────────────────────────────────────
 async function fetchIgData(userId, token) {
-  // 1. Profile
   const profileRes = await fetch(`${IG_BASE}/${userId}?fields=followers_count,follows_count,media_count,name,username&access_token=${token}`);
   const profile = await profileRes.json();
   if (profile.error) throw new Error(`Instagram: ${profile.error.message}`);
 
-  // 2. Recent media
   const mediaRes = await fetch(
     `${IG_BASE}/${userId}/media?fields=id,caption,media_type,timestamp,like_count,comments_count,thumbnail_url,media_url,permalink&limit=30&access_token=${token}`
   );
   const mediaData = await mediaRes.json();
   if (mediaData.error) throw new Error(`Instagram media: ${mediaData.error.message}`);
 
-  // 3. Insights per post (parallel for speed)
   const posts = await Promise.all((mediaData.data || []).map(async (item) => {
     let reach = 0, impressions = 0, saved = 0, plays = 0;
     try {
-      // NOTE: 'impressions' is only valid for IMAGE/CAROUSEL — using it for VIDEO/REEL causes the entire call to fail silently
       let metrics;
       if (item.media_type === 'REEL') {
         metrics = 'reach,saved,ig_reels_plays,total_interactions';
@@ -167,7 +188,7 @@ async function fetchIgData(userId, token) {
     return {
       id:           item.id,
       caption:      (item.caption || '').slice(0, 180),
-      mediaType:    item.media_type,      // IMAGE, VIDEO, CAROUSEL_ALBUM, REEL
+      mediaType:    item.media_type,
       timestamp:    item.timestamp,
       permalink:    item.permalink,
       thumbnail:    item.thumbnail_url || item.media_url || null,
@@ -182,7 +203,6 @@ async function fetchIgData(userId, token) {
     };
   }));
 
-  // Sort by reach desc
   posts.sort((a, b) => b.reach - a.reach || b.likeCount - a.likeCount);
 
   const n = posts.length;
@@ -207,6 +227,45 @@ async function fetchIgData(userId, token) {
   };
 }
 
+// ── YT inline snapshot (channel + recent video aggregates) ──────
+// Inlined so the IG cron can also snapshot YouTube — staying within Hobby
+// plan's 2-cron limit.
+async function fetchYtSnapshot() {
+  try {
+    const chRes  = await fetch(`${YT_BASE}/channels?part=statistics,contentDetails&id=${YT_CHANNEL_ID}&key=${YT_KEY}`);
+    const chData = await chRes.json();
+    const item   = chData.items?.[0];
+    if (!item) return null;
+    const subs    = parseInt(item.statistics?.subscriberCount) || 0;
+    const uploads = item.contentDetails?.relatedPlaylists?.uploads;
+
+    let avgViews = 0, avgEngRate = 0;
+    if (uploads) {
+      const plRes  = await fetch(`${YT_BASE}/playlistItems?part=snippet&playlistId=${uploads}&maxResults=30&key=${YT_KEY}`);
+      const plData = await plRes.json();
+      const ids    = (plData.items || []).map(it => it.snippet?.resourceId?.videoId).filter(Boolean);
+      if (ids.length) {
+        const vRes  = await fetch(`${YT_BASE}/videos?part=statistics&id=${ids.join(',')}&key=${YT_KEY}`);
+        const vData = await vRes.json();
+        const items = vData.items || [];
+        const n = items.length;
+        if (n) {
+          const totalViews = items.reduce((s, v) => s + (parseInt(v.statistics?.viewCount) || 0), 0);
+          avgViews = Math.round(totalViews / n);
+          const totalEngPct = items.reduce((s, v) => {
+            const views = parseInt(v.statistics?.viewCount)    || 0;
+            const likes = parseInt(v.statistics?.likeCount)    || 0;
+            const comm  = parseInt(v.statistics?.commentCount) || 0;
+            return s + (views > 0 ? ((likes + comm) / views) * 100 : 0);
+          }, 0);
+          avgEngRate = parseFloat((totalEngPct / n).toFixed(2));
+        }
+      }
+    }
+    return { followers: subs, avgViews, avgEngRate };
+  } catch { return null; }
+}
+
 // ── Handler ─────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -217,11 +276,19 @@ export default async function handler(req, res) {
   const force    = req.query?.force === 'true';
   const setup    = req.query?.setup  === 'true';
   const cron     = req.query?.cron   === '1';
+  const snaps    = req.query?.snapshots === '1';
 
-  // Cron mode: lightweight token-refresh ping triggered daily by Vercel Cron.
-  // Forces refresh of the stored long-lived token to reset the 60-day clock,
-  // even if the dashboard hasn't been opened. Skips cache and stats fetch
-  // to keep function compute minimal.
+  // Snapshot read mode — returns last 90 days of daily snapshot rows for the dashboard
+  if (snaps) {
+    if (!baseUrl || !kvToken) return res.status(500).json({ ok: false, error: 'KV not configured' });
+    const keys = [];
+    for (let i = 0; i < 90; i++) keys.push(snapKey(dateNDaysAgo(i)));
+    const values = await kvMget(baseUrl, kvToken, keys);
+    const snapshots = values.filter(Boolean).sort((a, b) => (a.date < b.date ? -1 : 1));
+    return res.status(200).json({ ok: true, count: snapshots.length, snapshots });
+  }
+
+  // Cron mode: refresh IG token + write daily snapshot row (IG + YT)
   if (cron) {
     if (!baseUrl || !kvToken) {
       return res.status(500).json({ ok: false, error: 'KV not configured' });
@@ -231,23 +298,52 @@ export default async function handler(req, res) {
     const daysLeft = stored?.expiresAt
       ? Math.round((stored.expiresAt - Date.now()) / 86400000)
       : null;
+
+    // Daily snapshot — merge our IG + YT sections into today's row.
+    // The TT cron writes its own tt section into the same key separately.
+    const date = todayUtc();
+    const key  = snapKey(date);
+    const existing = (await kvGet(baseUrl, kvToken, key)) || { date, ts: 0 };
+
+    if (token && userId) {
+      try {
+        const igData = await fetchIgData(userId, token);
+        existing.ig = {
+          followers:  igData.profile.followersCount || 0,
+          avgViews:   igData.aggregates.avgReach   || 0,
+          avgEngRate: igData.aggregates.avgEngRate || 0,
+        };
+        // Also refresh the cache so the dashboard sees fresh data immediately
+        await kvSet(baseUrl, kvToken, CACHE_KEY, igData);
+      } catch (e) { existing.igError = e.message; }
+    }
+
+    try {
+      const yt = await fetchYtSnapshot();
+      if (yt) existing.yt = yt;
+    } catch (e) { existing.ytError = e.message; }
+
+    existing.ts = Date.now();
+    await kvSetWithTtl(baseUrl, kvToken, key, existing, SNAP_TTL_S);
+
     return res.status(200).json({
       ok: !!token,
       refreshedAt: new Date().toISOString(),
       tokenExpiresInDays: daysLeft,
       hasStoredToken: !!stored?.token,
+      snapshot: { date, ig: !!existing.ig, yt: !!existing.yt, tt: !!existing.tt },
     });
   }
 
-  // Setup mode: find IG User ID from token (first-time helper)
+  // Setup mode
   if (setup) {
     const token = process.env.IG_ACCESS_TOKEN;
     if (!token) return res.status(400).json({ ok: false, error: 'Set IG_ACCESS_TOKEN in Vercel env vars first' });
     try {
-      const pageRes = await fetch(`${IG_BASE}/me/accounts?access_token=${token}`);
+      const pageRes  = await fetch(`${IG_BASE}/me/accounts?access_token=${token}`);
       const pageData = await pageRes.json();
-      const pages = pageData.data || [];
-      const results = await Promise.all(pages.map(async p => {
+      const pages    = pageData.data || [];
+      const results  = await Promise.all(pages.map(async p => {
         const igRes  = await fetch(`${IG_BASE}/${p.id}?fields=instagram_business_account&access_token=${token}`);
         const igData = await igRes.json();
         return { pageName: p.name, pageId: p.id, igUserId: igData.instagram_business_account?.id || null };
@@ -268,7 +364,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // Force-reset: clear cached token so env var is picked up fresh
   if (force && baseUrl && kvToken) {
     await kvSet(baseUrl, kvToken, TOKEN_KEY, null);
   }
