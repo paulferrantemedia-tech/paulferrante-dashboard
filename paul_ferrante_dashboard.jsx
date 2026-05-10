@@ -2532,7 +2532,1105 @@ export default function App() {
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
-  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
+// ═══════════════════════════════════════════════════════════════════════════
+// BOOKS TAB — AI-Powered Expense Tracker
+// Paste this entire block above the main dashboard component's `return ()` in
+// paul_ferrante_dashboard.jsx (e.g., somewhere between line 2500 and 2530, just
+// before `const TABS = ...`). All names are scoped to functions, no globals.
+//
+// Dependencies expected in scope: React (useState, useEffect, useRef), the existing
+// color constants BG, CARD, BDR, BLUE, YELL, OCEAN, SLATE, TEXT, and `usd()`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Books palette aliases (the spec's tokens mapped onto existing constants) ─
+// "Ink"          → TEXT  ('#1A2744')
+// "Parchment"    → BG    ('#FFFFFF')   plus CARD ('#F7F9FC') for surfaces
+// "Bright Sky"   → BLUE  ('#88EAF6')   accent (use sparingly)
+// "Deep Ocean"   → SLATE ('#2E4A66')   secondary accent / accent on Sand
+// "Slate"        → '#94A3B8' for muted (the existing dashboard uses this directly)
+// "Sand"         → YELL  ('#E1D9AE')   warm surface
+const BOOKS = {
+  ink: TEXT, parchment: BG, surface: CARD, border: BDR,
+  brightSky: BLUE, deepOcean: SLATE, sand: YELL, muted: '#94A3B8',
+};
+
+const BOOKS_API = '/api/sync';
+
+const FLAG_META = {
+  extraction_failed:        { color: '#DC2626', label: 'Extraction failed', tip: 'AI could not read this receipt. Manual entry required.' },
+  low_confidence_extraction:{ color: '#D97706', label: 'Low confidence',    tip: 'AI flagged this extraction as uncertain — verify the fields.' },
+  auto_link_pending:        { color: '#2563EB', label: 'Auto-link pending', tip: 'A deal was auto-suggested. Confirm or change before reviewing.' },
+  missing_purpose:          { color: '#64748B', label: 'No purpose',        tip: 'Add a business purpose (under 10 chars treated as missing).' },
+  unlinked_high_value:      { color: '#7C3AED', label: 'Unlinked >$200',    tip: 'Travel category, over $200, no deal link, unreviewed.' },
+  category_other:           { color: '#475569', label: 'Category: Other',   tip: 'AI fell back to "Other". Pick a more specific category.' },
+  vendor_unknown:           { color: '#0891B2', label: 'New vendor',        tip: 'First time seeing this vendor. Confirm category to teach the system.' },
+  over_30_days_unreviewed:  { color: '#B45309', label: '>30 days unreviewed', tip: 'Sitting in queue more than 30 days.' },
+};
+
+const CATEGORIES = [
+  'Equipment & Hardware','Software & Subscriptions','Travel - Lodging','Travel - Transportation',
+  'Travel - Meals','Meals & Entertainment','Home Office','Professional Services',
+  'Marketing & Advertising','Internet & Phone','Production Costs','Education & Research',
+  'Bank & Payment Fees','Office Supplies','Other',
+];
+
+const DEAL_STATUSES = ['Pitching','In Discussions','Sold In','Paid'];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function booksApi(action, opts = {}) {
+  const { method = 'GET', body, query = {} } = opts;
+  const params = new URLSearchParams({ action, ...query }).toString();
+  return fetch(`${BOOKS_API}?${params}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(async (r) => {
+    const text = await r.text();
+    let json = {};
+    try { json = JSON.parse(text); } catch (_) {}
+    if (!r.ok) throw new Error(json.error || text || `HTTP ${r.status}`);
+    return json;
+  });
+}
+
+function fmtDate(d) { return d ? String(d) : '—'; }
+function fmtMoney(n, ccy = 'USD') {
+  if (n === '' || n == null || isNaN(Number(n))) return '—';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy || 'USD' }).format(Number(n));
+}
+function withinYear(row, year) { return String(row.date || '').startsWith(String(year)); }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BooksTab — top-level component
+// ─────────────────────────────────────────────────────────────────────────────
+function BooksTab({ isMobile, showToast }) {
+  const [year, setYear]         = useState(new Date().getFullYear());
+  const [sub, setSub]           = useState('inbox');
+  const [data, setData]         = useState({ expenses: [], deals: [], vendorMemory: [] });
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState(null);
+
+  const reload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const j = await booksApi('books-data', { query: { year } });
+      setData({ expenses: j.expenses || [], deals: j.deals || [], vendorMemory: j.vendorMemory || [] });
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  useEffect(() => { reload(); /* eslint-disable-line */ }, [year]);
+
+  // KPIs
+  const totalExpenses = data.expenses.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalRevenue  = data.deals.filter((d) => d.status === 'Paid').reduce((s, d) => s + Number(d.deal_value || 0), 0);
+  const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
+
+  const SUB_TABS = [
+    ['inbox',       'Inbox'],
+    ['expenses',    'Expenses'],
+    ['deals',       'Deals'],
+    ['audit',       'Audit View'],
+    ['export',      'Year-End Export'],
+  ];
+
+  const yearOptions = [];
+  for (let y = new Date().getFullYear(); y >= 2024; y--) yearOptions.push(y);
+
+  return (
+    <div>
+      {/* ── Header strip ──────────────────────────────────────────── */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
+        <div>
+          <div style={{ fontSize: isMobile?20:24, fontWeight:800, color:BOOKS.ink, letterSpacing:'-0.5px' }}>Books</div>
+          <div style={{ fontSize:11, color:BOOKS.muted, letterSpacing:'2px', textTransform:'uppercase', marginTop:2 }}>RGG Media · {year}</div>
+        </div>
+        <select
+          value={year} onChange={(e) => setYear(Number(e.target.value))}
+          style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, cursor:'pointer' }}
+        >
+          {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {/* ── KPI strip ────────────────────────────────────────────── */}
+      <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
+        <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink" />
+        <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean" />
+        <KpiCard label="Net"          value={fmtMoney(totalRevenue - totalExpenses)} tone={totalRevenue >= totalExpenses ? 'green' : 'red'} />
+        <KpiCard
+          label="Needs review"
+          value={String(flaggedCount)}
+          tone="brightSky"
+          onClick={() => setSub('inbox')}
+          clickable={flaggedCount > 0}
+        />
+      </div>
+
+      {/* ── Sub-nav ──────────────────────────────────────────────── */}
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BOOKS.border}`, marginBottom:16, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+        {SUB_TABS.map(([id, lbl]) => (
+          <button
+            key={id} onClick={() => setSub(id)}
+            style={{
+              background:'none', border:'none', cursor:'pointer', fontFamily:'inherit',
+              padding:'10px 16px', fontSize:13, fontWeight: sub === id ? 700 : 500,
+              color: sub === id ? BOOKS.ink : BOOKS.muted,
+              borderBottom: sub === id ? `2px solid ${BOOKS.ink}` : '2px solid transparent',
+              marginBottom:'-1px', whiteSpace:'nowrap', flexShrink:0,
+            }}
+          >{lbl}</button>
+        ))}
+      </div>
+
+      {/* ── Sub-tab body ─────────────────────────────────────────── */}
+      {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
+      {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
+      {!loading && !error && (
+        <>
+          {sub === 'inbox'    && <InboxTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'expenses' && <ExpensesTab data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'deals'    && <DealsTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'audit'    && <AuditTab    data={data} year={year} isMobile={isMobile} />}
+          {sub === 'export'   && <ExportTab   data={data} year={year} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI card
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, tone, onClick, clickable }) {
+  const toneColor = {
+    ink: TEXT, deepOcean: SLATE, brightSky: BLUE, green: '#16A34A', red: '#DC2626',
+  }[tone] || TEXT;
+  return (
+    <div
+      onClick={clickable ? onClick : undefined}
+      style={{
+        background: BOOKS.surface, border: `1px solid ${BOOKS.border}`, borderRadius:12,
+        padding:'14px 16px', cursor: clickable ? 'pointer' : 'default',
+        transition:'all 0.12s', minHeight:74,
+      }}
+      onMouseEnter={(e) => { if (clickable) e.currentTarget.style.borderColor = BOOKS.ink; }}
+      onMouseLeave={(e) => { if (clickable) e.currentTarget.style.borderColor = BOOKS.border; }}
+    >
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:22, fontWeight:800, color:toneColor, letterSpacing:'-0.5px' }}>{value}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FlagDots — small color dots for active flags
+// ─────────────────────────────────────────────────────────────────────────────
+function FlagDots({ flags }) {
+  if (!flags || flags.length === 0) return null;
+  return (
+    <div style={{ display:'inline-flex', gap:4, alignItems:'center' }}>
+      {flags.map((f) => {
+        const meta = FLAG_META[f] || { color:'#6B7280', label:f, tip:f };
+        return (
+          <div key={f} title={`${meta.label}: ${meta.tip}`}
+            style={{ width:8, height:8, borderRadius:'50%', background:meta.color, cursor:'help' }} />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// InboxTab — Paul's daily review surface
+// ─────────────────────────────────────────────────────────────────────────────
+const FLAG_PRIORITY = ['extraction_failed','low_confidence_extraction','auto_link_pending','missing_purpose','unlinked_high_value','category_other','vendor_unknown','over_30_days_unreviewed'];
+function priorityScore(flags) {
+  if (!flags || flags.length === 0) return 99;
+  let best = 99;
+  flags.forEach((f) => {
+    const idx = FLAG_PRIORITY.indexOf(f);
+    if (idx >= 0 && idx < best) best = idx;
+  });
+  return best;
+}
+
+function InboxTab({ data, reload, isMobile, showToast }) {
+  // Show ALL unreviewed rows so every AI extraction lands in your approval queue.
+  // Sorted by flag priority — flagged items bubble to top, clean ones below.
+  const queue = data.expenses
+    .filter((r) => String(r.reviewed).toLowerCase() !== 'true')
+    .sort((a, b) => priorityScore(a.flags_computed) - priorityScore(b.flags_computed));
+
+  const bulkConfirmHighConfidence = async () => {
+    const targets = queue.filter((r) => r.extraction_confidence === 'high'
+      && (r.flags_computed || []).every((f) => f === 'auto_link_pending' || f === 'vendor_unknown'));
+    if (targets.length === 0) return;
+    if (!confirm(`Confirm ${targets.length} high-confidence extractions and mark reviewed?`)) return;
+    for (const r of targets) {
+      try {
+        await booksApi('update-expense', {
+          method: 'POST',
+          body: { expense_id: r.expense_id, patch: { reviewed: 'TRUE' }, confirm_vendor_category: true },
+        });
+      } catch (e) { /* keep going */ }
+    }
+    showToast && showToast(`Confirmed ${targets.length}`);
+    reload();
+  };
+
+  if (queue.length === 0) {
+    return (
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:'40px 24px', textAlign:'center' }}>
+        <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div style={{ fontSize:13, color:BOOKS.muted }}>
+          {queue.length} item{queue.length === 1 ? '' : 's'} need{queue.length === 1 ? 's' : ''} review · sorted by priority
+        </div>
+        <button onClick={bulkConfirmHighConfidence}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          Confirm all high-confidence in view
+        </button>
+      </div>
+
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {queue.map((row) => (
+          <InboxCard key={row.expense_id} row={row} deals={data.deals} reload={reload} isMobile={isMobile} showToast={showToast} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InboxCard({ row, deals, reload, isMobile, showToast }) {
+  const [edit, setEdit] = useState({
+    vendor: row.vendor || '', date: row.date || '', amount: row.amount || '',
+    category: row.category || 'Other', business_purpose: row.business_purpose || '',
+    linked_deal_id: row.linked_deal_id || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const flags = row.flags_computed || [];
+
+  const confirm = async () => {
+    setSaving(true);
+    try {
+      await booksApi('update-expense', {
+        method: 'POST',
+        body: {
+          expense_id: row.expense_id,
+          patch: { ...edit, reviewed: 'TRUE' },
+          confirm_vendor_category: true,
+        },
+      });
+      showToast && showToast('Confirmed');
+      reload();
+    } catch (e) {
+      alert('Save failed: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  const dealOptions = deals
+    .slice()
+    .sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0))
+    .map((d) => ({ id: d.deal_id, label: `${d.brand} (${d.status})` }));
+
+  const inputStyle = {
+    background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6,
+    padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%',
+  };
+
+  return (
+    <div style={{
+      background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:12,
+      padding:14, display:'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '110px 1fr',
+      gap:14,
+    }}>
+      {/* Left: thumbnail / receipt link */}
+      <div style={{ alignSelf:'start' }}>
+        {row.receipt_url ? (
+          <a href={row.receipt_url} target="_blank" rel="noreferrer"
+             style={{ display:'block', height: isMobile?80:110, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px', textDecoration:'none' }}>
+            View receipt ↗
+          </a>
+        ) : (
+          <div style={{ height: isMobile?80:110, background:BOOKS.surface, border:`1px dashed ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px' }}>
+            No receipt
+          </div>
+        )}
+      </div>
+
+      {/* Right: editable fields */}
+      <div style={{ minWidth:0 }}>
+        {/* Header line: confidence + flags */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>
+          <ConfidenceBadge level={row.extraction_confidence} />
+          <FlagDots flags={flags} />
+          {row.confidence_notes && (
+            <div style={{ fontSize:11, color:BOOKS.muted, fontStyle:'italic' }}>{row.confidence_notes}</div>
+          )}
+        </div>
+
+        {/* Field grid */}
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap:10, marginBottom:10 }}>
+          <Field label="Vendor"><input style={inputStyle} value={edit.vendor} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
+          <Field label="Date"><input type="date" style={inputStyle} value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
+          <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
+          <Field label="Category">
+            <select style={inputStyle} value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        {row.category_reasoning && (
+          <div style={{ fontSize:11, color:BOOKS.muted, marginBottom:8, fontStyle:'italic' }}>
+            AI reasoning: {row.category_reasoning}
+          </div>
+        )}
+
+        {/* Deal link suggestion */}
+        {(row.auto_linked_deal_id || dealOptions.length > 0) && (
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:4 }}>
+              Linked deal {row.auto_linked_deal_id && '· auto-suggested'}
+            </div>
+            <select style={inputStyle} value={edit.linked_deal_id} onChange={(e) => setEdit({ ...edit, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {dealOptions.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+          </div>
+        )}
+
+        <Field label="Business purpose (required for audit)">
+          <input style={inputStyle} placeholder="e.g. Travel for sponsored Airbnb shoot — Tokyo Hotels deal"
+            value={edit.business_purpose} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
+        </Field>
+
+        <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+          <button onClick={confirm} disabled={saving}
+            style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 16px', fontSize:12, fontWeight:700, cursor: saving?'wait':'pointer', fontFamily:'inherit', opacity: saving?0.6:1 }}>
+            {saving ? 'Saving…' : '✓ Confirm & mark reviewed'}
+          </button>
+          <div style={{ flex:1 }} />
+          <div style={{ alignSelf:'center', fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>
+            {row.expense_id?.slice(0, 8)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display:'block' }}>
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:4 }}>{label}</div>
+      {children}
+    </label>
+  );
+}
+
+function ConfidenceBadge({ level }) {
+  const map = {
+    high:    { bg:'#DCFCE7', fg:'#15803D', label:'HIGH CONFIDENCE' },
+    medium:  { bg:'#FEF3C7', fg:'#B45309', label:'MEDIUM CONFIDENCE' },
+    low:     { bg:'#FEE2E2', fg:'#991B1B', label:'LOW CONFIDENCE' },
+    __failed__: { bg:'#FEE2E2', fg:'#991B1B', label:'EXTRACTION FAILED' },
+  };
+  const m = map[level] || map.medium;
+  return (
+    <span style={{ background:m.bg, color:m.fg, fontSize:9, fontWeight:800, letterSpacing:'1px', padding:'3px 8px', borderRadius:6 }}>
+      {m.label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExpensesTab — full table view
+// ─────────────────────────────────────────────────────────────────────────────
+function ExpensesTab({ data, reload, isMobile, showToast }) {
+  const [filterCat, setFilterCat]         = useState('');
+  const [filterFlagged, setFilterFlagged] = useState(false);
+  const [filterUnrev, setFilterUnrev]     = useState(false);
+  const [filterEntered, setFilterEntered] = useState('');
+  const [search, setSearch]               = useState('');
+  const [selected, setSelected]           = useState(null);
+  const [showManual, setShowManual]       = useState(false);
+
+  const filtered = data.expenses.filter((r) => {
+    if (filterCat && r.category !== filterCat) return false;
+    if (filterFlagged && (r.flags_computed || []).length === 0) return false;
+    if (filterUnrev && String(r.reviewed).toLowerCase() === 'true') return false;
+    if (filterEntered && r.entered_by !== filterEntered) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      if (!String(r.vendor || '').toLowerCase().includes(s)
+        && !String(r.business_purpose || '').toLowerCase().includes(s)) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const filterStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink };
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+        <input placeholder="Search vendor or purpose…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...filterStyle, minWidth:200 }} />
+        <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} style={filterStyle}>
+          <option value="">All categories</option>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterEntered} onChange={(e) => setFilterEntered(e.target.value)} style={filterStyle}>
+          <option value="">All sources</option>
+          <option value="ai">AI extracted</option>
+          <option value="paul">Paul (manual)</option>
+          <option value="husband">Husband (manual)</option>
+        </select>
+        <label style={{ fontSize:12, color:BOOKS.muted, display:'flex', alignItems:'center', gap:5, cursor:'pointer' }}>
+          <input type="checkbox" checked={filterFlagged} onChange={(e) => setFilterFlagged(e.target.checked)} /> Flagged only
+        </label>
+        <label style={{ fontSize:12, color:BOOKS.muted, display:'flex', alignItems:'center', gap:5, cursor:'pointer' }}>
+          <input type="checkbox" checked={filterUnrev} onChange={(e) => setFilterUnrev(e.target.checked)} /> Unreviewed only
+        </label>
+        <div style={{ flex:1 }} />
+        <button onClick={() => setShowManual(true)}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          + Add manually
+        </button>
+      </div>
+
+      <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:8 }}>
+        Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + Number(r.amount || 0), 0))}
+      </div>
+
+      {/* Table */}
+      <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:10, overflow:'hidden', overflowX:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, minWidth: isMobile ? 700 : 'auto' }}>
+          <thead style={{ background:BOOKS.surface }}>
+            <tr style={{ textAlign:'left' }}>
+              <th style={thStyle}>Date</th>
+              <th style={thStyle}>Vendor</th>
+              <th style={{ ...thStyle, textAlign:'right' }}>Amount</th>
+              <th style={thStyle}>Category</th>
+              <th style={thStyle}>Linked deal</th>
+              <th style={thStyle}>Confidence</th>
+              <th style={thStyle}>Reviewed</th>
+              <th style={thStyle}>Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.expense_id} onClick={() => setSelected(r)}
+                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent' }}>
+                <td style={tdStyle}>{fmtDate(r.date)}</td>
+                <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
+                <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={tdStyle}>{linkedDealLabel(r.linked_deal_id, data.deals)}</td>
+                <td style={tdStyle}><ConfidenceBadge level={r.extraction_confidence} /></td>
+                <td style={tdStyle}>{String(r.reviewed).toLowerCase() === 'true' ? '✓' : '—'}</td>
+                <td style={tdStyle}><FlagDots flags={r.flags_computed} /></td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} style={{ textAlign:'center', padding:'40px 0', color:BOOKS.muted, fontSize:13 }}>No expenses match these filters.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
+      {showManual && <ManualExpenseModal deals={data.deals} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
+    </div>
+  );
+}
+
+const thStyle = { padding:'10px 12px', fontWeight:700, fontSize:11, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px' };
+const tdStyle = { padding:'10px 12px', color:BOOKS.ink, verticalAlign:'top' };
+
+function linkedDealLabel(dealId, deals) {
+  if (!dealId) return <span style={{ color:'#94A3B8' }}>—</span>;
+  const d = deals.find((x) => x.deal_id === dealId);
+  return d ? <span style={{ color:SLATE, fontWeight:600 }}>{d.brand}</span> : <span style={{ color:'#94A3B8' }}>{dealId.slice(0, 8)}</span>;
+}
+
+function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
+  const [edit, setEdit] = useState({ ...row });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const patch = {};
+      ['date','vendor','amount','currency','category','business_purpose','payment_method',
+       'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
+      await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
+      showToast && showToast('Saved');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', justifyContent:'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 20px rgba(0,0,0,0.12)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>Expense detail</div>
+            <div style={{ fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>{row.expense_id}</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:BOOKS.muted }}>×</button>
+        </div>
+
+        {row.receipt_url && (
+          <div style={{ marginBottom:14 }}>
+            <a href={row.receipt_url} target="_blank" rel="noreferrer"
+              style={{ display:'block', padding:'10px 14px', background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:SLATE, fontSize:12, fontWeight:600, textDecoration:'none' }}>
+              View receipt in Drive ↗
+            </a>
+          </div>
+        )}
+
+        <div style={{ display:'grid', gap:12 }}>
+          <Field label="Date"><input type="date" style={inputStyle} value={edit.date || ''} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
+          <Field label="Vendor"><input style={inputStyle} value={edit.vendor || ''} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:8 }}>
+            <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount || ''} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
+            <Field label="Currency"><input style={inputStyle} value={edit.currency || ''} onChange={(e) => setEdit({ ...edit, currency: e.target.value })} /></Field>
+          </div>
+          <Field label="Category">
+            <select style={inputStyle} value={edit.category || ''} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+              <option value="">— pick —</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Business purpose">
+            <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={edit.business_purpose || ''} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
+          </Field>
+          <Field label="Linked deal (primary)">
+            <select style={inputStyle} value={edit.linked_deal_id || ''} onChange={(e) => setEdit({ ...edit, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Linked deal (secondary)">
+            <select style={inputStyle} value={edit.linked_deal_id_2 || ''} onChange={(e) => setEdit({ ...edit, linked_deal_id_2: e.target.value })}>
+              <option value="">— No second link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Payment method"><input style={inputStyle} value={edit.payment_method || ''} onChange={(e) => setEdit({ ...edit, payment_method: e.target.value })} /></Field>
+          <Field label="Notes">
+            <textarea style={{ ...inputStyle, minHeight:50, fontFamily:'inherit' }} value={edit.notes || ''} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+          </Field>
+          <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:BOOKS.ink, cursor:'pointer' }}>
+            <input type="checkbox" checked={String(edit.reviewed).toLowerCase() === 'true'} onChange={(e) => setEdit({ ...edit, reviewed: e.target.checked ? 'TRUE' : 'FALSE' })} />
+            Mark reviewed
+          </label>
+        </div>
+
+        <div style={{ marginTop:20, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+
+        {row.extracted_text && (
+          <details style={{ marginTop:18, fontSize:11, color:BOOKS.muted }}>
+            <summary style={{ cursor:'pointer', fontWeight:600 }}>Raw OCR text (debug)</summary>
+            <pre style={{ marginTop:8, whiteSpace:'pre-wrap', maxHeight:200, overflow:'auto', background:BOOKS.surface, padding:10, borderRadius:6 }}>{row.extracted_text}</pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ManualExpenseModal({ deals, onClose, reload, showToast }) {
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    vendor: '', amount: '', currency: 'USD', category: 'Other',
+    business_purpose: '', payment_method: '', linked_deal_id: '', notes: '',
+    entered_by: 'paul',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!form.vendor || !form.amount || !form.date) { alert('Vendor, amount, and date are required.'); return; }
+    setSaving(true);
+    try {
+      await booksApi('manual-expense', { method:'POST', body: form });
+      showToast && showToast('Added');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(480px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:16 }}>Add expense manually</div>
+        <div style={{ display:'grid', gap:10 }}>
+          <Field label="Vendor"><input style={inputStyle} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+            <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+          </div>
+          <Field label="Category">
+            <select style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Business purpose">
+            <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={form.business_purpose} onChange={(e) => setForm({ ...form, business_purpose: e.target.value })} />
+          </Field>
+          <Field label="Linked deal (optional)">
+            <select style={inputStyle} value={form.linked_deal_id} onChange={(e) => setForm({ ...form, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Payment method (optional)"><input style={inputStyle} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} /></Field>
+        </div>
+        <div style={{ marginTop:16, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : 'Add expense'}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DealsTab — pipeline kanban
+// ─────────────────────────────────────────────────────────────────────────────
+function DealsTab({ data, reload, isMobile, showToast }) {
+  const [editing, setEditing] = useState(null); // null | 'new' | dealObj
+  const cols = DEAL_STATUSES;
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <div style={{ fontSize:13, color:BOOKS.muted }}>{data.deals.length} deal{data.deals.length === 1 ? '' : 's'} this year</div>
+        <button onClick={() => setEditing({})}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          + Add deal
+        </button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
+        {cols.map((status) => {
+          const list = data.deals.filter((d) => d.status === status);
+          const total = list.reduce((s, d) => s + Number(d.deal_value || 0), 0);
+          return (
+            <div key={status} style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:10, padding:12, minHeight:200 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:BOOKS.ink, textTransform:'uppercase', letterSpacing:'1.5px' }}>{status}</div>
+                <div style={{ fontSize:10, color:BOOKS.muted, fontVariantNumeric:'tabular-nums' }}>{list.length} · {fmtMoney(total)}</div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {list.map((d) => (
+                  <div key={d.deal_id} onClick={() => setEditing(d)}
+                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', cursor:'pointer', transition:'all 0.12s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = BOOKS.ink}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = BOOKS.border}>
+                    <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{d.brand}</div>
+                    <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3, display:'flex', justifyContent:'space-between' }}>
+                      <span>{d.platform || '—'}</span>
+                      <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600, color:SLATE }}>{fmtMoney(d.deal_value)}</span>
+                    </div>
+                    {(d.shoot_start_date || d.shoot_end_date) && (
+                      <div style={{ fontSize:10, color:BOOKS.muted, marginTop:3 }}>
+                        Shoot: {d.shoot_start_date || '?'} → {d.shoot_end_date || '?'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {list.length === 0 && <div style={{ fontSize:11, color:BOOKS.muted, textAlign:'center', padding:'14px 0' }}>No deals</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && <DealModal deal={editing.deal_id ? editing : null} expenses={data.expenses} onClose={() => setEditing(null)} reload={reload} showToast={showToast} />}
+    </div>
+  );
+}
+
+function DealModal({ deal, expenses, onClose, reload, showToast }) {
+  const [form, setForm] = useState({
+    deal_id: deal?.deal_id || '',
+    brand: deal?.brand || '',
+    deal_value: deal?.deal_value || '',
+    status: deal?.status || 'Pitching',
+    platform: deal?.platform || 'TikTok',
+    deliverable_url: deal?.deliverable_url || '',
+    invoice_url: deal?.invoice_url || '',
+    shoot_start_date: deal?.shoot_start_date || '',
+    shoot_end_date: deal?.shoot_end_date || '',
+    usage_rights: deal?.usage_rights || '',
+    paid_date: deal?.paid_date || '',
+    notes: deal?.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const linkedExp = deal ? expenses.filter((e) => e.linked_deal_id === deal.deal_id || e.linked_deal_id_2 === deal.deal_id) : [];
+  const expensesTotal = linkedExp.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const profit = Number(form.deal_value || 0) - expensesTotal;
+
+  // Show expenses in shoot window if no deal_id yet (preview)
+  const previewExp = !deal && form.shoot_start_date && form.shoot_end_date
+    ? expenses.filter((e) => e.date >= form.shoot_start_date && e.date <= form.shoot_end_date)
+    : [];
+
+  const save = async () => {
+    if (!form.brand) { alert('Brand is required.'); return; }
+    if (form.status === 'Paid' && !form.deliverable_url) {
+      if (!confirm('Status is Paid but no deliverable URL. Save anyway?')) return;
+    }
+    setSaving(true);
+    try {
+      await booksApi('upsert-deal', { method:'POST', body: form });
+      showToast && showToast(deal ? 'Deal updated' : 'Deal added');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(560px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:16 }}>{deal ? 'Edit deal' : 'Add deal'}</div>
+        <div style={{ display:'grid', gap:10 }}>
+          <Field label="Brand"><input style={inputStyle} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Status">
+              <select style={inputStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                {DEAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Deal value"><input type="number" step="0.01" style={inputStyle} value={form.deal_value} onChange={(e) => setForm({ ...form, deal_value: e.target.value })} /></Field>
+          </div>
+          <Field label="Platform">
+            <select style={inputStyle} value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })}>
+              <option>TikTok</option><option>IG</option><option>YouTube</option><option>UGC</option><option>Bundle</option>
+            </select>
+          </Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Shoot start"><input type="date" style={inputStyle} value={form.shoot_start_date} onChange={(e) => setForm({ ...form, shoot_start_date: e.target.value })} /></Field>
+            <Field label="Shoot end"><input type="date" style={inputStyle} value={form.shoot_end_date} onChange={(e) => setForm({ ...form, shoot_end_date: e.target.value })} /></Field>
+          </div>
+          <Field label="Usage rights"><input style={inputStyle} placeholder="e.g. 30-day, paid social only" value={form.usage_rights} onChange={(e) => setForm({ ...form, usage_rights: e.target.value })} /></Field>
+          <Field label="Deliverable URL"><input style={inputStyle} placeholder="Posted link (required when Paid)" value={form.deliverable_url} onChange={(e) => setForm({ ...form, deliverable_url: e.target.value })} /></Field>
+          <Field label="Invoice URL"><input style={inputStyle} placeholder="Required from Sold In onward" value={form.invoice_url} onChange={(e) => setForm({ ...form, invoice_url: e.target.value })} /></Field>
+          <Field label="Paid date"><input type="date" style={inputStyle} value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} /></Field>
+          <Field label="Notes">
+            <textarea style={{ ...inputStyle, minHeight:50, fontFamily:'inherit' }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </Field>
+        </div>
+
+        {(linkedExp.length > 0 || previewExp.length > 0) && (
+          <div style={{ marginTop:16, padding:12, background:BOOKS.surface, borderRadius:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:BOOKS.ink, textTransform:'uppercase', letterSpacing:'1.2px', marginBottom:8 }}>
+              {deal ? 'Linked expenses' : 'Expenses in shoot window (preview)'}
+            </div>
+            {(linkedExp.length > 0 ? linkedExp : previewExp).slice(0, 8).map((e) => (
+              <div key={e.expense_id} style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:BOOKS.ink, padding:'4px 0' }}>
+                <span>{e.date} · {e.vendor}</span>
+                <span style={{ fontWeight:600 }}>{fmtMoney(e.amount)}</span>
+              </div>
+            ))}
+            {deal && (
+              <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${BOOKS.border}`, display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:700, color:BOOKS.ink }}>
+                <span>Profitability</span>
+                <span style={{ color: profit >= 0 ? '#16A34A' : '#DC2626' }}>{fmtMoney(profit)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop:16, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : (deal ? 'Save changes' : 'Add deal')}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuditTab — searchable audit cards
+// ─────────────────────────────────────────────────────────────────────────────
+function AuditTab({ data, isMobile }) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+
+  const matches = data.expenses.filter((r) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return String(r.vendor || '').toLowerCase().includes(s)
+      || String(r.business_purpose || '').toLowerCase().includes(s)
+      || String(r.category || '').toLowerCase().includes(s);
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, width:'100%', maxWidth:320 };
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap:16 }}>
+      <div>
+        <input placeholder="Search vendor / purpose / category…" value={search} onChange={(e) => setSearch(e.target.value)} style={inputStyle} />
+        <div style={{ marginTop:12, maxHeight: isMobile ? 240 : 600, overflowY:'auto', border:`1px solid ${BOOKS.border}`, borderRadius:8 }}>
+          {matches.map((r) => (
+            <div key={r.expense_id} onClick={() => setSelected(r)}
+              style={{
+                padding:'10px 12px', borderBottom:`1px solid ${BOOKS.border}`, cursor:'pointer',
+                background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent',
+              }}>
+              <div style={{ fontSize:12, fontWeight:600, color:BOOKS.ink }}>{r.vendor || '(no vendor)'}</div>
+              <div style={{ fontSize:11, color:BOOKS.muted, display:'flex', justifyContent:'space-between', marginTop:2 }}>
+                <span>{fmtDate(r.date)}</span>
+                <span>{fmtMoney(r.amount, r.currency)}</span>
+              </div>
+            </div>
+          ))}
+          {matches.length === 0 && <div style={{ padding:'30px 12px', textAlign:'center', color:BOOKS.muted, fontSize:12 }}>No matches.</div>}
+        </div>
+      </div>
+      {selected
+        ? <AuditCard row={selected} deals={data.deals} />
+        : <div style={{ padding:30, textAlign:'center', color:BOOKS.muted, fontSize:13 }}>Pick an expense to view its audit card.</div>}
+    </div>
+  );
+}
+
+function AuditCard({ row, deals }) {
+  const linked = row.linked_deal_id ? deals.find((d) => d.deal_id === row.linked_deal_id) : null;
+  const linked2 = row.linked_deal_id_2 ? deals.find((d) => d.deal_id === row.linked_deal_id_2) : null;
+
+  const printPdf = () => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`
+      <html><head><title>Audit Card — ${row.vendor || row.expense_id}</title>
+      <style>
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 32px; max-width: 720px; margin: 0 auto; color: #1A2744; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .meta { color: #94A3B8; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        td { padding: 6px 8px; border-bottom: 1px solid #E1E5EE; vertical-align: top; font-size: 12px; }
+        td:first-child { font-weight: 700; width: 35%; color: #2E4A66; }
+        .deal { background: #F7F9FC; padding: 14px; border-radius: 8px; margin-top: 14px; font-size: 12px; }
+        img { max-width: 100%; border: 1px solid #E1E5EE; border-radius: 6px; margin: 12px 0; }
+      </style></head><body>
+      <h1>${row.vendor || '(no vendor)'} — ${fmtMoney(row.amount, row.currency)}</h1>
+      <div class="meta">RGG Media · Expense ${row.expense_id} · ${row.date}</div>
+      <table>
+        <tr><td>Date</td><td>${row.date || '—'}</td></tr>
+        <tr><td>Vendor</td><td>${row.vendor || '—'}</td></tr>
+        <tr><td>Amount</td><td>${fmtMoney(row.amount, row.currency)}</td></tr>
+        <tr><td>Category</td><td>${row.category || '—'}</td></tr>
+        <tr><td>Payment method</td><td>${row.payment_method || '—'}</td></tr>
+        <tr><td>Business purpose</td><td>${row.business_purpose || '—'}</td></tr>
+        <tr><td>Receipt</td><td>${row.receipt_url ? `<a href="${row.receipt_url}">Drive link</a>` : '—'}</td></tr>
+        <tr><td>Confidence</td><td>${row.extraction_confidence || '—'}</td></tr>
+        <tr><td>Source</td><td>${row.entered_by} · extracted ${row.extracted_at}</td></tr>
+      </table>
+      ${linked ? `<div class="deal"><strong>Linked deal: ${linked.brand}</strong><br/>Value: ${fmtMoney(linked.deal_value)} · Status: ${linked.status} · Platform: ${linked.platform || '—'}<br/>Shoot: ${linked.shoot_start_date || '?'} → ${linked.shoot_end_date || '?'}<br/>${linked.deliverable_url ? `Deliverable: <a href="${linked.deliverable_url}">${linked.deliverable_url}</a>` : ''}</div>` : ''}
+      ${linked2 ? `<div class="deal"><strong>Secondary linked deal: ${linked2.brand}</strong><br/>Value: ${fmtMoney(linked2.deal_value)} · Status: ${linked2.status}</div>` : ''}
+      </body></html>
+    `);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  };
+
+  return (
+    <div style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>{row.vendor || '(no vendor)'}</div>
+          <div style={{ fontSize:11, color:BOOKS.muted, fontFamily:'monospace', marginTop:2 }}>{row.expense_id}</div>
+        </div>
+        <button onClick={printPdf}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          Print to PDF
+        </button>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'150px 1fr', gap:'8px 16px', fontSize:12, color:BOOKS.ink }}>
+        <strong style={{ color:SLATE }}>Date</strong>            <span>{row.date || '—'}</span>
+        <strong style={{ color:SLATE }}>Amount</strong>          <span style={{ fontWeight:700 }}>{fmtMoney(row.amount, row.currency)}</span>
+        <strong style={{ color:SLATE }}>Category</strong>        <span>{row.category || '—'}</span>
+        <strong style={{ color:SLATE }}>Payment method</strong>  <span>{row.payment_method || '—'}</span>
+        <strong style={{ color:SLATE }}>Business purpose</strong><span>{row.business_purpose || <em style={{ color:BOOKS.muted }}>missing — required for audit</em>}</span>
+        <strong style={{ color:SLATE }}>Receipt</strong>         <span>{row.receipt_url ? <a href={row.receipt_url} target="_blank" rel="noreferrer" style={{ color:SLATE, fontWeight:600 }}>View in Drive ↗</a> : '—'}</span>
+        <strong style={{ color:SLATE }}>Confidence</strong>      <span>{row.extraction_confidence || '—'}</span>
+        <strong style={{ color:SLATE }}>Source</strong>          <span>{row.entered_by} · {row.extracted_at}</span>
+      </div>
+
+      {linked && (
+        <div style={{ marginTop:16, padding:14, background:BOOKS.surface, borderRadius:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', marginBottom:6 }}>Linked deal</div>
+          <div style={{ fontSize:14, fontWeight:700, color:BOOKS.ink }}>{linked.brand}</div>
+          <div style={{ fontSize:12, color:BOOKS.ink, marginTop:4 }}>
+            {fmtMoney(linked.deal_value)} · {linked.status} · {linked.platform || '—'}
+          </div>
+          {(linked.shoot_start_date || linked.shoot_end_date) && (
+            <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3 }}>Shoot: {linked.shoot_start_date || '?'} → {linked.shoot_end_date || '?'}</div>
+          )}
+          {linked.deliverable_url && <div style={{ fontSize:11, marginTop:4 }}><a href={linked.deliverable_url} target="_blank" rel="noreferrer" style={{ color:SLATE }}>Deliverable ↗</a></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExportTab — CSV + audit binder
+// ─────────────────────────────────────────────────────────────────────────────
+function ExportTab({ data, year }) {
+  const [busy, setBusy] = useState(null);
+
+  const downloadCsv = async () => {
+    setBusy('csv');
+    try {
+      const r = await fetch(`${BOOKS_API}?action=year-export&kind=csv&year=${year}`);
+      const text = await r.text();
+      const blob = new Blob([text], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `RGG_Media_Expenses_${year}_for_George.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export failed: ' + e.message); }
+    setBusy(null);
+  };
+
+  const printBinder = () => {
+    const expenses = [...data.expenses]
+      .filter((r) => withinYear(r, year))
+      .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.date || '').localeCompare(b.date || ''));
+    const byCat = {};
+    expenses.forEach((r) => { (byCat[r.category || 'Uncategorized'] ||= []).push(r); });
+    const dealsById = {};
+    data.deals.forEach((d) => { dealsById[d.deal_id] = d; });
+
+    const w = window.open('', '_blank');
+    if (!w) return;
+    let toc = '<ul style="font-size:13px; line-height:1.9;">';
+    Object.keys(byCat).sort().forEach((c) => {
+      const total = byCat[c].reduce((s, r) => s + Number(r.amount || 0), 0);
+      toc += `<li><strong>${c}</strong> — ${byCat[c].length} expense${byCat[c].length===1?'':'s'} · ${fmtMoney(total)}</li>`;
+    });
+    toc += '</ul>';
+
+    let cards = '';
+    Object.keys(byCat).sort().forEach((c) => {
+      cards += `<h2 style="margin-top:32px; padding-bottom:8px; border-bottom:2px solid #1A2744;">${c}</h2>`;
+      byCat[c].forEach((r) => {
+        const linked = r.linked_deal_id ? dealsById[r.linked_deal_id] : null;
+        cards += `
+          <div class="card">
+            <div class="hdr">${r.vendor || '(no vendor)'} — ${fmtMoney(r.amount, r.currency)}</div>
+            <div class="meta">${r.date} · ${r.expense_id}</div>
+            <table>
+              <tr><td>Date</td><td>${r.date || '—'}</td></tr>
+              <tr><td>Vendor</td><td>${r.vendor || '—'}</td></tr>
+              <tr><td>Amount</td><td>${fmtMoney(r.amount, r.currency)}</td></tr>
+              <tr><td>Payment method</td><td>${r.payment_method || '—'}</td></tr>
+              <tr><td>Business purpose</td><td>${r.business_purpose || '<em>missing</em>'}</td></tr>
+              <tr><td>Receipt</td><td>${r.receipt_url ? `<a href="${r.receipt_url}">Drive link</a>` : '—'}</td></tr>
+              <tr><td>Confidence</td><td>${r.extraction_confidence || '—'}</td></tr>
+            </table>
+            ${linked ? `<div class="deal"><strong>${linked.brand}</strong> — ${fmtMoney(linked.deal_value)} · ${linked.status}<br/>Shoot: ${linked.shoot_start_date || '?'} → ${linked.shoot_end_date || '?'}</div>` : ''}
+          </div>
+        `;
+      });
+    });
+
+    w.document.write(`
+      <html><head><title>RGG Media ${year} — Audit Binder</title>
+      <style>
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 36px; max-width: 760px; margin: 0 auto; color: #1A2744; }
+        h1 { font-size: 22px; margin: 0 0 6px; } h2 { font-size: 16px; }
+        .card { page-break-inside: avoid; margin-bottom: 22px; padding: 14px; border: 1px solid #E1E5EE; border-radius: 8px; }
+        .hdr { font-size: 14px; font-weight: 800; }
+        .meta { color:#94A3B8; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin: 3px 0 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 5px 6px; border-bottom: 1px solid #F0F2F8; font-size: 11px; vertical-align: top; }
+        td:first-child { font-weight: 700; width: 35%; color:#2E4A66; }
+        .deal { margin-top: 10px; padding: 10px; background: #F7F9FC; border-radius: 6px; font-size: 11px; }
+      </style></head><body>
+      <h1>RGG Media LLC — ${year} Audit Binder</h1>
+      <div style="color:#94A3B8; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px;">Generated ${new Date().toISOString().slice(0,10)} · Total: ${fmtMoney(expenses.reduce((s,r)=>s+Number(r.amount||0),0))}</div>
+      <h2>Contents</h2>${toc}${cards}
+      </body></html>
+    `);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap:16 }}>
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>CSV for CPA</div>
+        <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:14 }}>
+          Flat export with category totals, sorted by category then date. Send to George Dimov.
+        </div>
+        <button onClick={downloadCsv} disabled={busy === 'csv'}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor: busy?'wait':'pointer', fontFamily:'inherit', opacity: busy === 'csv' ? 0.6 : 1 }}>
+          {busy === 'csv' ? 'Generating…' : 'Download CSV'}
+        </button>
+      </div>
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>Audit Binder PDF</div>
+        <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:14 }}>
+          One audit card per expense, sorted by category then date, with table of contents. Print-to-PDF from the new window.
+        </div>
+        <button onClick={printBinder}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+          Generate audit binder
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END BOOKS TAB
+// ═══════════════════════════════════════════════════════════════════════════
+  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
 
   return (
     <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Inter', system-ui, sans-serif" }}>
@@ -4777,6 +5875,7 @@ export default function App() {
 
         {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
         {tab === 'reality-casting' && <RealityCastingTab />}
+        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} />}
 
         </div>
       </div>
