@@ -1708,6 +1708,394 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
 }
 
 
+
+// ─────────────────────────────────────────────────────────────
+// 🎬 REALITY TV CASTING — Phase 1 (feed + fit score + filters)
+// ─────────────────────────────────────────────────────────────
+const CASTING_FORMAT_BUCKETS = {
+  'social-strategy':       'yes',
+  'big-cast-hybrid':       'yes',
+  'race-travel':           'yes',
+  'couples-only':          'yes',
+  'creator-targeted':      'yes',
+  'hybrid-physical-social':'yes',
+  'one-off-game':          'maybe',
+  'stunt-physical':        'maybe',
+  'pure-athletic':         'no',
+  'cooking':               'no',
+  'creative-maker':        'no',
+  'talent':                'no',
+  'dating':                'no',
+  'renovation':            'no',
+  'business-pitch':        'no',
+  'therapy':               'no',
+  'fear-horror':           'no',
+};
+const CASTING_FORMAT_LABELS = {
+  'social-strategy':'Social Strategy','big-cast-hybrid':'Big-Cast Hybrid','race-travel':'Race / Travel',
+  'couples-only':'Couples','creator-targeted':'Creator-Targeted','hybrid-physical-social':'Hybrid Physical+Social',
+  'one-off-game':'One-off Game Show','stunt-physical':'Stunt Physical',
+};
+
+function castingFitScore(i) {
+  const bucket = CASTING_FORMAT_BUCKETS[i.formatType] || 'no';
+  if (bucket === 'no') {
+    return { score:1, bucket:'no', reasoning:`${CASTING_FORMAT_LABELS[i.formatType]||i.formatType} — auto-archived (format mismatch).` };
+  }
+  const t = Math.max(1, Math.min(10, 11 - Math.floor((i.timeCommitmentDays||14)/7)));
+  const n = Math.max(4, Math.min(10, 11 - Math.floor((i.ndaMonths||12)/3)));
+  const p = ({low:4,mid:6,high:8,top:10})[i.payTier] || 5;
+  const e = i.eligibility==='duo-only' ? 8 : 10;
+  let raw = (i.careerUpside??5)*0.25 + (i.exposureValue??5)*0.22 + (i.audienceOverlap??5)*0.12
+          + p*0.12 + (i.networkEcosystem??5)*0.10 + t*0.08 + (i.brandFit??5)*0.05 + n*0.03 + e*0.03;
+  if (bucket==='maybe') raw = Math.min(raw, 6);
+  const score = Math.round(raw*10)/10;
+  return { score, bucket, reasoning: castingReasoning(score, i, bucket) };
+}
+function castingReasoning(score, i, bucket) {
+  const hits = [];
+  if (bucket==='maybe') hits.push('format = maybe (DQ risk)');
+  if ((i.careerUpside??0)>=9) hits.push('career-launching');
+  else if ((i.careerUpside??0)>=7) hits.push('strong post-show upside');
+  if ((i.exposureValue??0)>=9) hits.push('massive reach');
+  else if ((i.exposureValue??0)>=7) hits.push(`high reach (${i.network||'top network'})`);
+  if ((i.networkEcosystem??0)>=8) hits.push('opens doors at this network');
+  if ((i.audienceOverlap??0)>=9) hits.push('exact audience match');
+  else if ((i.audienceOverlap??0)>=7) hits.push('audience overlap');
+  if (i.payTier==='top') hits.push('top payout');
+  else if (i.payTier==='high') hits.push('strong payout');
+  if (i.timeCommitmentDays && i.timeCommitmentDays<=14) hits.push('short shoot');
+  if (i.eligibility==='duo-only' || i.eligibility==='either') hits.push('Dan-eligible');
+  return `${score}: ${hits.slice(0,4).join(', ') || 'partial fit'}.`;
+}
+
+const CASTING_TODAY_REF = new Date('2026-05-03');
+const castingDaysFromNow = (d) => { const x = new Date(CASTING_TODAY_REF); x.setDate(x.getDate()+d); return x.toISOString().slice(0,10); };
+function makeCasting(c) {
+  const r = castingFitScore({ ...c.scoreInputs, formatType:c.formatType, network:c.network });
+  return { ...c, fitScore:r.score, fitReasoning:r.reasoning, bucket:r.bucket };
+}
+const SEED_CASTINGS = [
+  makeCasting({ id:'c1', showName:'The Traitors US — Season 5', network:'Peacock', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(4),  pipelineStatus:'researching', applyLink:'https://www.peacocktv.com/casting', oneLineWhy:'Lead format for social game readers. Squid Game finalist credit + creator audience = strong tape angle.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c2', showName:'The Amazing Race — Season 38 (US)', network:'CBS', formatType:'race-travel', market:'US', deadline:castingDaysFromNow(11), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/amazing_race/casting/', oneLineWhy:'Highest-fit show on the board. Travel creator + 10-yr Dan dynamic = exact CBS template.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
+  makeCasting({ id:'c3', showName:'Beast Games — Season 2', network:'Prime Video / MrBeast', formatType:'creator-targeted', market:'US', deadline:castingDaysFromNow(2), pipelineStatus:'researching', applyLink:'https://beastgames.com/apply', oneLineWhy:'Creator-first cast. 65k cross-platform + Squid Game pedigree fits the producer brief exactly.', flags:['solo','closing-soon'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:9, exposureValue:9, careerUpside:7, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c4', showName:'Squid Game: The Challenge — Season 3', network:'Netflix', formatType:'big-cast-hybrid', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Returning finalist angle + show alumni credibility. Watchlist now, prep tape early.', flags:['solo','annual','returnee-angle'], dqRisk:true, dqRiskNotes:'Confirm returnee policy with casting before tape — some Netflix series block S1 finalists.', scoreInputs:{ brandFit:9, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c5', showName:'The Amazing Race Australia — Season 8', network:'Channel 10', formatType:'race-travel', market:'AU', deadline:castingDaysFromNow(18), pipelineStatus:'researching', applyLink:'https://10play.com.au/the-amazing-race-australia/casting', oneLineWhy:'AU passport route. Travel + Dan duo + strong AU follower base = home-market home-run.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:10, exposureValue:8, careerUpside:8, networkEcosystem:7, timeCommitmentDays:30, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
+  makeCasting({ id:'c6', showName:'The Traitors Australia — Season 4', network:'Channel 10', formatType:'social-strategy', market:'AU', deadline:castingDaysFromNow(22), pipelineStatus:'applied', applyLink:'https://10play.com.au/the-traitors-australia/casting', oneLineWhy:'AU eligibility. Strong audience overlap (49% AU). Squid Game finalist = camera-ready credit.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c7', showName:'Big Brother — Season 27 (US)', network:'CBS', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(25), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/big_brother/casting/', oneLineWhy:'Long-form social game with massive fanbase. Time commitment is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c8', showName:'The Mole — Season 4', network:'Netflix', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(31), pipelineStatus:'researching', applyLink:'https://www.netflix.com/casting', oneLineWhy:'Pure deception game — character-driven, strong showreel material. Travel-shoot format suits travel creator.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:7, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c9', showName:'Race Across the World — Series 6 (UK/AU)', network:'BBC / SBS', formatType:'race-travel', market:'INTL', deadline:castingDaysFromNow(45), pipelineStatus:'researching', applyLink:'https://www.bbc.co.uk/programmes/articles/casting', oneLineWhy:'Slow-travel format — exactly the RGG Media brand. Dan duo angle is producer catnip.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
+  makeCasting({ id:'c10', showName:'Deal or No Deal Island — Season 3', network:'NBC', formatType:'big-cast-hybrid', market:'US', deadline:castingDaysFromNow(60), pipelineStatus:'researching', applyLink:'https://www.nbc.com/casting', oneLineWhy:'Travel-set big-cast hybrid. Tropical shoot + social strategy = high content cross-pollination.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:8, careerUpside:7, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c11', showName:'Pressure Cooker — Season 2', network:'Hulu', formatType:'hybrid-physical-social', market:'US', deadline:castingDaysFromNow(7), pipelineStatus:'researching', applyLink:'https://www.hulu.com/casting', oneLineWhy:'Hybrid social-strategy show with cooking layer. Verify food vs social weighting before committing tape time.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c12', showName:'The Quiz With Balls — Season 2', network:'Fox', formatType:'one-off-game', market:'US', deadline:castingDaysFromNow(10), pipelineStatus:'researching', applyLink:'https://foxcasting.com', oneLineWhy:'Low-time one-off. DQ risk for full-season casts — confirm before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
+  makeCasting({ id:'c13', showName:'The Challenge: Global Championship — Season 3', network:'CBS / Paramount+', formatType:'hybrid-physical-social', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Squid Game alumni route. Heavy physical but social strategy carries equal weight.', flags:['solo','annual','returnee-angle'], dqRisk:false, scoreInputs:{ brandFit:7, audienceOverlap:7, exposureValue:8, careerUpside:9, networkEcosystem:9, timeCommitmentDays:35, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
+];
+function castingDaysUntil(d) { if (!d) return null; return Math.ceil((new Date(d) - CASTING_TODAY_REF) / 86400000); }
+function castingDeadlineLabel(d) {
+  if (!d) return 'Annual cycle — TBA';
+  const days = castingDaysUntil(d);
+  if (days < 0)  return 'Closed';
+  if (days === 0) return 'Closes today';
+  if (days === 1) return 'Closes tomorrow';
+  if (days <= 7)  return `Closes in ${days} days`;
+  if (days <= 30) return `Closes ${d}`;
+  return `Open until ${d}`;
+}
+function castingScoreColor(s) {
+  if (s >= 8) return { bg:`${BLUE}33`, color:'#0E6A80', border:BLUE };
+  if (s >= 7) return { bg:`${YELL}55`, color:'#8A6A10', border:YELL };
+  if (s >= 6) return { bg:`${YELL}33`, color:'#8A6A10', border:`${YELL}AA` };
+  if (s >= 5) return { bg:'#F4F6F9',   color:SLATE,    border:BDR };
+  return        { bg:'#F4F6F9',         color:'#94A3B8', border:BDR };
+}
+
+function RealityCastingTab() {
+  const [cards, setCards] = useState(SEED_CASTINGS);
+  const [selected, setSelected] = useState(null);
+  const [activeTab, setActiveTab] = useState('open');
+  const [filters, setFilters] = useState({ market:'all', format:'all', deadline:'all', eligibility:'all', scoreFloor:5 });
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+
+  const visible = cards.filter(c => {
+    if (c.bucket === 'no') return false;
+    if (activeTab === 'open' && c.deadline === null) return false;
+    if (activeTab === 'closing' && (!c.deadline || castingDaysUntil(c.deadline) > 7 || castingDaysUntil(c.deadline) < 0)) return false;
+    if (activeTab === 'watchlist' && !c.flags.includes('watchlist') && !c.flags.includes('returnee-angle')) return false;
+    if (activeTab === 'annual' && c.deadline !== null) return false;
+    if (filters.market !== 'all' && c.market !== filters.market) return false;
+    if (filters.format !== 'all' && c.formatType !== filters.format) return false;
+    if (filters.eligibility === 'duo' && !c.flags.includes('duo-eligible') && !c.flags.includes('apply-with-dan')) return false;
+    if (filters.eligibility === 'solo' && (c.flags.includes('duo-eligible') || c.flags.includes('apply-with-dan'))) return false;
+    if (c.fitScore < filters.scoreFloor) return false;
+    if (filters.deadline !== 'all' && c.deadline) {
+      const d = castingDaysUntil(c.deadline);
+      if (filters.deadline === 'week' && d > 7) return false;
+      if (filters.deadline === 'month' && d > 30) return false;
+      if (filters.deadline === 'open' && d <= 30) return false;
+    }
+    return true;
+  }).sort((a,b) => b.fitScore - a.fitScore || (a.deadline ? castingDaysUntil(a.deadline) : 999) - (b.deadline ? castingDaysUntil(b.deadline) : 999));
+
+  const formatOptions = [...new Set(cards.filter(c => c.bucket !== 'no').map(c => c.formatType))];
+  const open       = cards.filter(c => c.bucket !== 'no' && c.deadline);
+  const inFlight   = cards.filter(c => ['applied','first-tape','callback','producer-interview'].includes(c.pipelineStatus));
+  const urgent     = open.filter(c => castingDaysUntil(c.deadline) <= 7 && castingDaysUntil(c.deadline) >= 0);
+  const topScore   = open.length ? Math.max(...open.map(c => c.fitScore)) : 0;
+  const topCard    = open.filter(c => c.fitScore === topScore).sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline))[0];
+  const avg        = open.length ? Math.round(open.reduce((s,c) => s + c.fitScore, 0) / open.length * 10) / 10 : 0;
+
+  const updatePipeline = (id, stage) => {
+    setCards(cards.map(c => c.id === id ? { ...c, pipelineStatus:stage } : c));
+    if (selected && selected.id === id) setSelected({ ...selected, pipelineStatus:stage });
+  };
+  const addQuickCasting = (text) => {
+    if (!text.trim()) return;
+    const newCard = makeCasting({
+      id: `c${Date.now()}`,
+      showName: text.split('\n')[0].slice(0,60) || 'Untitled casting',
+      network: 'TBD', formatType:'social-strategy', market:'US',
+      deadline: castingDaysFromNow(14), pipelineStatus:'researching',
+      applyLink: '', oneLineWhy:'Just added — review fields and adjust scoring inputs.',
+      flags:['solo'], dqRisk:false,
+      scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:6, careerUpside:6, networkEcosystem:6, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' }
+    });
+    setCards([newCard, ...cards]);
+  };
+
+  const Pill = ({ active, children, onClick }) => (
+    <button onClick={onClick} style={{
+      padding:'6px 12px', borderRadius:20, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit',
+      background: active ? TEXT : '#FFFFFF', color: active ? '#FFFFFF' : SLATE,
+      border: `1px solid ${active ? TEXT : BDR}`, whiteSpace:'nowrap',
+    }}>{children}</button>
+  );
+
+  return (
+    <div>
+      <div style={{ marginBottom:18 }}>
+        <Label>reality tv casting</Label>
+        <div style={{ fontSize:24, fontWeight:700, color:TEXT, lineHeight:1.1, letterSpacing:'-0.5px' }}>What's open. What scores. What you should tape this week.</div>
+      </div>
+
+      {/* Stat tiles */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:12, marginBottom:18 }}>
+        <div style={{ background:`linear-gradient(135deg, #B6F2F9 0%, ${BLUE} 100%)`, borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
+          <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Highest open fit score</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{topScore.toFixed(1)}</div>
+          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>this week</div>
+        </div>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Live applications</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{inFlight.length}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>in flight</div>
+        </Card>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Open castings</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{open.length}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>tracked</div>
+        </Card>
+        <Card>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Avg fit score</div>
+          <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{avg.toFixed(1)}</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>across open queue</div>
+        </Card>
+      </div>
+
+      {/* Persona summary */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>What's casting right now that fits you</div>
+        {topCard ? (
+          <>
+            <div style={{ fontSize:16, fontWeight:600, color:TEXT, lineHeight:1.4 }}>
+              Top of your queue this week: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}, {castingDeadlineLabel(topCard.deadline).toLowerCase()}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
+            </div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} open castings tracked · {urgent.length} closing in the next 7 days.</div>
+          </>
+        ) : (
+          <div style={{ fontSize:14, color:TEXT }}>Nothing in the open queue scores above your floor — quiet week. Watchlist below has annual cycles to prep tapes for.</div>
+        )}
+      </Card>
+
+      {/* Paste & score */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:14 }}>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Paste &amp; score</div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>Drop a casting URL or brief — gets scored against your profile and added to the feed.</div>
+          </div>
+          {!pasteOpen && <button onClick={() => setPasteOpen(true)} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:10, padding:'9px 18px', fontWeight:800, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>+ Add casting</button>}
+        </div>
+        {pasteOpen && (
+          <div style={{ marginTop:12 }}>
+            <textarea rows="3" placeholder="Paste a casting URL, producer email, or copied brief here..." value={pasteText} onChange={e => setPasteText(e.target.value)}
+              style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+              <button onClick={() => { setPasteOpen(false); setPasteText(''); }} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+              <button onClick={() => { addQuickCasting(pasteText); setPasteText(''); setPasteOpen(false); }} style={{ background:TEXT, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Score &amp; add</button>
+            </div>
+            <div style={{ fontSize:10, color:'#94A3B8', marginTop:6 }}>Phase 1: opens a quick-add stub. Phase 2 wires AI extraction so a URL auto-fills everything.</div>
+          </div>
+        )}
+      </Card>
+
+      {/* Sub-tabs */}
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BDR}`, marginBottom:14 }}>
+        {[['open','Open Now'],['closing','Closing Soon'],['watchlist','Watchlist'],['annual','Annual Cycles']].map(([k,l]) => (
+          <div key={k} onClick={() => setActiveTab(k)} style={{
+            padding:'10px 18px', fontSize:12, fontWeight:600, cursor:'pointer',
+            color: activeTab===k ? TEXT : SLATE, borderBottom: activeTab===k ? `2px solid ${TEXT}` : '2px solid transparent', marginBottom:'-1px',
+          }}>{l}</div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <Card style={{ marginBottom:14 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Filters</div>
+          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (auto-archived hidden)</div>
+        </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Market</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {['all','US','AU','CA','INTL'].map(m => <Pill key={m} active={filters.market===m} onClick={() => setFilters({...filters, market:m})}>{m==='all'?'All':m}</Pill>)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Format</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              <Pill active={filters.format==='all'} onClick={() => setFilters({...filters, format:'all'})}>All</Pill>
+              {formatOptions.map(f => <Pill key={f} active={filters.format===f} onClick={() => setFilters({...filters, format:f})}>{CASTING_FORMAT_LABELS[f]}</Pill>)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Deadline</div>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {[['all','Any'],['week','This week'],['month','This month'],['open','Open later']].map(([k,l]) => <Pill key={k} active={filters.deadline===k} onClick={() => setFilters({...filters, deadline:k})}>{l}</Pill>)}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:24, flexWrap:'wrap' }}>
+            <div>
+              <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Eligibility</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[['all','Any'],['solo','Solo'],['duo','+ Dan']].map(([k,l]) => <Pill key={k} active={filters.eligibility===k} onClick={() => setFilters({...filters, eligibility:k})}>{l}</Pill>)}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Fit score floor</div>
+              <div style={{ display:'flex', gap:6 }}>
+                {[3,5,7,8].map(n => <Pill key={n} active={filters.scoreFloor===n} onClick={() => setFilters({...filters, scoreFloor:n})}>{n}+</Pill>)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Feed */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px,1fr))', gap:14 }}>
+        {visible.length === 0 ? (
+          <Card style={{ gridColumn:'1/-1', textAlign:'center', padding:40 }}>
+            <div style={{ color:SLATE, fontSize:13 }}>Nothing matches these filters. Try lowering the fit score floor or switching tabs.</div>
+          </Card>
+        ) : visible.map(c => {
+          const sc = castingScoreColor(c.fitScore);
+          const sev = !c.deadline ? 'open' : (castingDaysUntil(c.deadline) <= 7 ? 'urgent' : (castingDaysUntil(c.deadline) <= 21 ? 'soon' : 'open'));
+          const dlColor = sev==='urgent' ? '#A32D2D' : sev==='soon' ? '#8A6A10' : SLATE;
+          return (
+            <Card key={c.id} style={{ cursor:'pointer', padding:16 }}>
+              <div onClick={() => setSelected(c)} style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+                <div style={{ width:42, height:42, borderRadius:'50%', background:sc.bg, color:sc.color, border:`2px solid ${sc.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, flexShrink:0 }}>{c.fitScore}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                    <div>
+                      <div style={{ fontSize:14, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{c.showName}</div>
+                      <div style={{ fontSize:11, color:SLATE, marginTop:2 }}>{c.network} · {c.market}</div>
+                    </div>
+                    {c.dqRisk && <Tag color="#A32D2D">DQ risk</Tag>}
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
+                    <Tag color={SLATE}>{CASTING_FORMAT_LABELS[c.formatType]}</Tag>
+                    <Tag color={dlColor}>{castingDeadlineLabel(c.deadline)}</Tag>
+                    {c.flags.includes('apply-with-dan') && <Tag color={SLATE}>+ Dan</Tag>}
+                    {c.flags.includes('annual') && <Tag color={SLATE}>Annual</Tag>}
+                  </div>
+                  <div style={{ fontSize:12, color:SLATE, marginTop:10, lineHeight:1.4 }}>{c.oneLineWhy}</div>
+                  <div style={{ fontSize:10, color:'#94A3B8', marginTop:8, fontStyle:'italic' }}>{c.fitReasoning}</div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize:10, color:'#94A3B8', marginTop:18, paddingBottom:8 }}>
+        Phase 1 — feed, fit score, filters. Auto-archived shows (cooking / dating / athletic / etc.) hidden by default.
+      </div>
+
+      {/* Detail modal */}
+      {selected && (
+        <div onClick={() => setSelected(null)} style={{ position:'fixed', inset:0, background:'rgba(26,39,68,0.5)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'5vh 16px', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#FFFFFF', borderRadius:12, maxWidth:620, width:'100%', boxShadow:'0 20px 50px -10px rgba(26,39,68,0.3)' }}>
+            <div style={{ padding:24, borderBottom:`1px solid ${BDR}`, display:'flex', alignItems:'flex-start', gap:14 }}>
+              <div style={{ width:42, height:42, borderRadius:'50%', background:castingScoreColor(selected.fitScore).bg, color:castingScoreColor(selected.fitScore).color, border:`2px solid ${castingScoreColor(selected.fitScore).border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, flexShrink:0 }}>{selected.fitScore}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:18, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{selected.showName}</div>
+                <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>{selected.network} · {selected.market}</div>
+              </div>
+              <button onClick={() => setSelected(null)} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Close</button>
+            </div>
+            <div style={{ padding:24 }}>
+              <div style={{ marginBottom:18 }}>
+                <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Why this scored</div>
+                <div style={{ fontSize:13, color:TEXT }}>{selected.fitReasoning}</div>
+                <div style={{ fontSize:13, color:SLATE, marginTop:8 }}>{selected.oneLineWhy}</div>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:18 }}>
+                {[
+                  ['Format', CASTING_FORMAT_LABELS[selected.formatType]],
+                  ['Deadline', castingDeadlineLabel(selected.deadline)],
+                  ['Career upside', `${selected.scoreInputs.careerUpside ?? '—'}/10`],
+                  ['Exposure value', `${selected.scoreInputs.exposureValue}/10`],
+                  ['Network ecosystem', `${selected.scoreInputs.networkEcosystem ?? '—'}/10`],
+                  ['Audience overlap', `${selected.scoreInputs.audienceOverlap}/10`],
+                  ['Brand fit', `${selected.scoreInputs.brandFit}/10`],
+                  ['Pay tier', selected.scoreInputs.payTier],
+                  ['Eligibility', selected.scoreInputs.eligibility],
+                  ['Time commitment', `${selected.scoreInputs.timeCommitmentDays} days`],
+                  ['NDA length', `${selected.scoreInputs.ndaMonths} months`],
+                ].map(([k,v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600 }}>{k}</div>
+                    <div style={{ fontSize:13, color:TEXT, marginTop:3 }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {selected.dqRisk && (
+                <div style={{ background:'#FBF1DC', border:'1px solid #ECD9AC', borderRadius:8, padding:12, marginBottom:18 }}>
+                  <div style={{ fontSize:10, color:'#8A6A10', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700 }}>DQ risk</div>
+                  <div style={{ fontSize:12, color:TEXT, marginTop:4 }}>{selected.dqRiskNotes}</div>
+                </div>
+              )}
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Pipeline stage</div>
+                <select value={selected.pipelineStatus} onChange={e => updatePipeline(selected.id, e.target.value)}
+                  style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
+                  {['researching','applied','first-tape','callback','producer-interview','booked','rejected','ghosted'].map(s => <option key={s} value={s}>{s.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}</option>)}
+                </select>
+              </div>
+              {selected.applyLink && (
+                <a href={selected.applyLink} target="_blank" rel="noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>Open apply link →</a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function App() {
   const width = useWindowWidth();
   const isMobile = width < 768;
@@ -2128,7 +2516,12 @@ export default function App() {
   }, [tab]);
 
   // ── Live pulse ────────────────────────────────────────────────
+  // Only fire flashes on tabs that actually show the live-stat cards (Overview).
+  // On Books/CRM/Deliverables etc the flash setState causes the whole Dashboard
+  // to re-render every 4s, which made typing into the Books expense description
+  // feel like the tab was "refreshing every few seconds."
   useEffect(() => {
+    if (tab !== 'overview' && tab !== 'analytics' && tab !== 'audience') return;
     const id = setInterval(() => {
       const r = Math.random();
       if (r < 0.38 && !igConnected)      { setFlash('ig'); setTimeout(() => setFlash(null), 700); }
@@ -2136,73 +2529,1403 @@ export default function App() {
       else if (!ytConnected)             { setFlash('yt'); setTimeout(() => setFlash(null), 700); }
     }, 4000);
     return () => clearInterval(id);
-  }, [igConnected, ttConnected, ytConnected]);
+  }, [igConnected, ttConnected, ytConnected, tab]);
 
   // ── Derived ───────────────────────────────────────────────────
   const paidDeals     = deals.filter(d => d.s === 'Paid');
   const totalRevenue  = paidDeals.reduce((s, d) => s + (d.v || 0), 0);
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
+  const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
-  // ── Biggest deal (replaces hardcoded American Airlines $2,000) ──
-  const biggestPaidDeal = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
-  const biggestAnyDeal  = deals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
-  const biggestDeal     = biggestPaidDeal || (biggestAnyDeal && (biggestAnyDeal.v || 0) > 0 ? biggestAnyDeal : null);
-
-  // ── Live milestone values (auto-tracked from deals/followers) ──
-  // Parses goal strings like '$45K', '90K', '24' → numbers.
-  // Returns derived { cur, pct, isAuto } for milestones we can compute live;
-  // returns null for milestones still manually edited (e.g. Content posts).
-  const totalAudience = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
-  const parseGoalNum = g => {
-    if (!g) return 1;
-    const s = String(g).replace(/[$,\s]/g, '').trim();
-    const mt = s.match(/^([0-9.]+)([kKmM]?)$/);
-    if (!mt) return parseFloat(s) || 1;
-    const n = parseFloat(mt[1]);
-    const u = mt[2].toLowerCase();
-    return u === 'k' ? n * 1000 : u === 'm' ? n * 1000000 : n;
+  // ── Milestones: live numbers, not stored ones ────────────────
+  // Milestone `cur` and `pct` are derived from current state so they always
+  // match what the Overview's Revenue / Pipeline / Total Audience cards show.
+  // Hardcoded stored values used to drift (e.g. milestone said "$4,055" while
+  // Total Earned said "$2,500"); deriving at render time fixes that drift.
+  const fmtMilestoneNum = (n, prefix = '', suffix = '') => {
+    if (n == null || isNaN(n)) return `${prefix}0${suffix}`;
+    if (n >= 1000) return `${prefix}${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K${suffix}`;
+    return `${prefix}${Math.round(n).toLocaleString()}${suffix}`;
   };
-  const liveMilestone = m => {
-    const goalN = parseGoalNum(m.goal);
-    const make = (val, fmt) => ({
-      cur: fmt(val),
-      pct: Math.min(100, Math.round((val / goalN) * 100)),
-      isAuto: true,
-    });
-    switch (m.id) {
-      case 3: return make(totalRevenue,        v => usd(v));         // Revenue: $45K
-      case 4: return make(paidDeals.length,    v => String(v));      // Deals: 24
-      case 5: return make(totalAudience,       v => fmtFull(v));     // Total Audience: 90K
-      case 7: return make(ttFollowers || 0,    v => fmtFull(v));     // TikTok: 100K
-      case 8: return make(igFollowers || 0,    v => fmtFull(v));     // Instagram: 20K
-      default: return null;                                          // Content (id 6) stays manual
+  const parseGoal = (g) => {
+    // Goals come in as "$45K", "90K", "260", "100K", "20K" etc.
+    // Strip $ + commas, then expand K (×1000) and M (×1,000,000) so the
+    // percentage math is against the real numeric goal — not the bare digits.
+    const raw = String(g || '').trim().replace(/[$,\s]/g, '');
+    const m = raw.match(/^([0-9]*\.?[0-9]+)\s*([kKmM]?)/);
+    if (!m) return 1;
+    const num = parseFloat(m[1]);
+    const suf = (m[2] || '').toLowerCase();
+    if (!isFinite(num) || num <= 0) return 1;
+    if (suf === 'k') return num * 1000;
+    if (suf === 'm') return num * 1000000;
+    return num;
+  };
+  const computeMilestone = (m) => {
+    if (m.done) return m; // Completed milestones stay as-is
+    const goalN = parseGoal(m.goal);
+    let curN = null;
+    let curStr = m.cur;
+    // Map well-known milestones to live data sources
+    if (m.cat === 'Revenue' || /revenue/i.test(m.t)) {
+      curN = totalRevenue;
+      curStr = `$${curN.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    } else if (m.cat === 'Deals' || /^Deals:/i.test(m.t)) {
+      curN = paidDeals.length;
+      curStr = String(curN);
+    } else if (/^TikTok:/i.test(m.t)) {
+      curN = ttFollowers;
+      curStr = fmtMilestoneNum(curN);
+    } else if (/^Instagram:/i.test(m.t)) {
+      curN = igFollowers;
+      curStr = fmtMilestoneNum(curN);
+    } else if (/^YouTube:/i.test(m.t)) {
+      curN = ytSubs;
+      curStr = fmtMilestoneNum(curN);
+    } else if (m.cat === 'Audience' || /total audience/i.test(m.t)) {
+      curN = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
+      curStr = fmtMilestoneNum(curN);
+    } else if (m.cat === 'Content' || /^Content:/i.test(m.t)) {
+      // Content posts: use stored cur (user-edited) — there's no clean
+      // year-to-date total available from the APIs
+      curN = parseFloat(String(m.cur || '').replace(/[^0-9.]/g, '')) || 0;
+      curStr = m.cur;
+    } else {
+      curN = parseFloat(String(m.cur || '').replace(/[^0-9.]/g, '')) || 0;
+      curStr = m.cur;
+    }
+    const pct = Math.min(100, Math.max(0, Math.round((curN / goalN) * 100)));
+    return { ...m, cur: curStr, pct };
+  };
+  const liveMilestones = milestones.map(computeMilestone);
+
+// BOOKS TAB — AI-Powered Expense Tracker
+// Paste this entire block above the main dashboard component's `return ()` in
+// paul_ferrante_dashboard.jsx (e.g., somewhere between line 2500 and 2530, just
+// before `const TABS = ...`). All names are scoped to functions, no globals.
+//
+// Dependencies expected in scope: React (useState, useEffect, useRef), the existing
+// color constants BG, CARD, BDR, BLUE, YELL, OCEAN, SLATE, TEXT, and `usd()`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── Books palette aliases (the spec's tokens mapped onto existing constants) ─
+// "Ink"          → TEXT  ('#1A2744')
+// "Parchment"    → BG    ('#FFFFFF')   plus CARD ('#F7F9FC') for surfaces
+// "Bright Sky"   → BLUE  ('#88EAF6')   accent (use sparingly)
+// "Deep Ocean"   → SLATE ('#2E4A66')   secondary accent / accent on Sand
+// "Slate"        → '#94A3B8' for muted (the existing dashboard uses this directly)
+// "Sand"         → YELL  ('#E1D9AE')   warm surface
+const BOOKS = {
+  ink: TEXT, parchment: BG, surface: CARD, border: BDR,
+  brightSky: BLUE, deepOcean: SLATE, sand: YELL, muted: '#94A3B8',
+};
+
+const BOOKS_API = '/api/sync';
+
+const FLAG_META = {
+  extraction_failed:        { color: '#DC2626', label: 'Extraction failed', tip: 'AI could not read this receipt. Manual entry required.' },
+  low_confidence_extraction:{ color: '#D97706', label: 'Low confidence',    tip: 'AI flagged this extraction as uncertain — verify the fields.' },
+  auto_link_pending:        { color: '#2563EB', label: 'Auto-link pending', tip: 'A deal was auto-suggested. Confirm or change before reviewing.' },
+  missing_purpose:          { color: '#64748B', label: 'No purpose',        tip: 'Add a business purpose (under 10 chars treated as missing).' },
+  unlinked_high_value:      { color: '#7C3AED', label: 'Unlinked >$200',    tip: 'Travel category, over $200, no deal link, unreviewed.' },
+  category_other:           { color: '#475569', label: 'Category: Other',   tip: 'AI fell back to "Other". Pick a more specific category.' },
+  vendor_unknown:           { color: '#0891B2', label: 'New vendor',        tip: 'First time seeing this vendor. Confirm category to teach the system.' },
+  over_30_days_unreviewed:  { color: '#B45309', label: '>30 days unreviewed', tip: 'Sitting in queue more than 30 days.' },
+};
+
+const CATEGORIES = [
+  'Equipment & Hardware','Software & Subscriptions','Travel - Lodging','Travel - Transportation',
+  'Travel - Meals','Meals & Entertainment','Home Office','Professional Services',
+  'Marketing & Advertising','Internet & Phone','Production Costs','Education & Research',
+  'Bank & Payment Fees','Office Supplies','Other',
+];
+
+const DEAL_STATUSES = ['Pitching','In Discussions','Sold In','Paid'];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function booksApi(action, opts = {}) {
+  const { method = 'GET', body, query = {} } = opts;
+  const params = new URLSearchParams({ action, ...query }).toString();
+  return fetch(`${BOOKS_API}?${params}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then(async (r) => {
+    const text = await r.text();
+    let json = {};
+    try { json = JSON.parse(text); } catch (_) {}
+    if (!r.ok) throw new Error(json.error || text || `HTTP ${r.status}`);
+    return json;
+  });
+}
+
+function fmtDate(d) { return d ? String(d) : '—'; }
+function fmtMoney(n, ccy = 'USD') {
+  if (n === '' || n == null || isNaN(Number(n))) return '—';
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy || 'USD' }).format(Number(n));
+}
+function withinYear(row, year) { return String(row.date || '').startsWith(String(year)); }
+
+// sessionStorage helpers — let the current sub-tab and any draft edits survive
+// any parent remount (the Books-tab component used to lose your in-progress
+// typing if anything in the dashboard caused a refresh).
+function _ssGet(key, fallback) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return fallback;
+    var v = window.sessionStorage.getItem(key);
+    if (v == null) return fallback;
+    try { return JSON.parse(v); } catch (_) { return v; }
+  } catch (_) { return fallback; }
+}
+function _ssSet(key, value) {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    window.sessionStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch (_) { /* quota or privacy mode — silently ignore */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BooksTab — top-level component
+// ─────────────────────────────────────────────────────────────────────────────
+function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
+  const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
+  const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
+  const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState(null);
+
+  // Persist year + sub on every change so a remount restores the user's place.
+  function setYear(v) { _ssSet('books_year', v); setYearRaw(v); }
+  function setSub(v)  { _ssSet('books_sub',  v); setSubRaw(v);  }
+
+  const reload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const j = await booksApi('books-data', { query: { year } });
+      setData({ expenses: j.expenses || [], deals: j.deals || [], vendorMemory: j.vendorMemory || [] });
+    } catch (e) { setError(e.message); }
+    setLoading(false);
+  };
+
+  useEffect(() => { reload(); /* eslint-disable-line */ }, [year]);
+
+  // KPIs
+  const totalExpenses = data.expenses.reduce((s, r) => s + Number(r.amount || 0), 0);
+  // Revenue: prefer the dashboard's live deals state (Deals tab / Revenue tab)
+  // filtered to the selected year, falling back to whatever the Books sheet has.
+  // Previously this only pulled from data.deals (the Books Sheet), so it showed
+  // $0 until the user duplicated their deals into the Books backend — confusing.
+  const dashboardRevenueForYear = (dashboardPaidDeals || []).reduce((s, d) => {
+    // d.d is "Mon YYYY" (e.g., "Jan 2026"); parse the trailing year token.
+    const parts = String(d.d || '').trim().split(/\s+/);
+    const yr = parts[1] ? parseInt(parts[1], 10) : null;
+    if (yr && yr !== year) return s;
+    return s + Number(d.v || 0);
+  }, 0);
+  const booksSheetRevenue = data.deals.filter((d) => d.status === 'Paid').reduce((s, d) => s + Number(d.deal_value || 0), 0);
+  const totalRevenue = Math.max(dashboardRevenueForYear, booksSheetRevenue);
+  const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
+
+  const SUB_TABS = [
+    ['inbox',       'Inbox'],
+    ['expenses',    'Expenses'],
+    ['deals',       'Deals'],
+    ['audit',       'Audit View'],
+    ['export',      'Year-End Export'],
+  ];
+
+  const yearOptions = [];
+  for (let y = new Date().getFullYear(); y >= 2024; y--) yearOptions.push(y);
+
+  return (
+    <div>
+      {/* ── Header strip ──────────────────────────────────────────── */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12, marginBottom:18 }}>
+        <div>
+          <div style={{ fontSize: isMobile?20:24, fontWeight:800, color:BOOKS.ink, letterSpacing:'-0.5px' }}>Books</div>
+          <div style={{ fontSize:11, color:BOOKS.muted, letterSpacing:'2px', textTransform:'uppercase', marginTop:2 }}>RGG Media · {year}</div>
+        </div>
+        <select
+          value={year} onChange={(e) => setYear(Number(e.target.value))}
+          style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, cursor:'pointer' }}
+        >
+          {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+      </div>
+
+      {/* ── KPI strip ────────────────────────────────────────────── */}
+      <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
+        <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink" />
+        <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean" />
+        <KpiCard label="Net"          value={fmtMoney(totalRevenue - totalExpenses)} tone={totalRevenue >= totalExpenses ? 'green' : 'red'} />
+        <KpiCard
+          label="Needs review"
+          value={String(flaggedCount)}
+          tone="brightSky"
+          onClick={() => setSub('inbox')}
+          clickable={flaggedCount > 0}
+        />
+      </div>
+
+      {/* ── Sub-nav ──────────────────────────────────────────────── */}
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BOOKS.border}`, marginBottom:16, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+        {SUB_TABS.map(([id, lbl]) => (
+          <button
+            key={id} onClick={() => setSub(id)}
+            style={{
+              background:'none', border:'none', cursor:'pointer', fontFamily:'inherit',
+              padding:'10px 16px', fontSize:13, fontWeight: sub === id ? 700 : 500,
+              color: sub === id ? BOOKS.ink : BOOKS.muted,
+              borderBottom: sub === id ? `2px solid ${BOOKS.ink}` : '2px solid transparent',
+              marginBottom:'-1px', whiteSpace:'nowrap', flexShrink:0,
+            }}
+          >{lbl}</button>
+        ))}
+      </div>
+
+      {/* ── Sub-tab body ─────────────────────────────────────────── */}
+      {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
+      {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
+      {!loading && !error && (
+        <>
+          {sub === 'inbox'    && <InboxTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'expenses' && <ExpensesTab data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'deals'    && <DealsTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'audit'    && <AuditTab    data={data} year={year} isMobile={isMobile} />}
+          {sub === 'export'   && <ExportTab   data={data} year={year} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI card
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiCard({ label, value, tone, onClick, clickable }) {
+  const toneColor = {
+    ink: TEXT, deepOcean: SLATE, brightSky: BLUE, green: '#16A34A', red: '#DC2626',
+  }[tone] || TEXT;
+  return (
+    <div
+      onClick={clickable ? onClick : undefined}
+      style={{
+        background: BOOKS.surface, border: `1px solid ${BOOKS.border}`, borderRadius:12,
+        padding:'14px 16px', cursor: clickable ? 'pointer' : 'default',
+        transition:'all 0.12s', minHeight:74,
+      }}
+      onMouseEnter={(e) => { if (clickable) e.currentTarget.style.borderColor = BOOKS.ink; }}
+      onMouseLeave={(e) => { if (clickable) e.currentTarget.style.borderColor = BOOKS.border; }}
+    >
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:22, fontWeight:800, color:toneColor, letterSpacing:'-0.5px' }}>{value}</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FlagDots — small color dots for active flags
+// ─────────────────────────────────────────────────────────────────────────────
+function FlagDots({ flags }) {
+  if (!flags || flags.length === 0) return null;
+  return (
+    <div style={{ display:'inline-flex', gap:4, alignItems:'center' }}>
+      {flags.map((f) => {
+        const meta = FLAG_META[f] || { color:'#6B7280', label:f, tip:f };
+        return (
+          <div key={f} title={`${meta.label}: ${meta.tip}`}
+            style={{ width:8, height:8, borderRadius:'50%', background:meta.color, cursor:'help' }} />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// InboxTab — Paul's daily review surface
+// ─────────────────────────────────────────────────────────────────────────────
+const FLAG_PRIORITY = ['extraction_failed','low_confidence_extraction','auto_link_pending','missing_purpose','unlinked_high_value','category_other','vendor_unknown','over_30_days_unreviewed'];
+function priorityScore(flags) {
+  if (!flags || flags.length === 0) return 99;
+  let best = 99;
+  flags.forEach((f) => {
+    const idx = FLAG_PRIORITY.indexOf(f);
+    if (idx >= 0 && idx < best) best = idx;
+  });
+  return best;
+}
+
+function InboxTab({ data, reload, isMobile, showToast }) {
+  // Show ALL unreviewed rows so every AI extraction lands in your approval queue.
+  // Sorted by flag priority — flagged items bubble to top, clean ones below.
+  const queue = data.expenses
+    .filter((r) => String(r.reviewed).toLowerCase() !== 'true')
+    .sort((a, b) => priorityScore(a.flags_computed) - priorityScore(b.flags_computed));
+
+  const bulkConfirmHighConfidence = async () => {
+    const targets = queue.filter((r) => r.extraction_confidence === 'high'
+      && (r.flags_computed || []).every((f) => f === 'auto_link_pending' || f === 'vendor_unknown'));
+    if (targets.length === 0) return;
+    if (!confirm(`Confirm ${targets.length} high-confidence extractions and mark reviewed?`)) return;
+    for (const r of targets) {
+      try {
+        await booksApi('update-expense', {
+          method: 'POST',
+          body: { expense_id: r.expense_id, patch: { reviewed: 'TRUE' }, confirm_vendor_category: true },
+        });
+      } catch (e) { /* keep going */ }
+    }
+    showToast && showToast(`Confirmed ${targets.length}`);
+    reload();
+  };
+
+  if (queue.length === 0) {
+    return (
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:'40px 24px', textAlign:'center' }}>
+        <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div style={{ fontSize:13, color:BOOKS.muted }}>
+          {queue.length} item{queue.length === 1 ? '' : 's'} need{queue.length === 1 ? 's' : ''} review · sorted by priority
+        </div>
+        <button onClick={bulkConfirmHighConfidence}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          Confirm all high-confidence in view
+        </button>
+      </div>
+
+      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+        {queue.map((row) => (
+          <InboxCard key={row.expense_id} row={row} deals={data.deals} reload={reload} isMobile={isMobile} showToast={showToast} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InboxCard({ row, deals, reload, isMobile, showToast }) {
+  // Edit drafts persist in sessionStorage so any parent remount/refresh
+  // doesn't wipe in-progress typing.
+  const _draftKey = 'books_draft_' + row.expense_id;
+  const [edit, setEditRaw] = useState(function () {
+    const saved = _ssGet(_draftKey, null);
+    if (saved && typeof saved === 'object') return saved;
+    return {
+      vendor: row.vendor || '', date: row.date || '', amount: row.amount || '',
+      category: row.category || 'Other', business_purpose: row.business_purpose || '',
+      linked_deal_id: row.linked_deal_id || '',
+    };
+  });
+  // Wrap setEdit so every keystroke is persisted to sessionStorage
+  function setEdit(next) {
+    const value = (typeof next === 'function') ? next(edit) : next;
+    _ssSet(_draftKey, value);
+    setEditRaw(value);
+  }
+  const [saving, setSaving] = useState(false);
+  const flags = row.flags_computed || [];
+
+  const confirm = async () => {
+    setSaving(true);
+    try {
+      await booksApi('update-expense', {
+        method: 'POST',
+        body: {
+          expense_id: row.expense_id,
+          patch: { ...edit, reviewed: 'TRUE' },
+          confirm_vendor_category: true,
+        },
+      });
+      // Clear the saved draft once it's been committed to the Sheet
+      try { if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(_draftKey); } catch (_) {}
+      showToast && showToast('Confirmed');
+      reload();
+    } catch (e) {
+      alert('Save failed: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  const dealOptions = deals
+    .slice()
+    .sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0))
+    .map((d) => ({ id: d.deal_id, label: `${d.brand} (${d.status})` }));
+
+  const inputStyle = {
+    background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6,
+    padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%',
+  };
+
+  return (
+    <div style={{
+      background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:12,
+      padding:14, display:'grid',
+      gridTemplateColumns: isMobile ? '1fr' : '110px 1fr',
+      gap:14,
+    }}>
+      {/* Left: thumbnail / receipt link */}
+      <div style={{ alignSelf:'start' }}>
+        {row.receipt_url ? (
+          <a href={row.receipt_url} target="_blank" rel="noreferrer"
+             style={{ display:'block', height: isMobile?80:110, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px', textDecoration:'none' }}>
+            View receipt ↗
+          </a>
+        ) : (
+          <div style={{ height: isMobile?80:110, background:BOOKS.surface, border:`1px dashed ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px' }}>
+            No receipt
+          </div>
+        )}
+      </div>
+
+      {/* Right: editable fields */}
+      <div style={{ minWidth:0 }}>
+        {/* Header line: confidence + flags */}
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>
+          <ConfidenceBadge level={row.extraction_confidence} />
+          <FlagDots flags={flags} />
+          {row.confidence_notes && (
+            <div style={{ fontSize:11, color:BOOKS.muted, fontStyle:'italic' }}>{row.confidence_notes}</div>
+          )}
+        </div>
+
+        {/* Field grid */}
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap:10, marginBottom:10 }}>
+          <Field label="Vendor"><input style={inputStyle} value={edit.vendor} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
+          <Field label="Date"><input type="date" style={inputStyle} value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
+          <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
+          <Field label="Category">
+            <select style={inputStyle} value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        {row.category_reasoning && (
+          <div style={{ fontSize:11, color:BOOKS.muted, marginBottom:8, fontStyle:'italic' }}>
+            AI reasoning: {row.category_reasoning}
+          </div>
+        )}
+
+        {/* Deal link suggestion */}
+        {(row.auto_linked_deal_id || dealOptions.length > 0) && (
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:4 }}>
+              Linked deal {row.auto_linked_deal_id && '· auto-suggested'}
+            </div>
+            <select style={inputStyle} value={edit.linked_deal_id} onChange={(e) => setEdit({ ...edit, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {dealOptions.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+          </div>
+        )}
+
+        <Field label="Business purpose (required for audit)">
+          <input style={inputStyle} placeholder="e.g. Travel for sponsored Airbnb shoot — Tokyo Hotels deal"
+            value={edit.business_purpose} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
+        </Field>
+
+        <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+          <button onClick={confirm} disabled={saving}
+            style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 16px', fontSize:12, fontWeight:700, cursor: saving?'wait':'pointer', fontFamily:'inherit', opacity: saving?0.6:1 }}>
+            {saving ? 'Saving…' : '✓ Confirm & mark reviewed'}
+          </button>
+          <div style={{ flex:1 }} />
+          <div style={{ alignSelf:'center', fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>
+            {row.expense_id?.slice(0, 8)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label style={{ display:'block' }}>
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:4 }}>{label}</div>
+      {children}
+    </label>
+  );
+}
+
+function ConfidenceBadge({ level }) {
+  const map = {
+    high:    { bg:'#DCFCE7', fg:'#15803D', label:'HIGH CONFIDENCE' },
+    medium:  { bg:'#FEF3C7', fg:'#B45309', label:'MEDIUM CONFIDENCE' },
+    low:     { bg:'#FEE2E2', fg:'#991B1B', label:'LOW CONFIDENCE' },
+    __failed__: { bg:'#FEE2E2', fg:'#991B1B', label:'EXTRACTION FAILED' },
+  };
+  const m = map[level] || map.medium;
+  return (
+    <span style={{ background:m.bg, color:m.fg, fontSize:9, fontWeight:800, letterSpacing:'1px', padding:'3px 8px', borderRadius:6 }}>
+      {m.label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExpensesTab — full table view
+// ─────────────────────────────────────────────────────────────────────────────
+function ExpensesTab({ data, reload, isMobile, showToast, year }) {
+  const [filterCat, setFilterCat]         = useState('');
+  const [filterFlagged, setFilterFlagged] = useState(false);
+  const [filterUnrev, setFilterUnrev]     = useState(false);
+  const [filterEntered, setFilterEntered] = useState('');
+  const [search, setSearch]               = useState('');
+  const [selected, setSelected]           = useState(null);
+  const [showManual, setShowManual]       = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
+
+  const filtered = data.expenses.filter((r) => {
+    if (filterCat && r.category !== filterCat) return false;
+    if (filterFlagged && (r.flags_computed || []).length === 0) return false;
+    if (filterUnrev && String(r.reviewed).toLowerCase() === 'true') return false;
+    if (filterEntered && r.entered_by !== filterEntered) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      if (!String(r.vendor || '').toLowerCase().includes(s)
+        && !String(r.business_purpose || '').toLowerCase().includes(s)) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const filterStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink };
+
+  return (
+    <div>
+      {/* Filter bar */}
+      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
+        <input placeholder="Search vendor or purpose…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...filterStyle, minWidth:200 }} />
+        <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} style={filterStyle}>
+          <option value="">All categories</option>
+          {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterEntered} onChange={(e) => setFilterEntered(e.target.value)} style={filterStyle}>
+          <option value="">All sources</option>
+          <option value="ai">AI extracted</option>
+          <option value="paul">Paul (manual)</option>
+          <option value="husband">Husband (manual)</option>
+        </select>
+        <label style={{ fontSize:12, color:BOOKS.muted, display:'flex', alignItems:'center', gap:5, cursor:'pointer' }}>
+          <input type="checkbox" checked={filterFlagged} onChange={(e) => setFilterFlagged(e.target.checked)} /> Flagged only
+        </label>
+        <label style={{ fontSize:12, color:BOOKS.muted, display:'flex', alignItems:'center', gap:5, cursor:'pointer' }}>
+          <input type="checkbox" checked={filterUnrev} onChange={(e) => setFilterUnrev(e.target.checked)} /> Unreviewed only
+        </label>
+        <div style={{ flex:1 }} />
+        <button onClick={() => setShowCsvImport(true)}
+          style={{ background:BOOKS.parchment, color:BOOKS.ink, border:`1px solid ${BOOKS.ink}`, borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          ↑ Import CSV
+        </button>
+        <button onClick={() => setShowManual(true)}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          + Add manually
+        </button>
+      </div>
+
+      <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:8 }}>
+        Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + Number(r.amount || 0), 0))}
+      </div>
+
+      {/* Table */}
+      <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:10, overflow:'hidden', overflowX:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, minWidth: isMobile ? 700 : 'auto' }}>
+          <thead style={{ background:BOOKS.surface }}>
+            <tr style={{ textAlign:'left' }}>
+              <th style={thStyle}>Date</th>
+              <th style={thStyle}>Vendor</th>
+              <th style={{ ...thStyle, textAlign:'right' }}>Amount</th>
+              <th style={thStyle}>Category</th>
+              <th style={thStyle}>Linked deal</th>
+              <th style={thStyle}>Confidence</th>
+              <th style={thStyle}>Reviewed</th>
+              <th style={thStyle}>Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r) => (
+              <tr key={r.expense_id} onClick={() => setSelected(r)}
+                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent' }}>
+                <td style={tdStyle}>{fmtDate(r.date)}</td>
+                <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
+                <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={tdStyle}>{linkedDealLabel(r.linked_deal_id, data.deals)}</td>
+                <td style={tdStyle}><ConfidenceBadge level={r.extraction_confidence} /></td>
+                <td style={tdStyle}>{String(r.reviewed).toLowerCase() === 'true' ? '✓' : '—'}</td>
+                <td style={tdStyle}><FlagDots flags={r.flags_computed} /></td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={8} style={{ textAlign:'center', padding:'40px 0', color:BOOKS.muted, fontSize:13 }}>No expenses match these filters.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
+      {showManual && <ManualExpenseModal deals={data.deals} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
+      {showCsvImport && <CsvImportModal year={year} onClose={() => setShowCsvImport(false)} reload={reload} showToast={showToast} />}
+    </div>
+  );
+}
+
+const thStyle = { padding:'10px 12px', fontWeight:700, fontSize:11, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px' };
+const tdStyle = { padding:'10px 12px', color:BOOKS.ink, verticalAlign:'top' };
+
+function linkedDealLabel(dealId, deals) {
+  if (!dealId) return <span style={{ color:'#94A3B8' }}>—</span>;
+  const d = deals.find((x) => x.deal_id === dealId);
+  return d ? <span style={{ color:SLATE, fontWeight:600 }}>{d.brand}</span> : <span style={{ color:'#94A3B8' }}>{dealId.slice(0, 8)}</span>;
+}
+
+function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
+  const [edit, setEdit] = useState({ ...row });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const patch = {};
+      ['date','vendor','amount','currency','category','business_purpose','payment_method',
+       'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
+      await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
+      showToast && showToast('Saved');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'6px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', justifyContent:'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 20px rgba(0,0,0,0.12)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>Expense detail</div>
+            <div style={{ fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>{row.expense_id}</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:BOOKS.muted }}>×</button>
+        </div>
+
+        {row.receipt_url && (
+          <div style={{ marginBottom:14 }}>
+            <a href={row.receipt_url} target="_blank" rel="noreferrer"
+              style={{ display:'block', padding:'10px 14px', background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:SLATE, fontSize:12, fontWeight:600, textDecoration:'none' }}>
+              View receipt in Drive ↗
+            </a>
+          </div>
+        )}
+
+        <div style={{ display:'grid', gap:12 }}>
+          <Field label="Date"><input type="date" style={inputStyle} value={edit.date || ''} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
+          <Field label="Vendor"><input style={inputStyle} value={edit.vendor || ''} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:8 }}>
+            <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount || ''} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
+            <Field label="Currency"><input style={inputStyle} value={edit.currency || ''} onChange={(e) => setEdit({ ...edit, currency: e.target.value })} /></Field>
+          </div>
+          <Field label="Category">
+            <select style={inputStyle} value={edit.category || ''} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+              <option value="">— pick —</option>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Business purpose">
+            <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={edit.business_purpose || ''} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
+          </Field>
+          <Field label="Linked deal (primary)">
+            <select style={inputStyle} value={edit.linked_deal_id || ''} onChange={(e) => setEdit({ ...edit, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Linked deal (secondary)">
+            <select style={inputStyle} value={edit.linked_deal_id_2 || ''} onChange={(e) => setEdit({ ...edit, linked_deal_id_2: e.target.value })}>
+              <option value="">— No second link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Payment method"><input style={inputStyle} value={edit.payment_method || ''} onChange={(e) => setEdit({ ...edit, payment_method: e.target.value })} /></Field>
+          <Field label="Notes">
+            <textarea style={{ ...inputStyle, minHeight:50, fontFamily:'inherit' }} value={edit.notes || ''} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
+          </Field>
+          <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, color:BOOKS.ink, cursor:'pointer' }}>
+            <input type="checkbox" checked={String(edit.reviewed).toLowerCase() === 'true'} onChange={(e) => setEdit({ ...edit, reviewed: e.target.checked ? 'TRUE' : 'FALSE' })} />
+            Mark reviewed
+          </label>
+        </div>
+
+        <div style={{ marginTop:20, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+
+        {row.extracted_text && (
+          <details style={{ marginTop:18, fontSize:11, color:BOOKS.muted }}>
+            <summary style={{ cursor:'pointer', fontWeight:600 }}>Raw OCR text (debug)</summary>
+            <pre style={{ marginTop:8, whiteSpace:'pre-wrap', maxHeight:200, overflow:'auto', background:BOOKS.surface, padding:10, borderRadius:6 }}>{row.extracted_text}</pre>
+          </details>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ManualExpenseModal({ deals, onClose, reload, showToast }) {
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    vendor: '', amount: '', currency: 'USD', category: 'Other',
+    business_purpose: '', payment_method: '', linked_deal_id: '', notes: '',
+    entered_by: 'paul',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!form.vendor || !form.amount || !form.date) { alert('Vendor, amount, and date are required.'); return; }
+    setSaving(true);
+    try {
+      await booksApi('manual-expense', { method:'POST', body: form });
+      showToast && showToast('Added');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(480px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:16 }}>Add expense manually</div>
+        <div style={{ display:'grid', gap:10 }}>
+          <Field label="Vendor"><input style={inputStyle} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+            <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+          </div>
+          <Field label="Category">
+            <select style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Business purpose">
+            <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={form.business_purpose} onChange={(e) => setForm({ ...form, business_purpose: e.target.value })} />
+          </Field>
+          <Field label="Linked deal (optional)">
+            <select style={inputStyle} value={form.linked_deal_id} onChange={(e) => setForm({ ...form, linked_deal_id: e.target.value })}>
+              <option value="">— No link —</option>
+              {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
+            </select>
+          </Field>
+          <Field label="Payment method (optional)"><input style={inputStyle} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} /></Field>
+        </div>
+        <div style={{ marginTop:16, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : 'Add expense'}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CsvImportModal — bulk-import credit card statement CSV
+// Splits a CSV into ~30-line chunks and POSTs each to /api/sync?action=bulk-import-csv
+// so each request stays under Vercel Hobby's 10s function timeout.
+// ─────────────────────────────────────────────────────────────────────────────
+function CsvImportModal({ year, onClose, reload, showToast }) {
+  const [text, setText]       = useState('');
+  const [fileName, setFileName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [results, setResults] = useState(null); // { imported, skipped_duplicate, skipped_other_year, skipped_not_transaction, flagged_personal }
+  const [errors, setErrors]   = useState([]);
+
+  const handleFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => setText(String(ev.target?.result || ''));
+    reader.onerror = () => alert('Failed to read file');
+    reader.readAsText(file);
+  };
+
+  const runImport = async () => {
+    const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!raw) { alert('Paste CSV text or choose a CSV file first.'); return; }
+    const allLines = raw.split('\n').filter((l) => l.trim().length > 0);
+    if (allLines.length < 2) { alert('CSV needs at least a header row and one data row.'); return; }
+    const headerLine = allLines[0];
+    const dataLines = allLines.slice(1);
+
+    // Chunk ~30 lines per call (well under Anthropic + Vercel 10s timeout)
+    const CHUNK = 30;
+    const chunks = [];
+    for (let i = 0; i < dataLines.length; i += CHUNK) {
+      chunks.push(dataLines.slice(i, i + CHUNK).join('\n'));
+    }
+
+    setImporting(true);
+    setResults(null);
+    setErrors([]);
+    setProgress({ done: 0, total: chunks.length });
+
+    const totals = { imported: 0, skipped_duplicate: 0, skipped_other_year: 0, skipped_not_transaction: 0, flagged_personal: 0 };
+    const errs = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        const j = await booksApi('bulk-import-csv', { method: 'POST', body: { csvChunk: chunks[i], headerLine, year } });
+        totals.imported              += Number(j.imported || 0);
+        totals.skipped_duplicate     += Number(j.skipped_duplicate || 0);
+        totals.skipped_other_year    += Number(j.skipped_other_year || 0);
+        totals.skipped_not_transaction += Number(j.skipped_not_transaction || 0);
+        totals.flagged_personal      += Number(j.flagged_personal || 0);
+      } catch (e) {
+        errs.push(`Chunk ${i + 1}: ${e.message}`);
+      }
+      setProgress({ done: i + 1, total: chunks.length });
+    }
+
+    setResults(totals);
+    setErrors(errs);
+    setImporting(false);
+    if (totals.imported > 0) {
+      showToast && showToast(`Imported ${totals.imported}`);
+      reload();
     }
   };
 
-  // ── Deliverables visibility (soft-delete on Decline) ─────────
-  // A deliverable is hidden from the Deliverables tab when its brand has at
-  // least one matching deal AND every matching deal is in 'Declined' status.
-  // Deliverables stay in storage — if a deal is later moved back to an active
-  // status (Pitching / Awaiting Approval / Delivered / Paid / Not Paid),
-  // the matching deliverables reappear automatically. Manual delete (✕ button)
-  // is still a hard remove. Filtering here only affects the visible list —
-  // revenue counters and pipeline chart pull from `deals`, not `delivs`.
-  const dealsByBrand = deals.reduce((acc, dl) => {
-    const key = (dl.b || '').trim().toLowerCase();
-    if (!key) return acc;
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(dl);
-    return acc;
-  }, {});
-  const visibleDelivs = delivs.filter(d => {
-    const key = (d.b || '').trim().toLowerCase();
-    const brandDeals = dealsByBrand[key];
-    if (!brandDeals || brandDeals.length === 0) return true; // no linked deal — keep visible
-    return brandDeals.some(dl => dl.s !== 'Declined');       // hide only if ALL matching deals are declined
-  });
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
 
-  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables']];
+  return (
+    <div onClick={importing ? undefined : onClose}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(620px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink }}>Import CSV (credit card statement)</div>
+            <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>
+              Drops each row into Expenses. Year filter: {year}. Duplicates auto-skipped.
+            </div>
+          </div>
+          <button onClick={importing ? undefined : onClose}
+            style={{ background:'none', border:'none', fontSize:20, cursor: importing?'wait':'pointer', color:BOOKS.muted }}>×</button>
+        </div>
+
+        {!results && (
+          <>
+            <Field label="Upload .csv file">
+              <input type="file" accept=".csv,text/csv" onChange={handleFile} disabled={importing}
+                style={{ ...inputStyle, padding:'6px', cursor: importing?'wait':'pointer' }} />
+              {fileName && <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>{fileName}</div>}
+            </Field>
+
+            <div style={{ fontSize:11, color:BOOKS.muted, textAlign:'center', margin:'10px 0' }}>— or paste CSV text below —</div>
+
+            <Field label="CSV text">
+              <textarea
+                style={{ ...inputStyle, minHeight:140, fontFamily:'monospace', fontSize:11 }}
+                placeholder="Date,Description,Amount&#10;2026-03-04,Adobe Inc.,54.99&#10;2026-03-05,Delta Air Lines,412.18"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                disabled={importing}
+              />
+            </Field>
+
+            <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', fontSize:11, color:BOOKS.muted, marginTop:10, lineHeight:1.5 }}>
+              Claude reads each row, cleans the vendor name, picks a category, flags anything that looks personal, and tries to auto-link to a deal based on shoot dates.
+            </div>
+
+            {importing && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ fontSize:12, color:BOOKS.ink, marginBottom:6 }}>
+                  Processing chunk {progress.done} of {progress.total}…
+                </div>
+                <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:6, height:8, overflow:'hidden' }}>
+                  <div style={{ background:BOOKS.ink, height:'100%', width: progress.total ? `${(progress.done / progress.total) * 100}%` : '0%', transition:'width 0.3s' }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop:18, display:'flex', gap:8 }}>
+              <button onClick={runImport} disabled={importing || !text.trim()}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor: (importing || !text.trim()) ? 'not-allowed' : 'pointer', fontFamily:'inherit', opacity: (importing || !text.trim()) ? 0.6 : 1 }}>
+                {importing ? 'Importing…' : 'Start import'}
+              </button>
+              <button onClick={onClose} disabled={importing}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor: importing?'wait':'pointer', fontFamily:'inherit' }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {results && (
+          <div>
+            <div style={{ background:'#DCFCE7', border:'1px solid #86EFAC', borderRadius:8, padding:'14px 16px', marginBottom:12 }}>
+              <div style={{ fontSize:14, fontWeight:800, color:'#166534', marginBottom:6 }}>Import complete</div>
+              <div style={{ fontSize:12, color:'#166534', lineHeight:1.6 }}>
+                <div>Imported: <strong>{results.imported}</strong></div>
+                <div>Skipped (duplicates): {results.skipped_duplicate}</div>
+                <div>Skipped (outside {year}): {results.skipped_other_year}</div>
+                <div>Skipped (header / payment / non-transaction): {results.skipped_not_transaction}</div>
+                <div>Flagged as possibly personal: {results.flagged_personal}</div>
+              </div>
+            </div>
+            {errors.length > 0 && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12, color:'#991B1B' }}>
+                <div style={{ fontWeight:700, marginBottom:6 }}>{errors.length} chunk{errors.length === 1 ? '' : 's'} failed:</div>
+                {errors.map((e, i) => <div key={i} style={{ marginTop:2 }}>{e}</div>)}
+              </div>
+            )}
+            <div style={{ fontSize:11, color:BOOKS.muted, marginBottom:14 }}>
+              Imported rows now sit in Inbox with category + business purpose suggestions — review and confirm them like any other expense.
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={onClose}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                Done
+              </button>
+              <button onClick={() => { setResults(null); setErrors([]); setText(''); setFileName(''); }}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Import another
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DealsTab — pipeline kanban
+// ─────────────────────────────────────────────────────────────────────────────
+function DealsTab({ data, reload, isMobile, showToast }) {
+  const [editing, setEditing] = useState(null); // null | 'new' | dealObj
+  const cols = DEAL_STATUSES;
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <div style={{ fontSize:13, color:BOOKS.muted }}>{data.deals.length} deal{data.deals.length === 1 ? '' : 's'} this year</div>
+        <button onClick={() => setEditing({})}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          + Add deal
+        </button>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
+        {cols.map((status) => {
+          const list = data.deals.filter((d) => d.status === status);
+          const total = list.reduce((s, d) => s + Number(d.deal_value || 0), 0);
+          return (
+            <div key={status} style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:10, padding:12, minHeight:200 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:BOOKS.ink, textTransform:'uppercase', letterSpacing:'1.5px' }}>{status}</div>
+                <div style={{ fontSize:10, color:BOOKS.muted, fontVariantNumeric:'tabular-nums' }}>{list.length} · {fmtMoney(total)}</div>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {list.map((d) => (
+                  <div key={d.deal_id} onClick={() => setEditing(d)}
+                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', cursor:'pointer', transition:'all 0.12s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = BOOKS.ink}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = BOOKS.border}>
+                    <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{d.brand}</div>
+                    <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3, display:'flex', justifyContent:'space-between' }}>
+                      <span>{d.platform || '—'}</span>
+                      <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600, color:SLATE }}>{fmtMoney(d.deal_value)}</span>
+                    </div>
+                    {(d.shoot_start_date || d.shoot_end_date) && (
+                      <div style={{ fontSize:10, color:BOOKS.muted, marginTop:3 }}>
+                        Shoot: {d.shoot_start_date || '?'} → {d.shoot_end_date || '?'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {list.length === 0 && <div style={{ fontSize:11, color:BOOKS.muted, textAlign:'center', padding:'14px 0' }}>No deals</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {editing && <DealModal deal={editing.deal_id ? editing : null} expenses={data.expenses} onClose={() => setEditing(null)} reload={reload} showToast={showToast} />}
+    </div>
+  );
+}
+
+function DealModal({ deal, expenses, onClose, reload, showToast }) {
+  const [form, setForm] = useState({
+    deal_id: deal?.deal_id || '',
+    brand: deal?.brand || '',
+    deal_value: deal?.deal_value || '',
+    status: deal?.status || 'Pitching',
+    platform: deal?.platform || 'TikTok',
+    deliverable_url: deal?.deliverable_url || '',
+    invoice_url: deal?.invoice_url || '',
+    shoot_start_date: deal?.shoot_start_date || '',
+    shoot_end_date: deal?.shoot_end_date || '',
+    usage_rights: deal?.usage_rights || '',
+    paid_date: deal?.paid_date || '',
+    notes: deal?.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  const linkedExp = deal ? expenses.filter((e) => e.linked_deal_id === deal.deal_id || e.linked_deal_id_2 === deal.deal_id) : [];
+  const expensesTotal = linkedExp.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const profit = Number(form.deal_value || 0) - expensesTotal;
+
+  // Show expenses in shoot window if no deal_id yet (preview)
+  const previewExp = !deal && form.shoot_start_date && form.shoot_end_date
+    ? expenses.filter((e) => e.date >= form.shoot_start_date && e.date <= form.shoot_end_date)
+    : [];
+
+  const save = async () => {
+    if (!form.brand) { alert('Brand is required.'); return; }
+    if (form.status === 'Paid' && !form.deliverable_url) {
+      if (!confirm('Status is Paid but no deliverable URL. Save anyway?')) return;
+    }
+    setSaving(true);
+    try {
+      await booksApi('upsert-deal', { method:'POST', body: form });
+      showToast && showToast(deal ? 'Deal updated' : 'Deal added');
+      reload(); onClose();
+    } catch (e) { alert('Save failed: ' + e.message); }
+    setSaving(false);
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(560px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:16 }}>{deal ? 'Edit deal' : 'Add deal'}</div>
+        <div style={{ display:'grid', gap:10 }}>
+          <Field label="Brand"><input style={inputStyle} value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /></Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Status">
+              <select style={inputStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                {DEAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </Field>
+            <Field label="Deal value"><input type="number" step="0.01" style={inputStyle} value={form.deal_value} onChange={(e) => setForm({ ...form, deal_value: e.target.value })} /></Field>
+          </div>
+          <Field label="Platform">
+            <select style={inputStyle} value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })}>
+              <option>TikTok</option><option>IG</option><option>YouTube</option><option>UGC</option><option>Bundle</option>
+            </select>
+          </Field>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+            <Field label="Shoot start"><input type="date" style={inputStyle} value={form.shoot_start_date} onChange={(e) => setForm({ ...form, shoot_start_date: e.target.value })} /></Field>
+            <Field label="Shoot end"><input type="date" style={inputStyle} value={form.shoot_end_date} onChange={(e) => setForm({ ...form, shoot_end_date: e.target.value })} /></Field>
+          </div>
+          <Field label="Usage rights"><input style={inputStyle} placeholder="e.g. 30-day, paid social only" value={form.usage_rights} onChange={(e) => setForm({ ...form, usage_rights: e.target.value })} /></Field>
+          <Field label="Deliverable URL"><input style={inputStyle} placeholder="Posted link (required when Paid)" value={form.deliverable_url} onChange={(e) => setForm({ ...form, deliverable_url: e.target.value })} /></Field>
+          <Field label="Invoice URL"><input style={inputStyle} placeholder="Required from Sold In onward" value={form.invoice_url} onChange={(e) => setForm({ ...form, invoice_url: e.target.value })} /></Field>
+          <Field label="Paid date"><input type="date" style={inputStyle} value={form.paid_date} onChange={(e) => setForm({ ...form, paid_date: e.target.value })} /></Field>
+          <Field label="Notes">
+            <textarea style={{ ...inputStyle, minHeight:50, fontFamily:'inherit' }} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </Field>
+        </div>
+
+        {(linkedExp.length > 0 || previewExp.length > 0) && (
+          <div style={{ marginTop:16, padding:12, background:BOOKS.surface, borderRadius:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:BOOKS.ink, textTransform:'uppercase', letterSpacing:'1.2px', marginBottom:8 }}>
+              {deal ? 'Linked expenses' : 'Expenses in shoot window (preview)'}
+            </div>
+            {(linkedExp.length > 0 ? linkedExp : previewExp).slice(0, 8).map((e) => (
+              <div key={e.expense_id} style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:BOOKS.ink, padding:'4px 0' }}>
+                <span>{e.date} · {e.vendor}</span>
+                <span style={{ fontWeight:600 }}>{fmtMoney(e.amount)}</span>
+              </div>
+            ))}
+            {deal && (
+              <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${BOOKS.border}`, display:'flex', justifyContent:'space-between', fontSize:12, fontWeight:700, color:BOOKS.ink }}>
+                <span>Profitability</span>
+                <span style={{ color: profit >= 0 ? '#16A34A' : '#DC2626' }}>{fmtMoney(profit)}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop:16, display:'flex', gap:8 }}>
+          <button onClick={save} disabled={saving}
+            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+            {saving ? 'Saving…' : (deal ? 'Save changes' : 'Add deal')}
+          </button>
+          <button onClick={onClose}
+            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuditTab — searchable audit cards
+// ─────────────────────────────────────────────────────────────────────────────
+function AuditTab({ data, isMobile }) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
+
+  const matches = data.expenses.filter((r) => {
+    if (!search) return true;
+    const s = search.toLowerCase();
+    return String(r.vendor || '').toLowerCase().includes(s)
+      || String(r.business_purpose || '').toLowerCase().includes(s)
+      || String(r.category || '').toLowerCase().includes(s);
+  }).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, width:'100%', maxWidth:320 };
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '320px 1fr', gap:16 }}>
+      <div>
+        <input placeholder="Search vendor / purpose / category…" value={search} onChange={(e) => setSearch(e.target.value)} style={inputStyle} />
+        <div style={{ marginTop:12, maxHeight: isMobile ? 240 : 600, overflowY:'auto', border:`1px solid ${BOOKS.border}`, borderRadius:8 }}>
+          {matches.map((r) => (
+            <div key={r.expense_id} onClick={() => setSelected(r)}
+              style={{
+                padding:'10px 12px', borderBottom:`1px solid ${BOOKS.border}`, cursor:'pointer',
+                background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent',
+              }}>
+              <div style={{ fontSize:12, fontWeight:600, color:BOOKS.ink }}>{r.vendor || '(no vendor)'}</div>
+              <div style={{ fontSize:11, color:BOOKS.muted, display:'flex', justifyContent:'space-between', marginTop:2 }}>
+                <span>{fmtDate(r.date)}</span>
+                <span>{fmtMoney(r.amount, r.currency)}</span>
+              </div>
+            </div>
+          ))}
+          {matches.length === 0 && <div style={{ padding:'30px 12px', textAlign:'center', color:BOOKS.muted, fontSize:12 }}>No matches.</div>}
+        </div>
+      </div>
+      {selected
+        ? <AuditCard row={selected} deals={data.deals} />
+        : <div style={{ padding:30, textAlign:'center', color:BOOKS.muted, fontSize:13 }}>Pick an expense to view its audit card.</div>}
+    </div>
+  );
+}
+
+function AuditCard({ row, deals }) {
+  const linked = row.linked_deal_id ? deals.find((d) => d.deal_id === row.linked_deal_id) : null;
+  const linked2 = row.linked_deal_id_2 ? deals.find((d) => d.deal_id === row.linked_deal_id_2) : null;
+
+  const printPdf = () => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`
+      <html><head><title>Audit Card — ${row.vendor || row.expense_id}</title>
+      <style>
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 32px; max-width: 720px; margin: 0 auto; color: #1A2744; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .meta { color: #94A3B8; font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+        td { padding: 6px 8px; border-bottom: 1px solid #E1E5EE; vertical-align: top; font-size: 12px; }
+        td:first-child { font-weight: 700; width: 35%; color: #2E4A66; }
+        .deal { background: #F7F9FC; padding: 14px; border-radius: 8px; margin-top: 14px; font-size: 12px; }
+        img { max-width: 100%; border: 1px solid #E1E5EE; border-radius: 6px; margin: 12px 0; }
+      </style></head><body>
+      <h1>${row.vendor || '(no vendor)'} — ${fmtMoney(row.amount, row.currency)}</h1>
+      <div class="meta">RGG Media · Expense ${row.expense_id} · ${row.date}</div>
+      <table>
+        <tr><td>Date</td><td>${row.date || '—'}</td></tr>
+        <tr><td>Vendor</td><td>${row.vendor || '—'}</td></tr>
+        <tr><td>Amount</td><td>${fmtMoney(row.amount, row.currency)}</td></tr>
+        <tr><td>Category</td><td>${row.category || '—'}</td></tr>
+        <tr><td>Payment method</td><td>${row.payment_method || '—'}</td></tr>
+        <tr><td>Business purpose</td><td>${row.business_purpose || '—'}</td></tr>
+        <tr><td>Receipt</td><td>${row.receipt_url ? `<a href="${row.receipt_url}">Drive link</a>` : '—'}</td></tr>
+        <tr><td>Confidence</td><td>${row.extraction_confidence || '—'}</td></tr>
+        <tr><td>Source</td><td>${row.entered_by} · extracted ${row.extracted_at}</td></tr>
+      </table>
+      ${linked ? `<div class="deal"><strong>Linked deal: ${linked.brand}</strong><br/>Value: ${fmtMoney(linked.deal_value)} · Status: ${linked.status} · Platform: ${linked.platform || '—'}<br/>Shoot: ${linked.shoot_start_date || '?'} → ${linked.shoot_end_date || '?'}<br/>${linked.deliverable_url ? `Deliverable: <a href="${linked.deliverable_url}">${linked.deliverable_url}</a>` : ''}</div>` : ''}
+      ${linked2 ? `<div class="deal"><strong>Secondary linked deal: ${linked2.brand}</strong><br/>Value: ${fmtMoney(linked2.deal_value)} · Status: ${linked2.status}</div>` : ''}
+      </body></html>
+    `);
+    w.document.close();
+    setTimeout(() => w.print(), 300);
+  };
+
+  return (
+    <div style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>{row.vendor || '(no vendor)'}</div>
+          <div style={{ fontSize:11, color:BOOKS.muted, fontFamily:'monospace', marginTop:2 }}>{row.expense_id}</div>
+        </div>
+        <button onClick={printPdf}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          Print to PDF
+        </button>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'150px 1fr', gap:'8px 16px', fontSize:12, color:BOOKS.ink }}>
+        <strong style={{ color:SLATE }}>Date</strong>            <span>{row.date || '—'}</span>
+        <strong style={{ color:SLATE }}>Amount</strong>          <span style={{ fontWeight:700 }}>{fmtMoney(row.amount, row.currency)}</span>
+        <strong style={{ color:SLATE }}>Category</strong>        <span>{row.category || '—'}</span>
+        <strong style={{ color:SLATE }}>Payment method</strong>  <span>{row.payment_method || '—'}</span>
+        <strong style={{ color:SLATE }}>Business purpose</strong><span>{row.business_purpose || <em style={{ color:BOOKS.muted }}>missing — required for audit</em>}</span>
+        <strong style={{ color:SLATE }}>Receipt</strong>         <span>{row.receipt_url ? <a href={row.receipt_url} target="_blank" rel="noreferrer" style={{ color:SLATE, fontWeight:600 }}>View in Drive ↗</a> : '—'}</span>
+        <strong style={{ color:SLATE }}>Confidence</strong>      <span>{row.extraction_confidence || '—'}</span>
+        <strong style={{ color:SLATE }}>Source</strong>          <span>{row.entered_by} · {row.extracted_at}</span>
+      </div>
+
+      {linked && (
+        <div style={{ marginTop:16, padding:14, background:BOOKS.surface, borderRadius:8 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', marginBottom:6 }}>Linked deal</div>
+          <div style={{ fontSize:14, fontWeight:700, color:BOOKS.ink }}>{linked.brand}</div>
+          <div style={{ fontSize:12, color:BOOKS.ink, marginTop:4 }}>
+            {fmtMoney(linked.deal_value)} · {linked.status} · {linked.platform || '—'}
+          </div>
+          {(linked.shoot_start_date || linked.shoot_end_date) && (
+            <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3 }}>Shoot: {linked.shoot_start_date || '?'} → {linked.shoot_end_date || '?'}</div>
+          )}
+          {linked.deliverable_url && <div style={{ fontSize:11, marginTop:4 }}><a href={linked.deliverable_url} target="_blank" rel="noreferrer" style={{ color:SLATE }}>Deliverable ↗</a></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExportTab — CSV + audit binder
+// ─────────────────────────────────────────────────────────────────────────────
+function ExportTab({ data, year }) {
+  const [busy, setBusy] = useState(null);
+
+  const downloadCsv = async () => {
+    setBusy('csv');
+    try {
+      const r = await fetch(`${BOOKS_API}?action=year-export&kind=csv&year=${year}`);
+      const text = await r.text();
+      const blob = new Blob([text], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `RGG_Media_Expenses_${year}_for_George.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export failed: ' + e.message); }
+    setBusy(null);
+  };
+
+  const printBinder = () => {
+    const expenses = [...data.expenses]
+      .filter((r) => withinYear(r, year))
+      .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.date || '').localeCompare(b.date || ''));
+    const byCat = {};
+    expenses.forEach((r) => { (byCat[r.category || 'Uncategorized'] ||= []).push(r); });
+    const dealsById = {};
+    data.deals.forEach((d) => { dealsById[d.deal_id] = d; });
+
+    const w = window.open('', '_blank');
+    if (!w) return;
+    let toc = '<ul style="font-size:13px; line-height:1.9;">';
+    Object.keys(byCat).sort().forEach((c) => {
+      const total = byCat[c].reduce((s, r) => s + Number(r.amount || 0), 0);
+      toc += `<li><strong>${c}</strong> — ${byCat[c].length} expense${byCat[c].length===1?'':'s'} · ${fmtMoney(total)}</li>`;
+    });
+    toc += '</ul>';
+
+    let cards = '';
+    Object.keys(byCat).sort().forEach((c) => {
+      cards += `<h2 style="margin-top:32px; padding-bottom:8px; border-bottom:2px solid #1A2744;">${c}</h2>`;
+      byCat[c].forEach((r) => {
+        const linked = r.linked_deal_id ? dealsById[r.linked_deal_id] : null;
+        cards += `
+          <div class="card">
+            <div class="hdr">${r.vendor || '(no vendor)'} — ${fmtMoney(r.amount, r.currency)}</div>
+            <div class="meta">${r.date} · ${r.expense_id}</div>
+            <table>
+              <tr><td>Date</td><td>${r.date || '—'}</td></tr>
+              <tr><td>Vendor</td><td>${r.vendor || '—'}</td></tr>
+              <tr><td>Amount</td><td>${fmtMoney(r.amount, r.currency)}</td></tr>
+              <tr><td>Payment method</td><td>${r.payment_method || '—'}</td></tr>
+              <tr><td>Business purpose</td><td>${r.business_purpose || '<em>missing</em>'}</td></tr>
+              <tr><td>Receipt</td><td>${r.receipt_url ? `<a href="${r.receipt_url}">Drive link</a>` : '—'}</td></tr>
+              <tr><td>Confidence</td><td>${r.extraction_confidence || '—'}</td></tr>
+            </table>
+            ${linked ? `<div class="deal"><strong>${linked.brand}</strong> — ${fmtMoney(linked.deal_value)} · ${linked.status}<br/>Shoot: ${linked.shoot_start_date || '?'} → ${linked.shoot_end_date || '?'}</div>` : ''}
+          </div>
+        `;
+      });
+    });
+
+    w.document.write(`
+      <html><head><title>RGG Media ${year} — Audit Binder</title>
+      <style>
+        body { font-family: -apple-system, system-ui, sans-serif; padding: 36px; max-width: 760px; margin: 0 auto; color: #1A2744; }
+        h1 { font-size: 22px; margin: 0 0 6px; } h2 { font-size: 16px; }
+        .card { page-break-inside: avoid; margin-bottom: 22px; padding: 14px; border: 1px solid #E1E5EE; border-radius: 8px; }
+        .hdr { font-size: 14px; font-weight: 800; }
+        .meta { color:#94A3B8; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; margin: 3px 0 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 5px 6px; border-bottom: 1px solid #F0F2F8; font-size: 11px; vertical-align: top; }
+        td:first-child { font-weight: 700; width: 35%; color:#2E4A66; }
+        .deal { margin-top: 10px; padding: 10px; background: #F7F9FC; border-radius: 6px; font-size: 11px; }
+      </style></head><body>
+      <h1>RGG Media LLC — ${year} Audit Binder</h1>
+      <div style="color:#94A3B8; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px;">Generated ${new Date().toISOString().slice(0,10)} · Total: ${fmtMoney(expenses.reduce((s,r)=>s+Number(r.amount||0),0))}</div>
+      <h2>Contents</h2>${toc}${cards}
+      </body></html>
+    `);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap:16 }}>
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>CSV for CPA</div>
+        <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:14 }}>
+          Flat export with category totals, sorted by category then date. Send to George Dimov.
+        </div>
+        <button onClick={downloadCsv} disabled={busy === 'csv'}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor: busy?'wait':'pointer', fontFamily:'inherit', opacity: busy === 'csv' ? 0.6 : 1 }}>
+          {busy === 'csv' ? 'Generating…' : 'Download CSV'}
+        </button>
+      </div>
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>Audit Binder PDF</div>
+        <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:14 }}>
+          One audit card per expense, sorted by category then date, with table of contents. Print-to-PDF from the new window.
+        </div>
+        <button onClick={printBinder}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+          Generate audit binder
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END BOOKS TAB
+// ═══════════════════════════════════════════════════════════════════════════
+  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
 
   return (
     <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Inter', system-ui, sans-serif" }}>
@@ -2413,8 +4136,8 @@ export default function App() {
               {!isMobile && (
                 <Card style={{ borderLeft:`3px solid #5DBF8A` }}>
                   <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
-                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '—'}</div>
-                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'No deals yet'}</div>
+                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
+                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
                 </Card>
               )}
             </div>
@@ -2425,7 +4148,7 @@ export default function App() {
                 <Label>milestones 🏆</Label>
 
                 {/* Completed milestones — full-width banners stacked at top */}
-                {milestones.filter(m => m.done).map(m => (
+                {liveMilestones.filter(m => m.done).map(m => (
                   <div key={m.id} style={{
                     background:'#DCFCE7', border:'0.5px solid #86EFAC', borderRadius:8,
                     padding:12, marginBottom:8,
@@ -2450,15 +4173,11 @@ export default function App() {
                 ))}
 
                 {/* In-progress milestones — 2-column tile grid */}
-                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: milestones.some(m=>m.done) ? 4 : 0 }}>
-                  {milestones.filter(m => !m.done).map(m => {
+                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: liveMilestones.some(m=>m.done) ? 4 : 0 }}>
+                  {liveMilestones.filter(m => !m.done).map(m => {
                     const label    = (m.t || '').split(':')[0];
-                    const live     = liveMilestone(m);
-                    const cur      = live ? live.cur : m.cur;
-                    const pct      = live ? live.pct : (m.pct || 0);
-                    const isAuto   = !!live;
                     const ringLen  = 94.2; // 2 * π * 15
-                    const ringFill = (pct / 100) * ringLen;
+                    const ringFill = ((m.pct || 0) / 100) * ringLen;
                     return (
                       <div key={m.id} style={{
                         background:'#FFFFFF', border:'0.5px solid #E5E7EB', borderRadius:8,
@@ -2469,7 +4188,7 @@ export default function App() {
                           <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                             <span style={{ marginRight:5 }}>{m.e}</span>{label}
                           </div>
-                          {editMsId === m.id && !isAuto ? (
+                          {editMsId === m.id ? (
                             <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:2 }}>
                               <input autoFocus value={editMsVal} onChange={e => setEditMsVal(e.target.value)}
                                 onKeyDown={e => { if(e.key==='Enter') saveMs(); if(e.key==='Escape') setEditMsId(null); }}
@@ -2478,15 +4197,12 @@ export default function App() {
                               <button onClick={() => setEditMsId(null)} style={{ fontSize:14, color:'#94A3B8', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✕</button>
                             </div>
                           ) : (
-                            <div onClick={isAuto ? undefined : () => startEditMs(m)}
-                              title={isAuto ? 'Auto-tracked from your deals/analytics' : 'Click to update'}
-                              style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1, cursor:isAuto?'default':'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                              {cur}
+                            <div onClick={() => startEditMs(m)} title="Click to update"
+                              style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1, cursor:'pointer', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                              {m.cur}
                             </div>
                           )}
-                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>
-                            goal {m.goal}{isAuto && <span style={{ marginLeft:6, color:'#22c55e', fontWeight:600 }}>· auto</span>}
-                          </div>
+                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal {m.goal}</div>
                         </div>
                         <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
                           <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
@@ -2494,7 +4210,7 @@ export default function App() {
                             strokeDasharray={`${ringFill} ${ringLen}`}
                             transform="rotate(-90 18 18)" />
                           <text x={18} y={18} textAnchor="middle" dominantBaseline="central" fontSize="10" fontWeight="500" fill={TEXT}>
-                            {pct}%
+                            {m.pct}%
                           </text>
                         </svg>
                       </div>
@@ -2907,12 +4623,7 @@ export default function App() {
             {isMobile ? (
               /* Mobile: card layout */
               <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
-                {visibleDelivs.length === 0 && (
-                  <div style={{ background:CARD, border:`1px dashed ${BDR}`, borderRadius:12, padding:'24px 16px', textAlign:'center', fontSize:12, color:SLATE }}>
-                    No active deliverables. Add one with the + button above.
-                  </div>
-                )}
-                {visibleDelivs.map(d => (
+                {delivs.map(d => (
                   editDelivId === d.id ? (
                     <Card key={d.id} style={{ border:`1px solid ${BLUE}44` }}>
                       <div style={{ display:'flex',flexDirection:'column',gap:10,marginBottom:12 }}>
@@ -2939,10 +4650,7 @@ export default function App() {
                             <Tag color="#666">{d.pl}</Tag>
                           </div>
                         </div>
-                        <div style={{ display:'flex',gap:6,flexShrink:0 }}>
-                          <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
-                          <button onClick={() => { if(window.confirm(`Delete deliverable for ${d.b}? This cannot be undone.`)) deleteDeliv(d.id); }} style={{ background:'none',border:`1px solid #f8717144`,borderRadius:7,padding:'5px 10px',color:'#f87171',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✕</button>
-                        </div>
+                        <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
                       </div>
                       <div style={{ fontSize:12,color:'#94A3B8',marginBottom:6 }}>{d.sc}</div>
                       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
@@ -2956,15 +4664,10 @@ export default function App() {
             ) : (
               /* Desktop: table */
               <div style={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:14,overflow:'hidden' }}>
-                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.7fr',padding:'10px 20px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
+                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.35fr',padding:'10px 20px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
                   {['Brand','Notes / Script','Due','Status','Platform','Rate',''].map(h => <div key={h}>{h}</div>)}
                 </div>
-                {visibleDelivs.length === 0 && (
-                  <div style={{ padding:'28px 20px', textAlign:'center', fontSize:12, color:SLATE }}>
-                    No active deliverables. Add one with the + button above.
-                  </div>
-                )}
-                {visibleDelivs.map((d, i) => (
+                {delivs.map((d, i) => (
                   editDelivId === d.id ? (
                     <div key={d.id} style={{ padding:'14px 20px',borderBottom:`1px solid ${BDR}`,background:`${OCEAN}55` }}>
                       <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr',gap:8,marginBottom:10 }}>
@@ -2982,17 +4685,14 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div key={d.id} style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.7fr',padding:'16px 20px',borderBottom:`1px solid ${OCEAN}44`,background:i%2===0?`${OCEAN}22`:'transparent',alignItems:'center' }}>
+                    <div key={d.id} style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.35fr',padding:'16px 20px',borderBottom:`1px solid ${OCEAN}44`,background:i%2===0?`${OCEAN}22`:'transparent',alignItems:'center' }}>
                       <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
                       <div style={{ fontSize:11,color:'#94A3B8' }}>{d.sc}</div>
                       <div style={{ fontSize:12,color:YELL,fontWeight:600 }}>{d.d}</div>
                       <Tag color={statusColor(d.s)}>{d.s}</Tag>
                       <div style={{ fontSize:12,color:'#94A3B8' }}>{d.pl}</div>
                       <div style={{ fontSize:12,color:BLUE,fontWeight:700 }}>{d.pay}</div>
-                      <div style={{ display:'flex',gap:6,justifyContent:'flex-end' }}>
-                        <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }} title="Edit">✏</button>
-                        <button onClick={() => { if(window.confirm(`Delete deliverable for ${d.b}? This cannot be undone.`)) deleteDeliv(d.id); }} style={{ background:'none',border:`1px solid #f8717144`,borderRadius:7,padding:'5px 9px',color:'#f87171',fontSize:11,cursor:'pointer',fontFamily:'inherit' }} title="Delete">✕</button>
-                      </div>
+                      <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
                     </div>
                   )
                 ))}
@@ -4467,6 +6167,10 @@ export default function App() {
             </div>
           );
         })()}
+
+        {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
+        {tab === 'reality-casting' && <RealityCastingTab />}
+        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} />}
 
         </div>
       </div>
