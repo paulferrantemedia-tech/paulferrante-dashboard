@@ -2516,7 +2516,12 @@ export default function App() {
   }, [tab]);
 
   // ── Live pulse ────────────────────────────────────────────────
+  // Only fire flashes on tabs that actually show the live-stat cards (Overview).
+  // On Books/CRM/Deliverables etc the flash setState causes the whole Dashboard
+  // to re-render every 4s, which made typing into the Books expense description
+  // feel like the tab was "refreshing every few seconds."
   useEffect(() => {
+    if (tab !== 'overview' && tab !== 'analytics' && tab !== 'audience') return;
     const id = setInterval(() => {
       const r = Math.random();
       if (r < 0.38 && !igConnected)      { setFlash('ig'); setTimeout(() => setFlash(null), 700); }
@@ -2524,13 +2529,63 @@ export default function App() {
       else if (!ytConnected)             { setFlash('yt'); setTimeout(() => setFlash(null), 700); }
     }, 4000);
     return () => clearInterval(id);
-  }, [igConnected, ttConnected, ytConnected]);
+  }, [igConnected, ttConnected, ytConnected, tab]);
 
   // ── Derived ───────────────────────────────────────────────────
   const paidDeals     = deals.filter(d => d.s === 'Paid');
   const totalRevenue  = paidDeals.reduce((s, d) => s + (d.v || 0), 0);
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
+  const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
+
+  // ── Milestones: live numbers, not stored ones ────────────────
+  // Milestone `cur` and `pct` are derived from current state so they always
+  // match what the Overview's Revenue / Pipeline / Total Audience cards show.
+  // Hardcoded stored values used to drift (e.g. milestone said "$4,055" while
+  // Total Earned said "$2,500"); deriving at render time fixes that drift.
+  const fmtMilestoneNum = (n, prefix = '', suffix = '') => {
+    if (n == null || isNaN(n)) return `${prefix}0${suffix}`;
+    if (n >= 1000) return `${prefix}${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K${suffix}`;
+    return `${prefix}${Math.round(n).toLocaleString()}${suffix}`;
+  };
+  const parseGoal = (g) => parseFloat(String(g || '').replace(/[^0-9.]/g, '')) || 1;
+  const computeMilestone = (m) => {
+    if (m.done) return m; // Completed milestones stay as-is
+    const goalN = parseGoal(m.goal);
+    let curN = null;
+    let curStr = m.cur;
+    // Map well-known milestones to live data sources
+    if (m.cat === 'Revenue' || /revenue/i.test(m.t)) {
+      curN = totalRevenue;
+      curStr = `$${curN.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+    } else if (m.cat === 'Deals' || /^Deals:/i.test(m.t)) {
+      curN = paidDeals.length;
+      curStr = String(curN);
+    } else if (/^TikTok:/i.test(m.t)) {
+      curN = ttFollowers;
+      curStr = fmtMilestoneNum(curN);
+    } else if (/^Instagram:/i.test(m.t)) {
+      curN = igFollowers;
+      curStr = fmtMilestoneNum(curN);
+    } else if (/^YouTube:/i.test(m.t)) {
+      curN = ytSubs;
+      curStr = fmtMilestoneNum(curN);
+    } else if (m.cat === 'Audience' || /total audience/i.test(m.t)) {
+      curN = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
+      curStr = fmtMilestoneNum(curN);
+    } else if (m.cat === 'Content' || /^Content:/i.test(m.t)) {
+      // Content posts: use stored cur (user-edited) — there's no clean
+      // year-to-date total available from the APIs
+      curN = parseFloat(String(m.cur || '').replace(/[^0-9.]/g, '')) || 0;
+      curStr = m.cur;
+    } else {
+      curN = parseFloat(String(m.cur || '').replace(/[^0-9.]/g, '')) || 0;
+      curStr = m.cur;
+    }
+    const pct = Math.min(100, Math.max(0, Math.round((curN / goalN) * 100)));
+    return { ...m, cur: curStr, pct };
+  };
+  const liveMilestones = milestones.map(computeMilestone);
 
 // BOOKS TAB — AI-Powered Expense Tracker
 // Paste this entire block above the main dashboard component's `return ()` in
@@ -2620,7 +2675,7 @@ function _ssSet(key, value) {
 // ─────────────────────────────────────────────────────────────────────────────
 // BooksTab — top-level component
 // ─────────────────────────────────────────────────────────────────────────────
-function BooksTab({ isMobile, showToast }) {
+function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
   const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [] });
@@ -2645,7 +2700,19 @@ function BooksTab({ isMobile, showToast }) {
 
   // KPIs
   const totalExpenses = data.expenses.reduce((s, r) => s + Number(r.amount || 0), 0);
-  const totalRevenue  = data.deals.filter((d) => d.status === 'Paid').reduce((s, d) => s + Number(d.deal_value || 0), 0);
+  // Revenue: prefer the dashboard's live deals state (Deals tab / Revenue tab)
+  // filtered to the selected year, falling back to whatever the Books sheet has.
+  // Previously this only pulled from data.deals (the Books Sheet), so it showed
+  // $0 until the user duplicated their deals into the Books backend — confusing.
+  const dashboardRevenueForYear = (dashboardPaidDeals || []).reduce((s, d) => {
+    // d.d is "Mon YYYY" (e.g., "Jan 2026"); parse the trailing year token.
+    const parts = String(d.d || '').trim().split(/\s+/);
+    const yr = parts[1] ? parseInt(parts[1], 10) : null;
+    if (yr && yr !== year) return s;
+    return s + Number(d.v || 0);
+  }, 0);
+  const booksSheetRevenue = data.deals.filter((d) => d.status === 'Paid').reduce((s, d) => s + Number(d.deal_value || 0), 0);
+  const totalRevenue = Math.max(dashboardRevenueForYear, booksSheetRevenue);
   const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
 
   const SUB_TABS = [
@@ -2993,7 +3060,7 @@ function ConfidenceBadge({ level }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ExpensesTab — full table view
 // ─────────────────────────────────────────────────────────────────────────────
-function ExpensesTab({ data, reload, isMobile, showToast }) {
+function ExpensesTab({ data, reload, isMobile, showToast, year }) {
   const [filterCat, setFilterCat]         = useState('');
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterUnrev, setFilterUnrev]     = useState(false);
@@ -3001,6 +3068,7 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
   const [search, setSearch]               = useState('');
   const [selected, setSelected]           = useState(null);
   const [showManual, setShowManual]       = useState(false);
+  const [showCsvImport, setShowCsvImport] = useState(false);
 
   const filtered = data.expenses.filter((r) => {
     if (filterCat && r.category !== filterCat) return false;
@@ -3039,6 +3107,10 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
           <input type="checkbox" checked={filterUnrev} onChange={(e) => setFilterUnrev(e.target.checked)} /> Unreviewed only
         </label>
         <div style={{ flex:1 }} />
+        <button onClick={() => setShowCsvImport(true)}
+          style={{ background:BOOKS.parchment, color:BOOKS.ink, border:`1px solid ${BOOKS.ink}`, borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          ↑ Import CSV
+        </button>
         <button onClick={() => setShowManual(true)}
           style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
           + Add manually
@@ -3087,6 +3159,7 @@ function ExpensesTab({ data, reload, isMobile, showToast }) {
 
       {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
       {showManual && <ManualExpenseModal deals={data.deals} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
+      {showCsvImport && <CsvImportModal year={year} onClose={() => setShowCsvImport(false)} reload={reload} showToast={showToast} />}
     </div>
   );
 }
@@ -3257,6 +3330,179 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
             Cancel
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CsvImportModal — bulk-import credit card statement CSV
+// Splits a CSV into ~30-line chunks and POSTs each to /api/sync?action=bulk-import-csv
+// so each request stays under Vercel Hobby's 10s function timeout.
+// ─────────────────────────────────────────────────────────────────────────────
+function CsvImportModal({ year, onClose, reload, showToast }) {
+  const [text, setText]       = useState('');
+  const [fileName, setFileName] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [results, setResults] = useState(null); // { imported, skipped_duplicate, skipped_other_year, skipped_not_transaction, flagged_personal }
+  const [errors, setErrors]   = useState([]);
+
+  const handleFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => setText(String(ev.target?.result || ''));
+    reader.onerror = () => alert('Failed to read file');
+    reader.readAsText(file);
+  };
+
+  const runImport = async () => {
+    const raw = (text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+    if (!raw) { alert('Paste CSV text or choose a CSV file first.'); return; }
+    const allLines = raw.split('\n').filter((l) => l.trim().length > 0);
+    if (allLines.length < 2) { alert('CSV needs at least a header row and one data row.'); return; }
+    const headerLine = allLines[0];
+    const dataLines = allLines.slice(1);
+
+    // Chunk ~30 lines per call (well under Anthropic + Vercel 10s timeout)
+    const CHUNK = 30;
+    const chunks = [];
+    for (let i = 0; i < dataLines.length; i += CHUNK) {
+      chunks.push(dataLines.slice(i, i + CHUNK).join('\n'));
+    }
+
+    setImporting(true);
+    setResults(null);
+    setErrors([]);
+    setProgress({ done: 0, total: chunks.length });
+
+    const totals = { imported: 0, skipped_duplicate: 0, skipped_other_year: 0, skipped_not_transaction: 0, flagged_personal: 0 };
+    const errs = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        const j = await booksApi('bulk-import-csv', { method: 'POST', body: { csvChunk: chunks[i], headerLine, year } });
+        totals.imported              += Number(j.imported || 0);
+        totals.skipped_duplicate     += Number(j.skipped_duplicate || 0);
+        totals.skipped_other_year    += Number(j.skipped_other_year || 0);
+        totals.skipped_not_transaction += Number(j.skipped_not_transaction || 0);
+        totals.flagged_personal      += Number(j.flagged_personal || 0);
+      } catch (e) {
+        errs.push(`Chunk ${i + 1}: ${e.message}`);
+      }
+      setProgress({ done: i + 1, total: chunks.length });
+    }
+
+    setResults(totals);
+    setErrors(errs);
+    setImporting(false);
+    if (totals.imported > 0) {
+      showToast && showToast(`Imported ${totals.imported}`);
+      reload();
+    }
+  };
+
+  const inputStyle = { background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6, padding:'7px 10px', fontSize:12, fontFamily:'inherit', color:BOOKS.ink, width:'100%' };
+
+  return (
+    <div onClick={importing ? undefined : onClose}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background:BOOKS.parchment, borderRadius:14, padding:24, width:'min(620px, 100%)', maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink }}>Import CSV (credit card statement)</div>
+            <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>
+              Drops each row into Expenses. Year filter: {year}. Duplicates auto-skipped.
+            </div>
+          </div>
+          <button onClick={importing ? undefined : onClose}
+            style={{ background:'none', border:'none', fontSize:20, cursor: importing?'wait':'pointer', color:BOOKS.muted }}>×</button>
+        </div>
+
+        {!results && (
+          <>
+            <Field label="Upload .csv file">
+              <input type="file" accept=".csv,text/csv" onChange={handleFile} disabled={importing}
+                style={{ ...inputStyle, padding:'6px', cursor: importing?'wait':'pointer' }} />
+              {fileName && <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>{fileName}</div>}
+            </Field>
+
+            <div style={{ fontSize:11, color:BOOKS.muted, textAlign:'center', margin:'10px 0' }}>— or paste CSV text below —</div>
+
+            <Field label="CSV text">
+              <textarea
+                style={{ ...inputStyle, minHeight:140, fontFamily:'monospace', fontSize:11 }}
+                placeholder="Date,Description,Amount&#10;2026-03-04,Adobe Inc.,54.99&#10;2026-03-05,Delta Air Lines,412.18"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                disabled={importing}
+              />
+            </Field>
+
+            <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', fontSize:11, color:BOOKS.muted, marginTop:10, lineHeight:1.5 }}>
+              Claude reads each row, cleans the vendor name, picks a category, flags anything that looks personal, and tries to auto-link to a deal based on shoot dates.
+            </div>
+
+            {importing && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ fontSize:12, color:BOOKS.ink, marginBottom:6 }}>
+                  Processing chunk {progress.done} of {progress.total}…
+                </div>
+                <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:6, height:8, overflow:'hidden' }}>
+                  <div style={{ background:BOOKS.ink, height:'100%', width: progress.total ? `${(progress.done / progress.total) * 100}%` : '0%', transition:'width 0.3s' }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop:18, display:'flex', gap:8 }}>
+              <button onClick={runImport} disabled={importing || !text.trim()}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor: (importing || !text.trim()) ? 'not-allowed' : 'pointer', fontFamily:'inherit', opacity: (importing || !text.trim()) ? 0.6 : 1 }}>
+                {importing ? 'Importing…' : 'Start import'}
+              </button>
+              <button onClick={onClose} disabled={importing}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor: importing?'wait':'pointer', fontFamily:'inherit' }}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+
+        {results && (
+          <div>
+            <div style={{ background:'#DCFCE7', border:'1px solid #86EFAC', borderRadius:8, padding:'14px 16px', marginBottom:12 }}>
+              <div style={{ fontSize:14, fontWeight:800, color:'#166534', marginBottom:6 }}>Import complete</div>
+              <div style={{ fontSize:12, color:'#166534', lineHeight:1.6 }}>
+                <div>Imported: <strong>{results.imported}</strong></div>
+                <div>Skipped (duplicates): {results.skipped_duplicate}</div>
+                <div>Skipped (outside {year}): {results.skipped_other_year}</div>
+                <div>Skipped (header / payment / non-transaction): {results.skipped_not_transaction}</div>
+                <div>Flagged as possibly personal: {results.flagged_personal}</div>
+              </div>
+            </div>
+            {errors.length > 0 && (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12, color:'#991B1B' }}>
+                <div style={{ fontWeight:700, marginBottom:6 }}>{errors.length} chunk{errors.length === 1 ? '' : 's'} failed:</div>
+                {errors.map((e, i) => <div key={i} style={{ marginTop:2 }}>{e}</div>)}
+              </div>
+            )}
+            <div style={{ fontSize:11, color:BOOKS.muted, marginBottom:14 }}>
+              Imported rows now sit in Inbox with category + business purpose suggestions — review and confirm them like any other expense.
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={onClose}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                Done
+              </button>
+              <button onClick={() => { setResults(null); setErrors([]); setText(''); setFileName(''); }}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Import another
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3877,8 +4123,8 @@ function ExportTab({ data, year }) {
               {!isMobile && (
                 <Card style={{ borderLeft:`3px solid #5DBF8A` }}>
                   <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
-                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>$2,000</div>
-                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>American Airlines ✈️</div>
+                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
+                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
                 </Card>
               )}
             </div>
@@ -3889,7 +4135,7 @@ function ExportTab({ data, year }) {
                 <Label>milestones 🏆</Label>
 
                 {/* Completed milestones — full-width banners stacked at top */}
-                {milestones.filter(m => m.done).map(m => (
+                {liveMilestones.filter(m => m.done).map(m => (
                   <div key={m.id} style={{
                     background:'#DCFCE7', border:'0.5px solid #86EFAC', borderRadius:8,
                     padding:12, marginBottom:8,
@@ -3914,8 +4160,8 @@ function ExportTab({ data, year }) {
                 ))}
 
                 {/* In-progress milestones — 2-column tile grid */}
-                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: milestones.some(m=>m.done) ? 4 : 0 }}>
-                  {milestones.filter(m => !m.done).map(m => {
+                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:8, marginTop: liveMilestones.some(m=>m.done) ? 4 : 0 }}>
+                  {liveMilestones.filter(m => !m.done).map(m => {
                     const label    = (m.t || '').split(':')[0];
                     const ringLen  = 94.2; // 2 * π * 15
                     const ringFill = ((m.pct || 0) / 100) * ringLen;
@@ -5911,7 +6157,7 @@ function ExportTab({ data, year }) {
 
         {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
         {tab === 'reality-casting' && <RealityCastingTab />}
-        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} />}
+        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} />}
 
         </div>
       </div>
