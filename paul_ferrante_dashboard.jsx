@@ -2548,7 +2548,20 @@ export default function App() {
     if (n >= 1000) return `${prefix}${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K${suffix}`;
     return `${prefix}${Math.round(n).toLocaleString()}${suffix}`;
   };
-  const parseGoal = (g) => parseFloat(String(g || '').replace(/[^0-9.]/g, '')) || 1;
+  const parseGoal = (g) => {
+    // Goals come in as "$45K", "90K", "260", "100K", "20K" etc.
+    // Strip $ + commas, then expand K (×1000) and M (×1,000,000) so the
+    // percentage math is against the real numeric goal — not the bare digits.
+    const raw = String(g || '').trim().replace(/[$,\s]/g, '');
+    const m = raw.match(/^([0-9]*\.?[0-9]+)\s*([kKmM]?)/);
+    if (!m) return 1;
+    const num = parseFloat(m[1]);
+    const suf = (m[2] || '').toLowerCase();
+    if (!isFinite(num) || num <= 0) return 1;
+    if (suf === 'k') return num * 1000;
+    if (suf === 'm') return num * 1000000;
+    return num;
+  };
   const computeMilestone = (m) => {
     if (m.done) return m; // Completed milestones stay as-is
     const goalN = parseGoal(m.goal);
