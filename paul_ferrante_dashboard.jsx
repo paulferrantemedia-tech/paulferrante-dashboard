@@ -2107,6 +2107,53 @@ function RealityCastingTab() {
 }
 
 
+// ── CRM client-details edit form (hoisted out of App's render) ───────────────
+// Was previously `const EditForm = (...)` defined INSIDE the CRM tab's render
+// IIFE, so every keystroke (setCrmBuf -> re-render) built a brand-new EditForm
+// function; React then unmounted the old inputs and mounted fresh ones, dropping
+// focus after each character. A stable top-level component keeps inputs mounted.
+function CrmEditForm({ c, crmBuf, setCrmBuf, saveCrm, onCancel, deleteCrm, isMobile }) {
+  useEffect(() => {
+    console.log('[crm-fix] CrmEditForm MOUNTED (expect once per edit, not per keystroke)');
+    return () => console.log('[crm-fix] CrmEditForm UNMOUNTED');
+  }, []);
+  console.log('[crm-fix] CrmEditForm render');
+  const upd = (k, v) => {
+    console.log('[crm-fix] keystroke \u2192 field=%s value=%o', k, v);
+    setCrmBuf(p => ({ ...p, [k]: v }));
+  };
+  return (
+    <div style={{ padding:'14px 16px', borderBottom:`1px solid ${BDR}`, background:`${OCEAN}44` }}>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:8, marginBottom:8 }}>
+        <Inp value={crmBuf.b||''} onChange={v=>upd('b', v)} placeholder="Brand / Agency" />
+        <Inp value={crmBuf.n||''} onChange={v=>upd('n', v)} placeholder="Contact person" />
+        <Inp value={crmBuf.e||''} onChange={v=>upd('e', v)} placeholder="Email" />
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:8 }}>
+        <Sel value={crmBuf.s||'Warm Lead'} onChange={v=>setCrmBuf(p=>({...p,s:v}))} options={CRM_STATUSES} />
+        <Sel value={crmBuf.type||'Brand Direct'} onChange={v=>setCrmBuf(p=>({...p,type:v}))} options={CRM_TYPES} />
+        <Sel value={crmBuf.country||'United States'} onChange={v=>setCrmBuf(p=>({...p,country:v}))} options={CRM_COUNTRIES} />
+        <Inp value={(crmBuf.niche||[]).join(', ')} onChange={v=>upd('niche', v.split(',').map(x=>x.trim()).filter(Boolean))} placeholder="Niches (comma separated)" />
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 2fr', gap:8, marginBottom:10 }}>
+        <Inp value={crmBuf.brands||''} onChange={v=>upd('brands', v)} placeholder="Brands they represent" />
+        <Inp value={crmBuf.dealValue||0} onChange={v=>upd('dealValue', parseFloat(v)||0)} placeholder="Deal value $" />
+        <Inp value={crmBuf.last||''} onChange={v=>upd('last', v)} placeholder="Last contact" />
+        <Inp value={crmBuf.note||''} onChange={v=>upd('note', v)} placeholder="Notes" />
+      </div>
+      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <button onClick={saveCrm} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
+        <button onClick={onCancel} style={{ background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+        <button onClick={() => { if(window.confirm(`Remove ${c.b}?`)) deleteCrm(c.id); }} style={{ background:'none',color:'#f87171',border:`1px solid #f8717144`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Delete</button>
+        <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12,color:SLATE,marginLeft:8,cursor:'pointer' }}>
+          <input type="checkbox" checked={!!crmBuf.paidDeal} onChange={e=>setCrmBuf(p=>({...p,paidDeal:e.target.checked}))} />
+          Paid deal history
+        </label>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const width = useWindowWidth();
   const isMobile = width < 768;
@@ -4477,37 +4524,9 @@ function ExportTab({ data, year }) {
           const activeCount  = crm.filter(c => c.s === 'Active Partner').length;
           const warmCount    = crm.filter(c => c.s === 'Warm Lead').length;
           const paidCount    = crm.filter(c => c.paidDeal).length;
-          // ── Edit form ─────────────────────────────────────────
-          const EditForm = ({ c }) => (
-            <div style={{ padding:'14px 16px', borderBottom:`1px solid ${BDR}`, background:`${OCEAN}44` }}>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:8, marginBottom:8 }}>
-                <Inp value={crmBuf.b||''} onChange={v=>setCrmBuf(p=>({...p,b:v}))} placeholder="Brand / Agency" />
-                <Inp value={crmBuf.n||''} onChange={v=>setCrmBuf(p=>({...p,n:v}))} placeholder="Contact person" />
-                <Inp value={crmBuf.e||''} onChange={v=>setCrmBuf(p=>({...p,e:v}))} placeholder="Email" />
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:8 }}>
-                <Sel value={crmBuf.s||'Warm Lead'} onChange={v=>setCrmBuf(p=>({...p,s:v}))} options={CRM_STATUSES} />
-                <Sel value={crmBuf.type||'Brand Direct'} onChange={v=>setCrmBuf(p=>({...p,type:v}))} options={CRM_TYPES} />
-                <Sel value={crmBuf.country||'United States'} onChange={v=>setCrmBuf(p=>({...p,country:v}))} options={CRM_COUNTRIES} />
-                <Inp value={(crmBuf.niche||[]).join(', ')} onChange={v=>setCrmBuf(p=>({...p,niche:v.split(',').map(x=>x.trim()).filter(Boolean)}))} placeholder="Niches (comma separated)" />
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr 2fr', gap:8, marginBottom:10 }}>
-                <Inp value={crmBuf.brands||''} onChange={v=>setCrmBuf(p=>({...p,brands:v}))} placeholder="Brands they represent" />
-                <Inp value={crmBuf.dealValue||0} onChange={v=>setCrmBuf(p=>({...p,dealValue:parseFloat(v)||0}))} placeholder="Deal value $" />
-                <Inp value={crmBuf.last||''} onChange={v=>setCrmBuf(p=>({...p,last:v}))} placeholder="Last contact" />
-                <Inp value={crmBuf.note||''} onChange={v=>setCrmBuf(p=>({...p,note:v}))} placeholder="Notes" />
-              </div>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                <button onClick={saveCrm} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
-                <button onClick={() => setEditCrmId(null)} style={{ background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
-                <button onClick={() => { if(window.confirm(`Remove ${c.b}?`)) deleteCrm(c.id); }} style={{ background:'none',color:'#f87171',border:`1px solid #f8717144`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Delete</button>
-                <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12,color:SLATE,marginLeft:8,cursor:'pointer' }}>
-                  <input type="checkbox" checked={!!crmBuf.paidDeal} onChange={e=>setCrmBuf(p=>({...p,paidDeal:e.target.checked}))} />
-                  Paid deal history
-                </label>
-              </div>
-            </div>
-          );
+          // EditForm hoisted to a stable top-level component (CrmEditForm) so it
+          // is NOT recreated on every render — that recreation was remounting the
+          // inputs and dropping focus after each keystroke.
           return (
             <div>
               {/* ── Header ── */}
@@ -4566,7 +4585,7 @@ function ExportTab({ data, year }) {
                 <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
                   {filteredCrm.map(c => (
                     editCrmId === c.id
-                      ? <Card key={c.id} style={{ border:`1px solid ${BLUE}44` }}><EditForm c={c}/></Card>
+                      ? <Card key={c.id} style={{ border:`1px solid ${BLUE}44` }}><CrmEditForm c={c} crmBuf={crmBuf} setCrmBuf={setCrmBuf} saveCrm={saveCrm} onCancel={() => setEditCrmId(null)} deleteCrm={deleteCrm} isMobile={isMobile} /></Card>
                       : (
                         <Card key={c.id}>
                           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
@@ -4599,7 +4618,7 @@ function ExportTab({ data, year }) {
                   </div>
                   {filteredCrm.map((c,i) => (
                     editCrmId === c.id
-                      ? <div key={c.id}><EditForm c={c}/></div>
+                      ? <div key={c.id}><CrmEditForm c={c} crmBuf={crmBuf} setCrmBuf={setCrmBuf} saveCrm={saveCrm} onCancel={() => setEditCrmId(null)} deleteCrm={deleteCrm} isMobile={isMobile} /></div>
                       : (
                         <div key={c.id} style={{ display:'grid',gridTemplateColumns:'1.2fr 0.9fr 0.8fr 0.7fr 1fr 0.8fr 1.5fr 0.3fr',padding:'12px 16px',borderBottom:`1px solid ${OCEAN}22`,background:i%2===0?`${OCEAN}11`:'transparent',alignItems:'center',gap:4 }}>
                           <div>
