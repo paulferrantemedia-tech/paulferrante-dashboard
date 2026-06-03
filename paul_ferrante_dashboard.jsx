@@ -382,7 +382,18 @@ function TTLogo({ size = 22 }) {
 // ── Deal Modal ────────────────────────────────────────────────
 function DealModal({ initial, onSave, onDelete, onClose, isMobile }) {
   const [form, setForm] = useState({ ...initial });
-  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // ── Bug 1 proof logs ──────────────────────────────────────────
+  // If typing works, MOUNT fires once per open and you'll see one
+  // "keystroke" line per character — with NO remount between them.
+  useEffect(() => {
+    console.log('[deals-fix] DealModal MOUNTED (expect once per open, not per keystroke)');
+    return () => console.log('[deals-fix] DealModal UNMOUNTED');
+  }, []);
+  console.log('[deals-fix] DealModal render');
+  const upd = (k, v) => {
+    console.log('[deals-fix] keystroke → field=%s value=%o', k, v);
+    setForm(p => ({ ...p, [k]: v }));
+  };
   const isNew = !initial.id;
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:isMobile?'flex-end':'center',justifyContent:'center' }}
@@ -2173,6 +2184,12 @@ export default function App() {
   const syncTimer       = useRef(null);
   const cloudReady      = useRef(false);
   const isApplyingCloud = useRef(false);
+  // Bug 2: track whether a deal form is open so the sync poll can pause and
+  // never overwrite unsaved input. Kept in a ref because the poll effect below
+  // closes over its initial scope (empty deps) and would otherwise see a stale
+  // value. Synced to `dealModal` via the effect just below.
+  const dealFormOpenRef = useRef(false);
+  useEffect(() => { dealFormOpenRef.current = !!dealModal; }, [dealModal]);
 
   // ── Cloud sync: load from cloud and apply state ──────────────
   const applyCloudState = (state, quiet = false) => {
@@ -2215,7 +2232,16 @@ export default function App() {
         .catch(() => { if (isMount) { cloudReady.current = true; setSyncStatus('error'); } });
     };
     fetchCloud(true);
-    const poll = setInterval(() => { if (!syncTimer.current) fetchCloud(false); }, 15000);
+    const poll = setInterval(() => {
+      // ── Bug 2 proof log: fires on every auto-refresh cycle ──────
+      console.log('[deals-fix] sync poll fired; dealFormOpen=', dealFormOpenRef.current);
+      // Pause the refresh while a deal form is open — never touch unsaved input.
+      if (dealFormOpenRef.current) {
+        console.log('[deals-fix] sync poll SKIPPED — deal form open, preserving unsaved input');
+        return;
+      }
+      if (!syncTimer.current) fetchCloud(false);
+    }, 15000);
     return () => clearInterval(poll);
   }, []);
 
@@ -3573,12 +3599,18 @@ function DealsTab({ data, reload, isMobile, showToast }) {
         })}
       </div>
 
-      {editing && <DealModal deal={editing.deal_id ? editing : null} expenses={data.expenses} onClose={() => setEditing(null)} reload={reload} showToast={showToast} />}
+      {editing && <BooksDealModal deal={editing.deal_id ? editing : null} expenses={data.expenses} onClose={() => setEditing(null)} reload={reload} showToast={showToast} />}
     </div>
   );
 }
 
-function DealModal({ deal, expenses, onClose, reload, showToast }) {
+// Renamed from DealModal → BooksDealModal. There used to be TWO top-level
+// `function DealModal` declarations in this file (this one + the brand-deal
+// Kanban modal far above). Duplicate top-level function declarations made the
+// bundler rebind the `DealModal` identifier to a fresh function object on every
+// render, so the main Deals tab's modal was torn down + rebuilt on every
+// dashboard re-render — wiping anything you typed. Distinct names fix that.
+function BooksDealModal({ deal, expenses, onClose, reload, showToast }) {
   const [form, setForm] = useState({
     deal_id: deal?.deal_id || '',
     brand: deal?.brand || '',
