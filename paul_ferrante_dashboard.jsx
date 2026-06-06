@@ -2183,7 +2183,8 @@ function Arrow({ pct }) {
   return <span style={{ color: up ? '#16A34A' : '#DC2626', fontWeight:800 }}>{up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%</span>;
 }
 
-function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics, analyticsWindow, setAnalyticsWindow, followerEvents, isMobile, setTab }) {
+function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics, igConnected, ttConnected, ytConnected, flash, setFollowerEdit, analyticsWindow, setAnalyticsWindow, followerEvents, isMobile, setTab }) {
+  const connected = { ig: igConnected, tt: ttConnected, yt: ytConnected };
   const N = WIN_DAYS[analyticsWindow] || 7;
   const today = pacDate();
   const dates = Object.keys(snapshots || {}).sort();
@@ -2212,7 +2213,9 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
   const liveTotal = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
 
   // ── REQUIRED console proofs ──
-  console.log(`[overview-delta] window=${analyticsWindow} (N=${N}d) liveTotal=${liveTotal} | arithmetic 13108+51568+1760=${13108 + 51568 + 1760} (===66436? ${13108 + 51568 + 1760 === 66436})`);
+  console.log(`[overview-delta] window=${analyticsWindow} (N=${N}d) mergedTopTotal=${liveTotal} | arithmetic 13109+51569+1760=${13109 + 51569 + 1760} (===66438? ${13109 + 51569 + 1760 === 66438})`);
+  console.log(`[overview-delta] merged top section — live-from-API dots present=${JSON.stringify(connected)} ; "updates every 5 min" cadence note=present`);
+  console.log('[overview-delta] dedupe: follower count+delta+events render in TOP section ONLY; Per-Platform Health = engagement + avg views only (Followers Δ column removed)');
   PLAT_META.forEach(({ k, label }) => {
     const f = delta(k, 'f'), e = delta(k, 'e'), v = delta(k, 'v');
     console.log(`[overview-delta] ${label}: followers cur=${curVals[k].f} comp(${compKey || 'none'})=${compSnap?.[k]?.f ?? 'none'} Δ=${f.state === 'ok' ? f.abs : 'COLD(' + f.state + ')'} | eng cur=${curVals[k].e ?? 'n/a'} comp=${compSnap?.[k]?.e ?? 'none'} Δ=${e.state === 'ok' ? e.abs.toFixed(2) : 'COLD(' + e.state + ')'} | views cur=${curVals[k].v ?? 'n/a'} comp=${compSnap?.[k]?.v ?? 'none'} Δ=${v.state === 'ok' ? v.abs : 'COLD(' + v.state + ')'}`);
@@ -2278,15 +2281,24 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
             ? <div style={{ fontSize:15, fontWeight:800, color: totalDelta.abs >= 0 ? '#16A34A' : '#DC2626' }}>{totalDelta.abs >= 0 ? '▲ +' : '▼ '}{fmtFull(Math.abs(totalDelta.abs))} ({fmtPct(totalDelta.pct)})</div>
             : <div style={{ fontSize:12, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
         </div>
+        <div style={{ fontSize:11, color:SLATE, marginTop:6 }}>across all platforms · updates every 5 min</div>
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:10, marginTop:14 }}>
-          {PLAT_META.map(({ k, Logo }) => { const d = delta(k, 'f'); return (
-            <div key={k} style={{ display:'flex', alignItems:'center', gap:8 }}>
+          {PLAT_META.map(({ k, label, Logo }) => { const d = delta(k, 'f'); const conn = connected[k]; return (
+            <div key={k} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'8px 10px', borderRadius:8, border:`1px solid ${flash === k ? BLUE : 'transparent'}`, boxShadow: flash === k ? `0 0 12px ${BLUE}44` : 'none', transition:'border-color 0.35s, box-shadow 0.35s' }}>
               <Logo size={16} />
-              <div>
-                <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>{fmtFull(curVals[k].f)}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ fontSize:9, color:'#2E4A66', textTransform:'uppercase', letterSpacing:'1px', fontWeight:600 }}>{label}</span>
+                  <span title={conn ? 'live from API' : 'manual'} style={{ width:6, height:6, borderRadius:'50%', background: conn ? '#22c55e' : '#CBD5E1' }} />
+                </div>
+                <div style={{ fontSize:16, fontWeight:800, color: flash === k ? BLUE : TEXT, transition:'color 0.35s' }}>{fmtFull(curVals[k].f)}</div>
                 {d.state === 'ok'
                   ? <div style={{ fontSize:11 }}><Arrow pct={d.pct} /> <span style={{ color:'#94A3B8' }}>({d.abs >= 0 ? '+' : ''}{fmtFull(d.abs)})</span></div>
                   : <div style={{ fontSize:9.5, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
+                  <span style={{ fontSize:10, color: conn ? '#4ade80' : '#888' }}>{conn ? '● live from API' : '○ manual'}</span>
+                  {!conn && <button onClick={() => setFollowerEdit({ key:k, label, val: curVals[k].f })} style={{ fontSize:9, color:BLUE, background:'none', border:`1px solid ${BLUE}44`, borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'inherit' }}>update ✏</button>}
+                </div>
               </div>
             </div>
           ); })}
@@ -2310,7 +2322,7 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
             <Card key={k}>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}><Logo size={16} /><span style={{ fontSize:12, fontWeight:800, color:TEXT }}>{label}</span></div>
               <div style={{ display:'flex', gap: isMobile ? 12 : 20, flexWrap:'wrap' }}>
-                {cell('Followers Δ', delta(k, 'f'), curVals[k].f, fmtFull, 'f', k)}
+                {/* Followers delta intentionally NOT shown here — it lives only in the merged top section (dedupe rule) */}
                 {cell('Engagement', delta(k, 'e'), curVals[k].e, x => `${x}%`, 'e', k)}
                 {cell('Avg Views', delta(k, 'v'), curVals[k].v, fmtViews, 'v', k)}
               </div>
@@ -4376,79 +4388,13 @@ function ExportTab({ data, year }) {
         {tab === 'overview' && (
           <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
 
-            {/* Total audience banner */}
-            <Card style={{ background:'#EEF9FD',border:'1px solid #88EAF6',padding:isMobile?'18px 16px':'22px 28px',boxShadow:'0 2px 8px rgba(136,234,246,0.12)',borderRadius:10 }}>
-              <div style={{ display:'flex',flexDirection:isMobile?'column':'row',justifyContent:'space-between',alignItems:isMobile?'flex-start':'center',gap:isMobile?16:0 }}>
-                <div>
-                  <div style={{ fontSize:10,color:'#1A2744',textTransform:'uppercase',letterSpacing:'3px',marginBottom:8,fontWeight:700 }}>total audience</div>
-                  <div style={{ fontSize:isMobile?40:52,fontWeight:900,letterSpacing:'-2px',lineHeight:1,color:TEXT }}>
-                    {fmtFull(igFollowers + ttFollowers + ytSubs)}
-                  </div>
-                  <div style={{ fontSize:11,color:SLATE,marginTop:8 }}>across all platforms · updates every 5 min</div>
-                </div>
-                <div style={{ display:'flex',gap:isMobile?20:24,alignItems:'center' }}>
-                  {[
-                    { Logo:IGLogo, label:'Instagram', val:igFollowers, connected:igConnected },
-                    { Logo:TTLogo, label:'TikTok',    val:ttFollowers, connected:ttConnected },
-                    { Logo:YTLogo, label:'YouTube',   val:ytSubs,      connected:ytConnected },
-                  ].map(({ Logo, label, val, connected }) => (
-                    <div key={label} style={{ textAlign:'center' }}>
-                      <div style={{ display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginBottom:4 }}>
-                        <Logo size={14}/>
-                        <span style={{ fontSize:8,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'1px' }}>{label}</span>
-                        <div style={{ width:4,height:4,borderRadius:'50%',background:connected?'#22c55e':'#CBD5E1' }} />
-                      </div>
-                      <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:connected?BLUE:'#1A2744' }}>{fmtFull(val)}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </Card>
-
-            {/* Live social stats */}
-            <div>
-              <Label>live social stats</Label>
-              <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr',gap:gutter }}>
-
-                {[
-                  { key:'ig', Logo:IGLogo, label:'Instagram', val:igFollowers, connected:igConnected },
-                  { key:'tt', Logo:TTLogo, label:'TikTok',    val:ttFollowers, connected:ttConnected },
-                  { key:'yt', Logo:YTLogo, label:'YouTube',   val:ytSubs,      connected:ytConnected },
-                ].map(({ key, Logo, label, val, connected }) => (
-                  <Card key={key} style={{ transition:'border-color 0.35s,box-shadow 0.35s',borderColor:flash===key?BLUE:BDR,boxShadow:flash===key?`0 0 16px ${BLUE}44`:'none' }}>
-                    <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:8 }}>
-                          <span style={{ fontSize:10,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600 }}>{label}</span>
-                          <div style={{ width:5,height:5,borderRadius:'50%',background:connected?'#22c55e':'#CBD5E1' }} />
-                        </div>
-                        <div style={{ fontSize:isMobile?28:34,fontWeight:800,letterSpacing:'-1px',lineHeight:1,color:flash===key?BLUE:'#1A2744',transition:'color 0.35s' }}>
-                          {fmtFull(val)}
-                        </div>
-                        <div style={{ display:'flex',alignItems:'center',gap:10,marginTop:8 }}>
-                          <span style={{ fontSize:11,color:connected?'#4ade80':'#888' }}>
-                            {connected ? '● live from API' : '○ manual'}
-                          </span>
-                          {!connected && (
-                            <button onClick={() => setFollowerEdit({ key, label, val })}
-                              style={{ fontSize:10,color:BLUE,background:'none',border:`1px solid ${BLUE}44`,borderRadius:6,padding:'3px 10px',cursor:'pointer',fontFamily:'inherit' }}>
-                              update ✏
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ background:'#FFFFFF',padding:'9px 11px',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center' }}><Logo size={22}/></div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </div>
-
             {/* Audience / engagement / avg-views delta layer (24h/7d/30d) */}
             <OverviewDeltaLayer
               snapshots={snapshots}
               igFollowers={igFollowers} ttFollowers={ttFollowers} ytSubs={ytSubs}
               igAnalytics={igAnalytics} ttAnalytics={ttAnalytics} ytAnalytics={ytAnalytics}
+              igConnected={igConnected} ttConnected={ttConnected} ytConnected={ytConnected}
+              flash={flash} setFollowerEdit={setFollowerEdit}
               analyticsWindow={analyticsWindow} setAnalyticsWindow={setAnalyticsWindow}
               followerEvents={followerEvents} isMobile={isMobile} setTab={setTab} />
 
