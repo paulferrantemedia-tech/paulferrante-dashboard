@@ -442,7 +442,7 @@ function DealModal({ initial, onSave, onDelete, onClose, isMobile }) {
           </div>
           {form.remindDate && (
             <div style={{ fontSize:11,color:YELL,marginTop:10 }}>
-              📧 A reminder will be sent to paulferrante84@gmail.com on {new Date(form.remindDate + 'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+              📧 A reminder will be sent to paulferrantemedia@gmail.com on {new Date(form.remindDate + 'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
             </div>
           )}
         </div>
@@ -2418,7 +2418,11 @@ export default function App() {
     if (form.remindDate && form.nextStep) {
       const today = new Date().toISOString().slice(0,10);
       if (form.remindDate >= today) {
-        fetch('/api/remind', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ brand:form.b, nextStep:form.nextStep, remindDate:form.remindDate, dealValue:form.v }) }).catch(()=>{});
+        // Don't swallow failures silently — surface them so a broken email
+        // pipeline is visible instead of failing into the void.
+        fetch('/api/remind', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ brand:form.b, nextStep:form.nextStep, remindDate:form.remindDate, dealValue:form.v }) })
+          .then(async r => { const d = await r.json().catch(()=>({})); console.log('[remind] save response', r.status, d); if (!r.ok) showToast(`⚠ Reminder NOT sent (${r.status}) — check email setup`); })
+          .catch(e => { console.log('[remind] save error', e); showToast('⚠ Reminder request failed (network)'); });
         showToast(`✓ Saved + reminder set for ${form.remindDate}`);
       } else { showToast(isNew ? 'Deal added!' : 'Deal updated!'); }
     } else { showToast(isNew ? 'Deal added!' : 'Deal updated!'); }
