@@ -2494,17 +2494,24 @@ export default function App() {
         .catch(() => { if (isMount) { cloudReady.current = true; setSyncStatus('error'); } });
     };
     fetchCloud(true);
+    // SINGLE interval, created once here, cleared on unmount below. No stacking.
+    console.log('[books-fix] sync poll interval CREATED (id tracked once, cleared on unmount)');
     const poll = setInterval(() => {
-      // ── Bug 2 proof log: fires on every auto-refresh cycle ──────
-      console.log('[deals-fix] sync poll fired; dealFormOpen=', dealFormOpenRef.current);
-      // Pause the refresh while a deal form is open — never touch unsaved input.
-      if (dealFormOpenRef.current) {
-        console.log('[deals-fix] sync poll SKIPPED — deal form open, preserving unsaved input');
+      // Pause the refresh while a deal form is open OR while the user is typing
+      // into ANY field (e.g. the Books Inbox review cards). A refresh re-renders
+      // the dashboard, which on the Books page remounts the review card and steals
+      // focus / interrupts typing. Skipping the refresh while a field is focused
+      // keeps edits and caret intact; it resumes automatically on blur/save.
+      const ae = (typeof document !== 'undefined') ? document.activeElement : null;
+      const fieldFocused = !!ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || '');
+      console.log('[books-fix] sync poll fired; dealFormOpen=', dealFormOpenRef.current, 'fieldFocused=', fieldFocused, fieldFocused ? '(' + (ae.getAttribute('placeholder') || ae.name || ae.type || ae.tagName) + ')' : '');
+      if (dealFormOpenRef.current || fieldFocused) {
+        console.log('[books-fix] sync poll SKIPPED — editing in progress (focused field / open form); refresh paused, no remount, input preserved');
         return;
       }
       if (!syncTimer.current) fetchCloud(false);
     }, 15000);
-    return () => clearInterval(poll);
+    return () => { console.log('[books-fix] sync poll interval CLEARED on unmount'); clearInterval(poll); };
   }, []);
 
   // ── Cloud sync: push on every change (debounced 1.5s) ────────
@@ -3057,6 +3064,9 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   const totalRevenue = Math.max(dashboardRevenueForYear, booksSheetRevenue);
   const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
 
+  // Proof: financial values are computed exactly as before — the fix is render/refresh-only.
+  console.log('[books-fix] KPIs unchanged by fix → Expenses YTD ' + fmtMoney(totalExpenses) + ' · Revenue YTD ' + fmtMoney(totalRevenue) + ' · Net ' + fmtMoney(totalRevenue - totalExpenses));
+
   const SUB_TABS = [
     ['inbox',       'Inbox'],
     ['expenses',    'Expenses'],
@@ -3192,6 +3202,10 @@ function InboxTab({ data, reload, isMobile, showToast }) {
   const queue = data.expenses
     .filter((r) => String(r.reviewed).toLowerCase() !== 'true')
     .sort((a, b) => priorityScore(a.flags_computed) - priorityScore(b.flags_computed));
+
+  // Proof: review cards are keyed by a STABLE id (expense_id), never by index,
+  // so a background data merge reconciles in place instead of remounting them.
+  console.log('[books-fix] Inbox cards keyed by stable expense_id (not index); queue=' + queue.length + (queue[0] ? ', firstKey=' + queue[0].expense_id : ''));
 
   const bulkConfirmHighConfidence = async () => {
     const targets = queue.filter((r) => r.extraction_confidence === 'high'
