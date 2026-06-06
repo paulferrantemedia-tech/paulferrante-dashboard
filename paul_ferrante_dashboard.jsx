@@ -2979,6 +2979,25 @@ const CATEGORIES = [
 
 const DEAL_STATUSES = ['Pitching','In Discussions','Sold In','Paid'];
 
+// ── Single source of truth for the Inbox "Business purpose" template dropdown ──
+// { group, label, text }. Short label shows in the menu; full text fills the
+// field. Rendered into <optgroup>s. NOT pulled from Notion (live sync out of scope).
+const MEAL_PURPOSE_TEMPLATES = [
+  { group:'Travel meals', label:'Travel meal (solo / day-to-day)', text:'Meal incurred during business travel for content production and creator business activities for RGG Media.' },
+  { group:'Travel meals', label:'Travel meal (filming day)', text:'Meal purchased during business travel for content creation, filming, and audience development activities.' },
+  { group:'Travel meals', label:'Travel meal (full creator ops)', text:'Meal incurred during business travel for content production, brand partnership activities, business development, and creator operations for RGG Media.' },
+  { group:'Networking / business development', label:'Networking / biz dev meal', text:'Business meal related to creator partnerships, networking, brand relationship development, and business growth activities for RGG Media.' },
+  { group:'Client / prospect present', label:'Coffee with brand rep', text:'Coffee meeting with [name] from [Brand] regarding potential content partnership.' },
+  { group:'Client / prospect present', label:'Lunch with prospective partner', text:'Lunch with [name] from [Brand] to discuss sponsorship opportunities and campaign concepts.' },
+  { group:'Client / prospect present', label:'Dinner with agency rep', text:'Dinner with [name] from [Agency] regarding creator campaign opportunities.' },
+];
+const TEMPLATE_GROUPS = [...new Set(MEAL_PURPOSE_TEMPLATES.map(t => t.group))]; // preserve order, one source
+
+// PHASE 0 proof (runs once on load):
+console.log('[books-template] PHASE0 draft path: per-card draft keyed by ("books_draft_"+expense_id) in sessionStorage; card inputs read from `edit` state; setEdit() writes draft+state. The template dropdown writes business_purpose via this SAME setEdit path (no clobber on refresh).');
+console.log('[books-template] PHASE0 Business Purpose binding: <input value={edit.business_purpose} onChange={e=>setEdit({...edit, business_purpose:e.target.value})}/> (now also has a ref for placeholder selection).');
+console.log('[books-template] config MEAL_PURPOSE_TEMPLATES length=' + MEAL_PURPOSE_TEMPLATES.length + ' groups=' + JSON.stringify(TEMPLATE_GROUPS) + ' labels=' + JSON.stringify(MEAL_PURPOSE_TEMPLATES.map(t => t.label)));
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function booksApi(action, opts = {}) {
   const { method = 'GET', body, query = {} } = opts;
@@ -3275,6 +3294,37 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
   const [saving, setSaving] = useState(false);
   const flags = row.flags_computed || [];
 
+  // ── Business-purpose template fill (writes through the per-card draft path) ──
+  const bpRef = useRef(null);
+  const _id8 = (row.expense_id || '').slice(0, 8);
+  useEffect(() => {
+    console.log('[books-template] dropdown rendered on Inbox card ' + _id8 + ' with ' + MEAL_PURPOSE_TEMPLATES.length + ' templates');
+  }, []);
+  const fillTemplate = (idxStr) => {
+    if (idxStr === '' || idxStr == null) return;
+    const tpl = MEAL_PURPOSE_TEMPLATES[Number(idxStr)];
+    if (!tpl) return;
+    // Same draft path the refresh fix uses — keyed by THIS card's expense_id only.
+    setEdit({ ...edit, business_purpose: tpl.text });
+    console.log('[books-template] fill card ' + _id8 + ' business_purpose <- "' + tpl.text + '"');
+    console.log('[books-template] dropdown reset to "Select a template…" after fill (card ' + _id8 + ')');
+    // Placeholder assist: select the first [bracketed] token so typing replaces it.
+    const m = tpl.text.match(/\[[^\]]*\]/);
+    setTimeout(() => {
+      const el = bpRef.current;
+      if (!el) return;
+      el.focus();
+      if (m) {
+        el.setSelectionRange(m.index, m.index + m[0].length);
+        console.log('[books-template] placeholder selected on card ' + _id8 + ' token=' + m[0] + ' range=[' + m.index + ',' + (m.index + m[0].length) + ']');
+      } else {
+        const len = tpl.text.length;
+        el.setSelectionRange(len, len);
+        console.log('[books-template] no placeholder on card ' + _id8 + '; caret at end (' + len + ')');
+      }
+    }, 0);
+  };
+
   const confirm = async () => {
     setSaving(true);
     try {
@@ -3369,8 +3419,21 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
           </div>
         )}
 
+        {/* Template dropdown — fills Business purpose via this card's draft state.
+            value is pinned to "" so it reads as an action and resets after each fill. */}
+        <div style={{ marginBottom:6 }}>
+          <select value="" onChange={(e) => fillTemplate(e.target.value)} style={{ ...inputStyle, cursor:'pointer' }} aria-label="Business purpose template">
+            <option value="">Select a template…</option>
+            {TEMPLATE_GROUPS.map((g) => (
+              <optgroup key={g} label={g}>
+                {MEAL_PURPOSE_TEMPLATES.map((t, i) => (t.group === g ? <option key={i} value={i}>{t.label}</option> : null))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+
         <Field label="Business purpose (required for audit)">
-          <input style={inputStyle} placeholder="e.g. Travel for sponsored Airbnb shoot — Tokyo Hotels deal"
+          <input ref={bpRef} style={inputStyle} placeholder="e.g. Travel for sponsored Airbnb shoot — Tokyo Hotels deal"
             value={edit.business_purpose} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
         </Field>
 
