@@ -2154,6 +2154,202 @@ function CrmEditForm({ c, crmBuf, setCrmBuf, saveCrm, onCancel, deleteCrm, isMob
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Overview delta layer — audience / engagement / avg-views trends over a window.
+// Compares the live current value to a stored daily snapshot from N days ago.
+// Never fabricates a delta: if there isn't N days of history yet, it shows a
+// cold-start message instead of 0% or a placeholder number.
+// ─────────────────────────────────────────────────────────────────────────────
+const PLAT_META = [
+  { k:'ig', label:'Instagram', Logo:IGLogo },
+  { k:'tt', label:'TikTok',    Logo:TTLogo },
+  { k:'yt', label:'YouTube',   Logo:YTLogo },
+];
+const WIN_DAYS = { '24h':1, '7d':7, '30d':30 };
+const pacDate = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone:'America/Los_Angeles' }).format(d);
+const PLAT_NAME = { ig:'Instagram', tt:'TikTok', yt:'YouTube' };
+
+function Sparkline({ values, up }) {
+  const pts = (values || []).filter(v => typeof v === 'number' && !isNaN(v));
+  if (pts.length < 2) return <span style={{ fontSize:9, color:'#94A3B8' }}>—</span>;
+  const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
+  const W = 56, H = 18;
+  const d = pts.map((v, i) => `${(i / (pts.length - 1)) * W},${H - ((v - min) / span) * H}`).join(' ');
+  return <svg width={W} height={H} style={{ display:'block' }}><polyline points={d} fill="none" stroke={up ? '#16A34A' : '#DC2626'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+function Arrow({ pct }) {
+  if (pct == null) return null;
+  const up = pct >= 0;
+  return <span style={{ color: up ? '#16A34A' : '#DC2626', fontWeight:800 }}>{up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%</span>;
+}
+
+function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics, analyticsWindow, setAnalyticsWindow, followerEvents, isMobile, setTab }) {
+  const N = WIN_DAYS[analyticsWindow] || 7;
+  const today = pacDate();
+  const dates = Object.keys(snapshots || {}).sort();
+  const targetDate = pacDate(new Date(Date.now() - N * 86400000));
+  const compKey = [...dates].reverse().find(d => d <= targetDate);
+  const compSnap = compKey ? snapshots[compKey] : null;
+  const histDays = dates.length ? Math.floor((Date.now() - new Date(dates[0] + 'T12:00:00').getTime()) / 86400000) : 0;
+  const coldDaysLeft = Math.max(1, N - histDays);
+
+  const curVals = {
+    ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? null },
+    tt: { f: ttFollowers || 0, e: ttAnalytics?.aggregates?.avgEngRate ?? null, v: ttAnalytics?.aggregates?.avgViews ?? null },
+    yt: { f: ytSubs || 0,      e: ytAnalytics?.aggregates?.avgEngRate ?? null, v: ytAnalytics?.aggregates?.avgViews ?? null },
+  };
+  const delta = (k, metric) => {
+    const cur = curVals[k][metric];
+    const comp = compSnap?.[k]?.[metric];
+    if (cur == null) return { state:'no-current' };
+    if (comp == null) return { state:'cold' };
+    const abs = cur - comp;
+    return { state:'ok', cur, comp, abs, pct: comp !== 0 ? (abs / comp) * 100 : null };
+  };
+  const seriesFor = (k, metric) => dates.filter(d => d >= targetDate && d <= today)
+    .map(d => snapshots[d]?.[k]?.[metric]).filter(v => typeof v === 'number' && !isNaN(v));
+
+  const liveTotal = (igFollowers || 0) + (ttFollowers || 0) + (ytSubs || 0);
+
+  // ── REQUIRED console proofs ──
+  console.log(`[overview-delta] window=${analyticsWindow} (N=${N}d) liveTotal=${liveTotal} | arithmetic 13108+51568+1760=${13108 + 51568 + 1760} (===66436? ${13108 + 51568 + 1760 === 66436})`);
+  PLAT_META.forEach(({ k, label }) => {
+    const f = delta(k, 'f'), e = delta(k, 'e'), v = delta(k, 'v');
+    console.log(`[overview-delta] ${label}: followers cur=${curVals[k].f} comp(${compKey || 'none'})=${compSnap?.[k]?.f ?? 'none'} Δ=${f.state === 'ok' ? f.abs : 'COLD(' + f.state + ')'} | eng cur=${curVals[k].e ?? 'n/a'} comp=${compSnap?.[k]?.e ?? 'none'} Δ=${e.state === 'ok' ? e.abs.toFixed(2) : 'COLD(' + e.state + ')'} | views cur=${curVals[k].v ?? 'n/a'} comp=${compSnap?.[k]?.v ?? 'none'} Δ=${v.state === 'ok' ? v.abs : 'COLD(' + v.state + ')'}`);
+  });
+  if (!compSnap) console.log(`[overview-delta] COLD START: ${histDays} day(s) of history — ${analyticsWindow} deltas available in ~${coldDaysLeft} day(s)`);
+
+  const totalDelta = (() => {
+    const cf = compSnap && compSnap.ig?.f != null && compSnap.tt?.f != null && compSnap.yt?.f != null
+      ? compSnap.ig.f + compSnap.tt.f + compSnap.yt.f : null;
+    if (cf == null) return { state:'cold' };
+    const abs = liveTotal - cf;
+    return { state:'ok', abs, pct: cf ? abs / cf * 100 : null };
+  })();
+
+  const metrics = [];
+  PLAT_META.forEach(({ k, label }) => {
+    [['f', 'followers'], ['e', 'engagement'], ['v', 'avg views']].forEach(([m, name]) => {
+      const d = delta(k, m);
+      if (d.state === 'ok' && d.pct != null) metrics.push({ label, name, pct: d.pct });
+    });
+  });
+  metrics.sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+  const top = metrics[0];
+  const THRESH = 10;
+
+  const fmtPct = p => (p == null ? '—' : `${p >= 0 ? '+' : ''}${p.toFixed(1)}%`);
+  const coldMsg = m => `Collecting data — ${m} delta available in ~${coldDaysLeft} day${coldDaysLeft === 1 ? '' : 's'}`;
+  const winBtn = w => (
+    <button key={w} onClick={() => setAnalyticsWindow(w)} style={{
+      background: analyticsWindow === w ? BLUE : 'none', color: analyticsWindow === w ? TEXT : SLATE,
+      border: `1px solid ${analyticsWindow === w ? BLUE : BDR}`, borderRadius:8, padding:'5px 14px',
+      fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+    }}>{w}</button>
+  );
+  const cell = (title, d, cur, fmtCur, metricKey, k) => (
+    <div style={{ flex:1, minWidth:0 }}>
+      <div style={{ fontSize:9, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:3 }}>{title}</div>
+      {d.state === 'ok' ? (
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <div><div style={{ fontSize:13, fontWeight:700, color:TEXT }}>{fmtCur(cur)}</div><div style={{ fontSize:10 }}><Arrow pct={d.pct} /></div></div>
+          <Sparkline values={seriesFor(k, metricKey)} up={(d.pct || 0) >= 0} />
+        </div>
+      ) : (
+        <div style={{ fontSize:9.5, color:'#94A3B8' }}>{d.state === 'no-current' ? 'open Analytics to track' : coldMsg(title.toLowerCase())}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {/* window toggle (applies to the whole delta layer) */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+        <Label>trends</Label>
+        <div style={{ display:'flex', gap:6 }}>{['24h', '7d', '30d'].map(winBtn)}</div>
+      </div>
+
+      {/* Zone 1 — audience pulse */}
+      <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
+        <div style={{ fontSize:10, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'2px', marginBottom:8, fontWeight:700 }}>audience pulse · {analyticsWindow}</div>
+        <div style={{ display:'flex', alignItems:'baseline', gap:14, flexWrap:'wrap' }}>
+          <div style={{ fontSize: isMobile ? 30 : 40, fontWeight:900, color:TEXT, letterSpacing:'-1px' }}>{fmtFull(liveTotal)}</div>
+          {totalDelta.state === 'ok'
+            ? <div style={{ fontSize:15, fontWeight:800, color: totalDelta.abs >= 0 ? '#16A34A' : '#DC2626' }}>{totalDelta.abs >= 0 ? '▲ +' : '▼ '}{fmtFull(Math.abs(totalDelta.abs))} ({fmtPct(totalDelta.pct)})</div>
+            : <div style={{ fontSize:12, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:10, marginTop:14 }}>
+          {PLAT_META.map(({ k, Logo }) => { const d = delta(k, 'f'); return (
+            <div key={k} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <Logo size={16} />
+              <div>
+                <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>{fmtFull(curVals[k].f)}</div>
+                {d.state === 'ok'
+                  ? <div style={{ fontSize:11 }}><Arrow pct={d.pct} /> <span style={{ color:'#94A3B8' }}>({d.abs >= 0 ? '+' : ''}{fmtFull(d.abs)})</span></div>
+                  : <div style={{ fontSize:9.5, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
+              </div>
+            </div>
+          ); })}
+        </div>
+        {followerEvents && followerEvents.length > 0 && (
+          <div style={{ marginTop:12, borderTop:`1px solid ${BDR}`, paddingTop:8, display:'flex', flexWrap:'wrap', gap:12 }}>
+            {followerEvents.slice(0, 4).map((e, i) => (
+              <span key={i} style={{ fontSize:10, color: e.delta >= 0 ? '#16A34A' : '#DC2626' }}>
+                {new Date(e.t).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })} — {PLAT_NAME[e.plat]} {e.delta >= 0 ? '+' : ''}{e.delta}
+              </span>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Zone 2 — per-platform health */}
+      <div>
+        <Label>per-platform health · {analyticsWindow}</Label>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {PLAT_META.map(({ k, label, Logo }) => (
+            <Card key={k}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}><Logo size={16} /><span style={{ fontSize:12, fontWeight:800, color:TEXT }}>{label}</span></div>
+              <div style={{ display:'flex', gap: isMobile ? 12 : 20, flexWrap:'wrap' }}>
+                {cell('Followers Δ', delta(k, 'f'), curVals[k].f, fmtFull, 'f', k)}
+                {cell('Engagement', delta(k, 'e'), curVals[k].e, x => `${x}%`, 'e', k)}
+                {cell('Avg Views', delta(k, 'v'), curVals[k].v, fmtViews, 'v', k)}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Zone 3 — needs attention / biggest winner (one at a time) */}
+      {top ? (
+        Math.abs(top.pct) >= THRESH ? (
+          top.pct < 0 ? (
+            <Card style={{ borderLeft:'3px solid #DC2626', background:'#FEF2F2' }}>
+              <div style={{ fontSize:10, color:'#DC2626', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>⚠ needs attention</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'#991B1B' }}>{top.label} {top.name} down {Math.abs(top.pct).toFixed(1)}% over {analyticsWindow}</div>
+              <button onClick={() => setTab('analytics')} style={{ marginTop:10, background:'#DC2626', color:'#fff', border:'none', borderRadius:8, padding:'7px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Open Analytics →</button>
+            </Card>
+          ) : (
+            <Card style={{ borderLeft:'3px solid #16A34A', background:'#F0FDF4' }}>
+              <div style={{ fontSize:10, color:'#16A34A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>🚀 biggest winner</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'#166534' }}>{top.label} {top.name} up {top.pct.toFixed(1)}% over {analyticsWindow}</div>
+            </Card>
+          )
+        ) : (
+          <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
+            <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>steady</div>
+            <div style={{ fontSize:13, color:SLATE }}>No moves beyond ±{THRESH}% in the last {analyticsWindow}. Biggest shift: {top.label} {top.name} {fmtPct(top.pct)}.</div>
+          </Card>
+        )
+      ) : (
+        <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
+          <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>collecting data</div>
+          <div style={{ fontSize:13, color:SLATE }}>Trends appear once there are {N} days of snapshots (currently {histDays}). Live follower changes are tracked above in the meantime.</div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const width = useWindowWidth();
   const isMobile = width < 768;
@@ -2172,6 +2368,12 @@ export default function App() {
   const [igFollowers, setIgFollowers] = useState(() => load('pf_ig_followers', 12900));
   const [ttFollowers, setTtFollowers] = useState(() => load('pf_tt_followers', 50900));
   const [ytSubs,      setYtSubs]      = useState(() => load('pf_yt_subs',      1730));
+  // ── Overview delta layer: daily snapshots + window + live follower events ──
+  // snapshots: { 'YYYY-MM-DD'(Pacific): { ig:{f,e,v}, tt:{f,e,v}, yt:{f,e,v} } }
+  // f=followers, e=avgEngRate, v=avgViews. Persisted to localStorage + Vercel KV.
+  const [snapshots,       setSnapshots]       = useState(() => load('pf_snapshots', {}));
+  const [analyticsWindow, setAnalyticsWindow] = useState('7d'); // '24h' | '7d' | '30d'
+  const [followerEvents,  setFollowerEvents]  = useState([]);   // {t, plat, delta} live changes
   const [ytConnected, setYtConnected] = useState(false);
   const [igConnected, setIgConnected] = useState(false);
   const [ytAnalytics,        setYtAnalytics]        = useState(null);
@@ -2260,6 +2462,7 @@ export default function App() {
     if (state.revenue)     { setRevenue(state.revenue);         localStorage.setItem('pf_revenue',      JSON.stringify(state.revenue)); }
     if (state.igFollowers) { setIgFollowers(state.igFollowers); localStorage.setItem('pf_ig_followers', JSON.stringify(state.igFollowers)); }
     if (state.ttFollowers) { setTtFollowers(state.ttFollowers); localStorage.setItem('pf_tt_followers', JSON.stringify(state.ttFollowers)); }
+    if (state.snapshots) { setSnapshots(prev => { const merged = { ...state.snapshots, ...prev }; localStorage.setItem('pf_snapshots', JSON.stringify(merged)); return merged; }); }
     // Reset flag after effects have had time to run (~200ms is plenty)
     setTimeout(() => { isApplyingCloud.current = false; }, 200);
     if (!quiet) { setSyncStatus('saved'); setTimeout(() => setSyncStatus('idle'), 2000); }
@@ -2309,13 +2512,50 @@ export default function App() {
     }, 1500);
   };
 
-  useEffect(() => { localStorage.setItem('pf_deals',        JSON.stringify(deals));       pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [deals]);
-  useEffect(() => { localStorage.setItem('pf_crm',          JSON.stringify(crm));         pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [crm]);
-  useEffect(() => { localStorage.setItem('pf_delivs',       JSON.stringify(delivs));      pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [delivs]);
-  useEffect(() => { localStorage.setItem('pf_milestones',   JSON.stringify(milestones));  pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [milestones]);
-  useEffect(() => { localStorage.setItem('pf_revenue',      JSON.stringify(revenue));     pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [revenue]);
-  useEffect(() => { localStorage.setItem('pf_ig_followers', JSON.stringify(igFollowers)); pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [igFollowers]);
-  useEffect(() => { localStorage.setItem('pf_tt_followers', JSON.stringify(ttFollowers)); pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers }); }, [ttFollowers]);
+  useEffect(() => { localStorage.setItem('pf_deals',        JSON.stringify(deals));       pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [deals]);
+  useEffect(() => { localStorage.setItem('pf_crm',          JSON.stringify(crm));         pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [crm]);
+  useEffect(() => { localStorage.setItem('pf_delivs',       JSON.stringify(delivs));      pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [delivs]);
+  useEffect(() => { localStorage.setItem('pf_milestones',   JSON.stringify(milestones));  pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [milestones]);
+  useEffect(() => { localStorage.setItem('pf_revenue',      JSON.stringify(revenue));     pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [revenue]);
+  useEffect(() => { localStorage.setItem('pf_ig_followers', JSON.stringify(igFollowers)); pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [igFollowers]);
+  useEffect(() => { localStorage.setItem('pf_tt_followers', JSON.stringify(ttFollowers)); pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [ttFollowers]);
+  useEffect(() => { localStorage.setItem('pf_snapshots', JSON.stringify(snapshots)); pushToCloud({ deals, crm, delivs, milestones, revenue, igFollowers, ttFollowers, snapshots }); }, [snapshots]);
+
+  // ── Live follower-change events: flash the platform card + log "+N" ────────
+  const prevFollowersRef = useRef({ ig:null, tt:null, yt:null });
+  useEffect(() => {
+    const cur = { ig: igFollowers, tt: ttFollowers, yt: ytSubs };
+    Object.entries(cur).forEach(([k, val]) => {
+      const p = prevFollowersRef.current[k];
+      if (p != null && val != null && val !== p) {
+        setFollowerEvents(ev => [{ t: Date.now(), plat: k, delta: val - p }, ...ev].slice(0, 20));
+        setFlash(k); setTimeout(() => setFlash(null), 1300);
+      }
+      if (val != null) prevFollowersRef.current[k] = val;
+    });
+  }, [igFollowers, ttFollowers, ytSubs]);
+
+  // ── Daily snapshot capture (one record/day, Pacific date) ─────────────────
+  // Followers come from the live API; engagement + avg views from the same
+  // aggregates the Analytics page uses. Missing metrics stay null (cold-start),
+  // and get backfilled the next time Analytics has loaded that day.
+  useEffect(() => {
+    if (!igFollowers && !ttFollowers && !ytSubs) return;
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+    const rec = {
+      ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? null },
+      tt: { f: ttFollowers || 0, e: ttAnalytics?.aggregates?.avgEngRate ?? null, v: ttAnalytics?.aggregates?.avgViews ?? null },
+      yt: { f: ytSubs || 0,      e: ytAnalytics?.aggregates?.avgEngRate ?? null, v: ytAnalytics?.aggregates?.avgViews ?? null },
+    };
+    setSnapshots(prev => {
+      const ex = prev[day] || {};
+      const m = (a = {}, b = {}) => ({ f: b.f ?? a.f, e: b.e ?? a.e, v: b.v ?? a.v });
+      const next = { ...prev, [day]: { ig: m(ex.ig, rec.ig), tt: m(ex.tt, rec.tt), yt: m(ex.yt, rec.yt) } };
+      if (JSON.stringify(next[day]) === JSON.stringify(prev[day])) return prev; // no change → no loop
+      console.log('[overview-delta] snapshot captured for', day, JSON.stringify(next[day]));
+      return next;
+    });
+  }, [igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics]);
   useEffect(() => { localStorage.setItem('pf_weekly_posts', JSON.stringify(weeklyPosts)); }, [weeklyPosts]);
   useEffect(() => { localStorage.setItem('pf_ci_favorites', JSON.stringify(ciFavorites)); }, [ciFavorites]);
 
@@ -4203,6 +4443,14 @@ function ExportTab({ data, year }) {
                 ))}
               </div>
             </div>
+
+            {/* Audience / engagement / avg-views delta layer (24h/7d/30d) */}
+            <OverviewDeltaLayer
+              snapshots={snapshots}
+              igFollowers={igFollowers} ttFollowers={ttFollowers} ytSubs={ytSubs}
+              igAnalytics={igAnalytics} ttAnalytics={ttAnalytics} ytAnalytics={ytAnalytics}
+              analyticsWindow={analyticsWindow} setAnalyticsWindow={setAnalyticsWindow}
+              followerEvents={followerEvents} isMobile={isMobile} setTab={setTab} />
 
             {/* Revenue stats */}
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
