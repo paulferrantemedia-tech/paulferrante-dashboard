@@ -943,7 +943,7 @@ async function handleBooksDiag(req, res) {
           .map((r) => ({ id: (r.expense_id || '').slice(0, 8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed })),
         // Phase 0 #2 — duplication:
         duplicateGroupCount: dups.length,
-        duplicateExtraRecords,
+        duplicateExtraRecords: dupExtraRecords,
         duplicateExtraDollars: dupExtraDollars.toFixed(2),
         duplicateGroups: dups.slice(0, 40),
         // Phase 0 #6 — what the total would be with duplicate extras removed:
