@@ -3226,6 +3226,43 @@ function InboxTab({ data, reload, isMobile, showToast }) {
   // so a background data merge reconciles in place instead of remounting them.
   console.log('[books-fix] Inbox cards keyed by stable expense_id (not index); queue=' + queue.length + (queue[0] ? ', firstKey=' + queue[0].expense_id : ''));
 
+  // ── Backlog importer: pull receipts stuck in the Drive inbox, one per request
+  // (Hobby's 10s function cap), looping in the browser until the inbox is empty.
+  // The endpoint is duplicate-safe: relinks already-booked receipts (no total
+  // change) and adds only genuinely new ones.
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+  const runBacklogImport = async () => {
+    if (importing) return;
+    setImporting(true); setImportMsg('Starting…');
+    let relinked = 0, added = 0, guard = 0;
+    try {
+      while (guard++ < 80) {
+        let j;
+        try {
+          const r = await fetch('/api/sync?action=process-inbox&commit=1&limit=1&secret=pf_secret_2026&t=' + Date.now(), { cache: 'no-store' });
+          if (!r.ok) { setImportMsg(`Paused (a receipt took too long to scan). Relinked ${relinked}, added ${added}. Click again to continue.`); break; }
+          j = await r.json();
+        } catch (e) { setImportMsg(`Paused: ${e.message}. Click again to continue.`); break; }
+        const s = j.summary || {};
+        relinked += s.relinked || 0; added += s.added_new || 0;
+        setImportMsg(`Working… relinked ${relinked}, added ${added} new — ${j.remainingAfterThisCall} left`);
+        if (!j.processedThisCall || j.remainingAfterThisCall <= 0) { setImportMsg(`Done. Relinked ${relinked} existing receipt(s), added ${added} new.`); break; }
+      }
+    } catch (e) { setImportMsg('Stopped: ' + e.message); }
+    setImporting(false);
+    reload();
+  };
+  const importBtn = (
+    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+      <button onClick={runBacklogImport} disabled={importing}
+        style={{ background: importing ? BOOKS.surface : BOOKS.ink, color: importing ? BOOKS.ink : '#FFFFFF', border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor: importing ? 'wait' : 'pointer', fontFamily:'inherit' }}>
+        {importing ? 'Importing…' : '⬇ Pull in receipt backlog'}
+      </button>
+      {importMsg && <span style={{ fontSize:12, color:BOOKS.muted }}>{importMsg}</span>}
+    </div>
+  );
+
   const bulkConfirmHighConfidence = async () => {
     const targets = queue.filter((r) => r.extraction_confidence === 'high'
       && (r.flags_computed || []).every((f) => f === 'auto_link_pending' || f === 'vendor_unknown'));
@@ -3245,8 +3282,12 @@ function InboxTab({ data, reload, isMobile, showToast }) {
 
   if (queue.length === 0) {
     return (
-      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:'40px 24px', textAlign:'center' }}>
-        <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
+      <div>
+        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>{importBtn}</div>
+        <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:'40px 24px', textAlign:'center' }}>
+          <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
+          <div style={{ fontSize:12, color:BOOKS.muted, marginTop:6 }}>If receipts are sitting in your Drive folder, use “Pull in receipt backlog” above.</div>
+        </div>
       </div>
     );
   }
@@ -3257,10 +3298,13 @@ function InboxTab({ data, reload, isMobile, showToast }) {
         <div style={{ fontSize:13, color:BOOKS.muted }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} need{queue.length === 1 ? 's' : ''} review · sorted by priority
         </div>
-        <button onClick={bulkConfirmHighConfidence}
-          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
-          Confirm all high-confidence in view
-        </button>
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+          {importBtn}
+          <button onClick={bulkConfirmHighConfidence}
+            style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+            Confirm all high-confidence in view
+          </button>
+        </div>
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
