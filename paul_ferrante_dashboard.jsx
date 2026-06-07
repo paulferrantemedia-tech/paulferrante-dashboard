@@ -3405,6 +3405,21 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
     setSaving(false);
   };
 
+  // Delete this entry from the books (for duplicates / junk scans). Removes the
+  // row via the existing delete-expense action; user confirms first.
+  const deleteEntry = async () => {
+    const label = `${row.vendor || '(no vendor)'} ${row.amount ? ('· $' + row.amount) : ''} ${row.date || ''}`.trim();
+    if (!window.confirm(`Delete this entry from your books?\n\n${label}\n\nUse this for duplicates or blank/junk scans. This removes the row (and adjusts your totals).`)) return;
+    setSaving(true);
+    try {
+      await booksApi('delete-expense', { method: 'POST', body: { expense_id: row.expense_id } });
+      try { if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(_draftKey); } catch (_) {}
+      showToast && showToast('Deleted');
+      reload();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+    setSaving(false);
+  };
+
   // ── Linked Deal dropdown: current, post-pitch deals within the last 60 days ──
   // Source = the Books deal pipeline (data.deals; statuses use DEAL_STATUSES).
   // Include stages PAST "Pitching" (In Discussions / Sold In / Paid); exclude
@@ -3535,6 +3550,10 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
           <button onClick={confirm} disabled={saving}
             style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 16px', fontSize:12, fontWeight:700, cursor: saving?'wait':'pointer', fontFamily:'inherit', opacity: saving?0.6:1 }}>
             {saving ? 'Saving…' : '✓ Confirm & mark reviewed'}
+          </button>
+          <button onClick={deleteEntry} disabled={saving} title="Delete this entry (duplicates / junk scans)"
+            style={{ background:'none', color:'#DC2626', border:'1px solid #DC262644', borderRadius:8, padding:'8px 12px', fontSize:12, fontWeight:600, cursor: saving?'wait':'pointer', fontFamily:'inherit' }}>
+            🗑 Delete
           </button>
           <div style={{ flex:1 }} />
           <div style={{ alignSelf:'center', fontSize:10, color:BOOKS.muted, fontFamily:'monospace' }}>
