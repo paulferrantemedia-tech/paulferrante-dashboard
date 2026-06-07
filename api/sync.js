@@ -638,7 +638,7 @@ async function handleProcessInbox(req, res) {
   if (!sheetId || !inboxId || !processedId || !failedId) return res.status(500).json({ error: 'Books env vars missing' });
 
   const dryRun = String(req.query.commit || '') !== '1';
-  const limit = Math.max(1, Math.min(8, parseInt(req.query.limit || '5', 10) || 5));
+  const limit = Math.max(1, Math.min(8, parseInt(req.query.limit || '1', 10) || 1));
 
   let token;
   try { token = await getGoogleAccessToken(); }
