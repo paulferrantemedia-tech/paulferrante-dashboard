@@ -917,20 +917,37 @@ async function handleBooksDiag(req, res) {
     if (eVals) {
       const exps = rowsToObjects(eVals).filter((r) => r.expense_id);
       const withUrl = exps.filter((r) => r.receipt_url && String(r.receipt_url).trim());
+      const num = (r) => Number(r.amount) || 0;
+      const curYear = String(new Date().getFullYear());
+      const yearRows = exps.filter((r) => r.date && String(r.date).startsWith(curYear));
+      const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      // duplicate groups by vendor + date + amount (2dp)
+      const dgroups = {};
+      exps.forEach((r) => { const k = norm(r.vendor) + '|' + (r.date || '') + '|' + num(r).toFixed(2); (dgroups[k] = dgroups[k] || []).push(r); });
+      const dups = Object.entries(dgroups).filter(([, rows]) => rows.length > 1)
+        .map(([k, rows]) => ({ vendor: rows[0].vendor, date: rows[0].date, amount: num(rows[0]).toFixed(2), count: rows.length, ids: rows.map((r) => (r.expense_id || '').slice(0, 8)) }))
+        .sort((a, b) => b.count - a.count);
+      const dupExtraRecords = dups.reduce((s, g) => s + (g.count - 1), 0);
+      const dupExtraDollars = dups.reduce((s, g) => s + (g.count - 1) * Number(g.amount), 0);
+      const totalAll = exps.reduce((s, r) => s + num(r), 0);
+      const totalYear = yearRows.reduce((s, r) => s + num(r), 0);
       out.receipts = {
         totalExpenseRows: exps.length,
+        currentYearRows: yearRows.length,
         withReceiptUrl: withUrl.length,
-        withoutReceiptUrl: exps.length - withUrl.length,
-        unreviewedTotal: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true').length,
-        unreviewedWithReceipt: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true' && r.receipt_url && String(r.receipt_url).trim()).length,
-        expensesYtdTotal: exps.reduce((sm, r) => sm + (Number(r.amount) || 0), 0).toFixed(2),
-        possibleDuplicates: (() => {
-          const groups = {};
-          exps.forEach((r) => { const k = (r.date||'') + '|' + (Number(r.amount)||0).toFixed(2); (groups[k] = groups[k] || []).push(r); });
-          return Object.entries(groups).filter(([, rows]) => rows.length > 1)
-            .map(([k, rows]) => ({ key: k, count: rows.length, vendors: rows.map((r) => r.vendor), ids: rows.map((r) => (r.expense_id||'').slice(0,8)) }));
-        })(),
-        allRecords: exps.map((r) => ({ id: (r.expense_id||'').slice(0,8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed, linked: !!(r.receipt_url && String(r.receipt_url).trim()) })),
+        // The two ways totals can be computed:
+        expensesTotal_allRows: totalAll.toFixed(2),
+        expensesYTD_currentYearOnly: totalYear.toFixed(2),   // this is what the dashboard shows
+        // Phase 0 #3 — biggest records (look for parse errors / implausible amounts):
+        top20ByAmount: [...exps].sort((a, b) => num(b) - num(a)).slice(0, 20)
+          .map((r) => ({ id: (r.expense_id || '').slice(0, 8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed })),
+        // Phase 0 #2 — duplication:
+        duplicateGroupCount: dups.length,
+        duplicateExtraRecords,
+        duplicateExtraDollars: dupExtraDollars.toFixed(2),
+        duplicateGroups: dups.slice(0, 40),
+        // Phase 0 #6 — what the total would be with duplicate extras removed:
+        projectedTotalAfterDedup: (totalYear - dupExtraDollars).toFixed(2),
       };
     }
   } catch (e) { out.lastSync = { error: e.message }; }
