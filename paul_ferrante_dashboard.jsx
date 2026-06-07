@@ -2999,6 +2999,11 @@ const MEAL_PURPOSE_TEMPLATES = [
   { group:'Production & growth', label:'Advertising / promotion', text:'Advertising and promotion expense supporting RGG Media content and audience growth.' },
   { group:'Production & growth', label:'Professional services', text:'Professional services supporting RGG Media business operations, compliance, and administration.' },
   { group:'General', label:'General business expense', text:'Ordinary and necessary business expense incurred for creator business operations for RGG Media.' },
+  { group:'Travel transport & lodging', label:'Flights / airfare', text:'Airfare for business travel related to content production, filming, and creator business operations for RGG Media.' },
+  { group:'Travel transport & lodging', label:'Ground transport (taxi / rideshare / transit)', text:'Ground transportation during business travel for content production and creator business operations for RGG Media.' },
+  { group:'Travel transport & lodging', label:'Rental car / fuel', text:'Vehicle rental or fuel for business travel related to content production and creator business operations for RGG Media.' },
+  { group:'Travel transport & lodging', label:'Hotel / lodging', text:'Lodging during business travel for content production, filming, and creator business operations for RGG Media.' },
+  { group:'Travel transport & lodging', label:'Other travel (baggage / parking / tolls)', text:'Travel-related expense incurred during business travel for content production and creator business operations for RGG Media.' },
 ];
 const TEMPLATE_GROUPS = [...new Set(MEAL_PURPOSE_TEMPLATES.map(t => t.group))]; // preserve order, one source
 
