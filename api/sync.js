@@ -95,6 +95,10 @@ async function getGoogleAccessToken() {
 // ─────────────────────────────────────────────────────────────
 // Sheets helpers
 // ─────────────────────────────────────────────────────────────
+// Drive folder IDs are sometimes pasted from a browser URL with trailing junk
+// like "<id>?dmr=1&ec=...". Strip anything after the id so lookups don't 404.
+function cleanDriveId(x) { return String(x || '').replace(/[?#&].*$/, '').trim(); }
+
 async function sheetsGet(token, sheetId, range) {
   const r = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
@@ -464,9 +468,9 @@ async function handleProcessReceipt(req, res) {
   if (!fileId) return res.status(400).json({ error: 'fileId required' });
 
   const sheetId = process.env.GOOGLE_SHEETS_ID;
-  const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
-  const processedId = process.env.GOOGLE_DRIVE_PROCESSED_ID;
-  const failedId = process.env.GOOGLE_DRIVE_FAILED_ID;
+  const inboxId = cleanDriveId(process.env.GOOGLE_DRIVE_INBOX_ID);
+  const processedId = cleanDriveId(process.env.GOOGLE_DRIVE_PROCESSED_ID);
+  const failedId = cleanDriveId(process.env.GOOGLE_DRIVE_FAILED_ID);
   if (!sheetId || !inboxId || !processedId || !failedId) {
     return res.status(500).json({ error: 'Books env vars missing' });
   }
@@ -641,7 +645,7 @@ async function handleBooksDiag(req, res) {
   out.serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null;
 
   // Inbox folder access (THE top suspect for "stopped pulling")
-  const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
+  const inboxId = cleanDriveId(process.env.GOOGLE_DRIVE_INBOX_ID);
   const listInbox = async (allDrives) => {
     const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
     const extra = allDrives ? '&supportsAllDrives=true&includeItemsFromAllDrives=true' : '';
