@@ -3034,6 +3034,15 @@ function fmtMoney(n, ccy = 'USD') {
   if (n === '' || n == null || isNaN(Number(n))) return '—';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy || 'USD' }).format(Number(n));
 }
+// Approximate FX rates (USD per 1 unit) for the SUMMARY Expenses total only.
+// Per-receipt cards still show the original amount + currency; the CPA applies
+// date-specific rates. Without this, foreign amounts (₩, ¥, A$) get summed as USD.
+const FX_TO_USD = { USD:1, AUD:0.66, KRW:0.00073, JPY:0.0067, EUR:1.08, GBP:1.27, CAD:0.73, NZD:0.61, THB:0.028, SGD:0.74, HKD:0.128, TWD:0.031, CNY:0.14, MXN:0.058, IDR:0.000063, VND:0.000039, PHP:0.018, MYR:0.22, INR:0.012, CHF:1.12, AED:0.272 };
+function toUSD(amount, currency) {
+  const a = Number(amount) || 0;
+  const r = FX_TO_USD[String(currency || 'USD').toUpperCase().trim()];
+  return r != null ? a * r : a;
+}
 function withinYear(row, year) { return String(row.date || '').startsWith(String(year)); }
 
 // sessionStorage helpers — let the current sub-tab and any draft edits survive
@@ -3081,7 +3090,9 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   useEffect(() => { reload(); /* eslint-disable-line */ }, [year]);
 
   // KPIs
-  const totalExpenses = data.expenses.reduce((s, r) => s + Number(r.amount || 0), 0);
+  // Convert each receipt to USD by its currency before summing — foreign-currency
+  // receipts (KRW/JPY/AUD/…) must not be added as raw dollars.
+  const totalExpenses = data.expenses.reduce((s, r) => s + toUSD(r.amount, r.currency), 0);
   // Revenue: prefer the dashboard's live deals state (Deals tab / Revenue tab)
   // filtered to the selected year, falling back to whatever the Books sheet has.
   // Previously this only pulled from data.deals (the Books Sheet), so it showed
@@ -3722,7 +3733,7 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
       </div>
 
       <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:8 }}>
-        Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + Number(r.amount || 0), 0))}
+        Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + toUSD(r.amount, r.currency), 0))} USD
       </div>
 
       {/* Table */}
@@ -4193,7 +4204,7 @@ function BooksDealModal({ deal, expenses, onClose, reload, showToast }) {
   const [saving, setSaving] = useState(false);
 
   const linkedExp = deal ? expenses.filter((e) => e.linked_deal_id === deal.deal_id || e.linked_deal_id_2 === deal.deal_id) : [];
-  const expensesTotal = linkedExp.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const expensesTotal = linkedExp.reduce((s, e) => s + toUSD(e.amount, e.currency), 0);
   const profit = Number(form.deal_value || 0) - expensesTotal;
 
   // Show expenses in shoot window if no deal_id yet (preview)

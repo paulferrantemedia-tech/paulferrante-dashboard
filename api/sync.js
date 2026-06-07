@@ -144,6 +144,12 @@ async function getGoogleAccessToken() {
 // Drive folder IDs are sometimes pasted from a browser URL with trailing junk
 // like "<id>?dmr=1&ec=...". Strip anything after the id so lookups don't 404.
 function cleanDriveId(x) { return String(x || '').replace(/[?#&].*$/, '').trim(); }
+// Approximate FX rates (USD per 1 unit). For the dashboard SUMMARY total only —
+// per-receipt original amounts/currency are preserved for the CPA, who applies
+// date-specific rates. Keeps the headline Expenses total sane when receipts are
+// in foreign currency (e.g. a Korea/Japan trip).
+const FX_TO_USD = { USD:1, AUD:0.66, KRW:0.00073, JPY:0.0067, EUR:1.08, GBP:1.27, CAD:0.73, NZD:0.61, THB:0.028, SGD:0.74, HKD:0.128, TWD:0.031, CNY:0.14, MXN:0.058, IDR:0.000063, VND:0.000039, PHP:0.018, MYR:0.22, INR:0.012, CHF:1.12, AED:0.272 };
+function toUSD(amount, currency) { const a = Number(amount) || 0; const c = String(currency || 'USD').toUpperCase().trim(); const r = FX_TO_USD[c]; return r != null ? a * r : a; }
 function driveFileIdFromUrl(u) { const t = String(u || ''); const m = t.match(/\/d\/([^/]+)/) || t.match(/[?&]id=([^&]+)/); return m ? m[1] : null; }
 
 const _sleep = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -675,23 +681,26 @@ async function handleProcessReceipt(req, res) {
     notes: '',
   };
   // ── Dedup tier 2: probable duplicate (strict vendor+date+amount, no hash match) ──
-  let existingRows = [];
-  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
-  const probable = strictDupMatch(existingRows, p.vendor, p.date, p.amount_total);
-  if (probable) {
-    // Do NOT auto-book. Surface for Paul's Skip / Add-anyway decision (persisted).
+  // FAIL CLOSED: if we cannot read existing expenses to compare, do NOT book the
+  // receipt (that would let dups slip in during an outage); hold it for review.
+  let existingRows = [], existingReadOk = true;
+  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) { existingReadOk = false; }
+  const probable = existingReadOk ? strictDupMatch(existingRows, p.vendor, p.date, p.amount_total) : null;
+  if (probable || !existingReadOk) {
+    // Probable dup OR un-verifiable -> surface for Paul (Skip / Add anyway); never auto-book.
     const already = dedup.pending.some((x) => (fileHash && x.hash === fileHash) || x.file_id === fileId);
     if (!already) {
       dedup.pending.push({
         dup_id: uuid(), hash: fileHash, file_id: fileId, file_name: fileName || '', receipt_url: receiptUrl, row,
         incoming: { vendor: p.vendor, date: p.date, amount: p.amount_total },
-        matched: { expense_id: probable.expense_id, vendor: probable.vendor, date: probable.date, amount: probable.amount },
+        matched: probable ? { expense_id: probable.expense_id, vendor: probable.vendor, date: probable.date, amount: probable.amount }
+                          : { unverified: true, note: 'could not read existing expenses to dedup-check — held for review' },
         at: nowIso(),
       });
       await saveDedup(dedup);
     }
-    await logComplete(token, sheetId, logId, 'probable_duplicate', '', '');
-    return res.status(200).json({ ok: true, skipped: 'probable_duplicate', matched_expense_id: probable.expense_id });
+    await logComplete(token, sheetId, logId, probable ? 'probable_duplicate' : 'held_unverified', '', '');
+    return res.status(200).json({ ok: true, skipped: probable ? 'probable_duplicate' : 'held_unverified', matched_expense_id: probable ? probable.expense_id : null });
   }
 
   // ── Net-new: book it + record content hash so future exact re-drops are caught ──
@@ -940,7 +949,13 @@ async function handleBooksDiag(req, res) {
         expensesYTD_currentYearOnly: totalYear.toFixed(2),   // this is what the dashboard shows
         // Phase 0 #3 — biggest records (look for parse errors / implausible amounts):
         top20ByAmount: [...exps].sort((a, b) => num(b) - num(a)).slice(0, 20)
-          .map((r) => ({ id: (r.expense_id || '').slice(0, 8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed })),
+          .map((r) => ({ id: (r.expense_id || '').slice(0, 8), vendor: r.vendor, amount: r.amount, currency: r.currency || '(none)', date: r.date, reviewed: r.reviewed })),
+        currencyBreakdown: (() => {
+          const by = {};
+          yearRows.forEach((r) => { const c = String(r.currency || 'USD').toUpperCase().trim() || 'USD'; (by[c] = by[c] || { count: 0, rawSum: 0, usdSum: 0 }); by[c].count++; by[c].rawSum += num(r); by[c].usdSum += toUSD(r.amount, r.currency); });
+          return Object.fromEntries(Object.entries(by).map(([c, v]) => [c, { count: v.count, rawSum: v.rawSum.toFixed(2), usdSum: v.usdSum.toFixed(2) }]));
+        })(),
+        expensesYTD_USD_converted: yearRows.reduce((s2, r) => s2 + toUSD(r.amount, r.currency), 0).toFixed(2),
         // Phase 0 #2 — duplication:
         duplicateGroupCount: dups.length,
         duplicateExtraRecords: dupExtraRecords,
