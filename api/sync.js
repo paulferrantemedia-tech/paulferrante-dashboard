@@ -690,22 +690,31 @@ async function handleProcessInbox(req, res) {
       if (!dryRun) { try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) {} }
     } else if (match) {
       relinked++;
-      results.push({ file: file.name, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id });
+      const rr = { file: file.name, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id };
+      results.push(rr);
       if (!dryRun) {
-        try {
-          await driveMoveFile(token, file.id, processedId, inboxId);
-          const url = await driveGetWebLink(token, file.id) || '';
-          const merged = { ...match, receipt_url: url };
-          delete merged._rowIndex; delete merged.flags_computed;
-          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
-        } catch (_) {}
+        // Write receipt_url FIRST (data persistence must NOT depend on the file move).
+        let url = '';
+        try { url = await driveGetWebLink(token, file.id) || ''; } catch (e) { rr.linkError = String(e.message).slice(0,120); }
+        rr.receipt_url_written = url || '(empty)';
+        if (url) {
+          try {
+            const merged = { ...match, receipt_url: url };
+            delete merged._rowIndex; delete merged.flags_computed;
+            await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
+          } catch (e) { rr.writeError = String(e.message).slice(0,120); }
+        }
+        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0,120); }
       }
     } else {
       added++;
-      results.push({ file: file.name, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion });
+      const rr = { file: file.name, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion };
+      results.push(rr);
       if (!dryRun) {
+        // Get the link + append the row FIRST; move the file afterward (independently).
         let receiptUrl = '';
-        try { await driveMoveFile(token, file.id, processedId, inboxId); receiptUrl = await driveGetWebLink(token, file.id) || ''; } catch (_) {}
+        try { receiptUrl = await driveGetWebLink(token, file.id) || ''; } catch (e) { rr.linkError = String(e.message).slice(0,120); }
+        rr.receipt_url_written = receiptUrl || '(empty)';
         const row = {
           expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD',
           category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '',
@@ -714,7 +723,8 @@ async function handleProcessInbox(req, res) {
           extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '',
           entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog',
         };
-        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); } catch (_) {}
+        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); } catch (e) { rr.writeError = String(e.message).slice(0,120); }
+        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0,120); }
       }
     }
   }
@@ -793,7 +803,18 @@ async function handleBooksDiag(req, res) {
     ]);
     if (logVals) { const lg = rowsToObjects(logVals); const last = lg[lg.length - 1]; out.lastSync = { logRows: lg.length, mostRecent: last ? { started_at: last.started_at, completed_at: last.completed_at, status: last.status, file_name: last.file_name, error_message: last.error_message } : 'no rows' }; }
     else out.lastSync = { note: 'ProcessingLog sheet not readable' };
-    if (eVals) { const exps = rowsToObjects(eVals).filter((r) => r.expense_id); const withUrl = exps.filter((r) => r.receipt_url && String(r.receipt_url).trim()); out.receipts = { totalExpenseRows: exps.length, withReceiptUrl: withUrl.length, withoutReceiptUrl: exps.length - withUrl.length, sampleReceiptUrls: withUrl.slice(0, 3).map((r) => r.receipt_url) }; }
+    if (eVals) {
+      const exps = rowsToObjects(eVals).filter((r) => r.expense_id);
+      const withUrl = exps.filter((r) => r.receipt_url && String(r.receipt_url).trim());
+      out.receipts = {
+        totalExpenseRows: exps.length,
+        withReceiptUrl: withUrl.length,
+        withoutReceiptUrl: exps.length - withUrl.length,
+        unreviewedTotal: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true').length,
+        unreviewedWithReceipt: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true' && r.receipt_url && String(r.receipt_url).trim()).length,
+        sampleRecords: exps.slice(-10).map((r) => ({ id: (r.expense_id||'').slice(0,8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed, receipt_url: r.receipt_url ? r.receipt_url : '(EMPTY)' })),
+      };
+    }
   } catch (e) { out.lastSync = { error: e.message }; }
 
   return res.status(200).json(out);
