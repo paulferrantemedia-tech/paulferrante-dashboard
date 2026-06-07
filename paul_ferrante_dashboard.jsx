@@ -3349,7 +3349,7 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
   const _driveFileId = (() => { const m = _receiptUrl.match(/\/d\/([^/]+)/) || _receiptUrl.match(/[?&]id=([^&]+)/); return m ? m[1] : null; })();
   const _receiptThumb = _driveFileId ? `https://drive.google.com/thumbnail?id=${_driveFileId}&sz=w240` : null;
   useEffect(() => {
-    console.log('[receipts] card ' + _id8 + ' receipt_url=' + (_receiptUrl ? 'present' : 'EMPTY') + ' thumb=' + (_receiptThumb || 'none'));
+    console.log('[receipts] card ' + _id8 + ' field=receipt_url value=' + (_receiptUrl || '(EMPTY)') + ' driveFileId=' + (_driveFileId || 'none') + ' -> renders: ' + (_receiptUrl ? 'LINKED (📎 Receipt linked / View ↗)' : 'No receipt'));
   }, []);
   useEffect(() => {
     console.log('[books-template] dropdown rendered on Inbox card ' + _id8 + ' with ' + MEAL_PURPOSE_TEMPLATES.length + ' templates');
@@ -3439,18 +3439,25 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
       gridTemplateColumns: isMobile ? '1fr' : '110px 1fr',
       gap:14,
     }}>
-      {/* Left: receipt image thumbnail (click to open full in Drive) */}
+      {/* Left: receipt state. If a receipt reference (receipt_url) exists, ALWAYS
+          show a clear green "linked" state (image if it loads, otherwise a
+          paperclip + "Receipt linked" + clickable View). Only show the gray
+          "No receipt" empty state when there is genuinely no reference. */}
       <div style={{ alignSelf:'start' }}>
-        {_receiptThumb && !imgError ? (
+        {_receiptUrl ? (
           <a href={_receiptUrl} target="_blank" rel="noreferrer" title="Open receipt in Drive"
-             style={{ display:'block', height: isMobile?80:110, borderRadius:8, overflow:'hidden', border:`1px solid ${BOOKS.border}` }}>
-            <img src={_receiptThumb} alt="receipt" onError={() => setImgError(true)}
-              style={{ width:'100%', height: isMobile?80:110, objectFit:'cover', display:'block' }} />
-          </a>
-        ) : _receiptUrl ? (
-          <a href={_receiptUrl} target="_blank" rel="noreferrer"
-             style={{ display:'block', height: isMobile?80:110, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px', textDecoration:'none' }}>
-            View receipt ↗
+             style={{ display:'block', height: isMobile?80:110, borderRadius:8, overflow:'hidden', border:'1px solid #16A34A', background:'#F0FDF4', textDecoration:'none' }}>
+            {_receiptThumb && !imgError && (
+              <img src={_receiptThumb} alt="receipt" onError={() => setImgError(true)}
+                style={{ width:'100%', height: isMobile?80:110, objectFit:'cover', display:'block' }} />
+            )}
+            {(!_receiptThumb || imgError) && (
+              <div style={{ height: isMobile?80:110, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:3, color:'#15803D' }}>
+                <span style={{ fontSize:22, lineHeight:1 }}>📎</span>
+                <span style={{ fontSize:11, fontWeight:800 }}>Receipt linked</span>
+                <span style={{ fontSize:9, textDecoration:'underline' }}>View ↗</span>
+              </div>
+            )}
           </a>
         ) : (
           <div style={{ height: isMobile?80:110, background:BOOKS.surface, border:`1px dashed ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px' }}>
