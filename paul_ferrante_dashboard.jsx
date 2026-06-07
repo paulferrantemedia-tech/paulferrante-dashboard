@@ -3235,21 +3235,26 @@ function InboxTab({ data, reload, isMobile, showToast }) {
   const runBacklogImport = async () => {
     if (importing) return;
     setImporting(true); setImportMsg('Starting…');
-    let relinked = 0, added = 0, guard = 0;
-    try {
-      while (guard++ < 80) {
-        let j;
-        try {
-          const r = await fetch('/api/sync?action=process-inbox&commit=1&limit=1&secret=pf_secret_2026&t=' + Date.now(), { cache: 'no-store' });
-          if (!r.ok) { setImportMsg(`Paused (a receipt took too long to scan). Relinked ${relinked}, added ${added}. Click again to continue.`); break; }
-          j = await r.json();
-        } catch (e) { setImportMsg(`Paused: ${e.message}. Click again to continue.`); break; }
-        const s = j.summary || {};
-        relinked += s.relinked || 0; added += s.added_new || 0;
-        setImportMsg(`Working… relinked ${relinked}, added ${added} new — ${j.remainingAfterThisCall} left`);
-        if (!j.processedThisCall || j.remainingAfterThisCall <= 0) { setImportMsg(`Done. Relinked ${relinked} existing receipt(s), added ${added} new.`); break; }
-      }
-    } catch (e) { setImportMsg('Stopped: ' + e.message); }
+    // Relink-only pass: pages the inbox by offset (1 receipt per request to stay
+    // under the 10s cap), tolerant matching attaches each receipt to its existing
+    // entry. No rows are added, so totals can't change. Slow files are skipped.
+    let offset = 0, relinked = 0, unmatched = 0, total = 0, guard = 0;
+    while (guard++ < 400) {
+      let j = null;
+      try {
+        const r = await fetch('/api/sync?action=process-inbox&commit=1&limit=1&offset=' + offset + '&secret=pf_secret_2026&t=' + Date.now(), { cache: 'no-store' });
+        if (r.ok) j = await r.json();
+      } catch (_) {}
+      if (!j) { offset += 1; setImportMsg(`Skipping a slow receipt… linked ${relinked} so far`); if (total && offset >= total) break; continue; }
+      const s = j.summary || {};
+      relinked += s.relinked || 0; unmatched += s.unmatched || 0;
+      total = j.totalImagesInInbox || total;
+      offset = (j.nextOffset != null) ? j.nextOffset : offset + 1;
+      setImportMsg(`Scanning ${Math.min(offset, total)}/${total}… linked ${relinked}${unmatched ? `, ${unmatched} no-match` : ''}`);
+      if (j.done) break;
+      if (!j.processedThisCall) { offset += 1; if (total && offset >= total) break; }
+    }
+    setImportMsg(`Done. Linked ${relinked} receipt(s) to existing entries${unmatched ? `, ${unmatched} had no matching entry` : ''}.`);
     setImporting(false);
     reload();
   };

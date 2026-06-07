@@ -622,15 +622,12 @@ async function logComplete(token, sheetId, logId, status, errMsg, expenseId) {
 // books-data action (read for the dashboard)
 // ─────────────────────────────────────────────────────────────
 async function handleProcessInbox(req, res) {
-  // SAFE, IDEMPOTENT backlog importer.
-  // Every receipt is tracked by its Drive FILE ID. A file whose id already
-  // appears in any expense's receipt_url is considered done and is never
-  // processed again — so even if the file can't be moved out of the inbox
-  // (e.g. the service account has read-only Drive access), it can NEVER create
-  // a duplicate. For each still-pending file: extract -> if it matches an
-  // existing expense (amount+date+vendor) RELINK that row's receipt_url (no new
-  // row, no total change); otherwise ADD a new expense. Best-effort move after.
-  // Default = DRY RUN. Add &commit=1 to apply. &limit=N per call.
+  // SAFE backlog linker. DEFAULT = RELINK-ONLY (never adds rows -> totals cannot
+  // change). It pages through the inbox by &offset so unmatched files don't loop.
+  // Matching is tolerant: amount rounded to 2dp, date within +/-1 calendar day,
+  // vendor fuzzy (letters only, ignores store numbers/punctuation). A file whose
+  // id already appears in any receipt_url is skipped (idempotent). Pass &add=1 to
+  // also create rows for genuinely-new receipts (off by default for safety).
   const secret = (req.query.secret || '').toString();
   const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
   if (secret !== expected) return res.status(403).json({ error: 'bad or missing secret' });
@@ -638,11 +635,12 @@ async function handleProcessInbox(req, res) {
   const sheetId = process.env.GOOGLE_SHEETS_ID;
   const inboxId = cleanDriveId(process.env.GOOGLE_DRIVE_INBOX_ID);
   const processedId = cleanDriveId(process.env.GOOGLE_DRIVE_PROCESSED_ID);
-  const failedId = cleanDriveId(process.env.GOOGLE_DRIVE_FAILED_ID);
-  if (!sheetId || !inboxId || !processedId || !failedId) return res.status(500).json({ error: 'Books env vars missing' });
+  if (!sheetId || !inboxId) return res.status(500).json({ error: 'Books env vars missing' });
 
   const dryRun = String(req.query.commit || '') !== '1';
+  const allowAdd = String(req.query.add || '') === '1';
   const limit = Math.max(1, Math.min(8, parseInt(req.query.limit || '1', 10) || 1));
+  const offset = Math.max(0, parseInt(req.query.offset || '0', 10) || 0);
 
   let token;
   try { token = await getGoogleAccessToken(); }
@@ -651,93 +649,85 @@ async function handleProcessInbox(req, res) {
   let files = [];
   try {
     const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&orderBy=createdTime`, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=400&orderBy=createdTime`, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) return res.status(500).json({ error: `inbox list failed: ${r.status} ${(await r.text()).slice(0, 200)}` });
     files = ((await r.json()).files || []).filter((x) => /^image\//.test(x.mimeType) || x.mimeType === 'application/pdf');
   } catch (e) { return res.status(500).json({ error: e.message }); }
 
+  const total = files.length;
+  const slice = files.slice(offset, offset + limit);
+
   let existing = [];
   try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
-
-  // Files already represented in the books (by Drive file id in a receipt_url) are DONE.
   const linkedFileIds = new Set(existing.map((r) => driveFileIdFromUrl(r.receipt_url)).filter(Boolean));
-  const pending = files.filter((file) => !linkedFileIds.has(file.id));
-  const totalInInbox = files.length;
-  const totalPending = pending.length;
-  const batch = pending.slice(0, limit);
 
-  const nvLoose = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const amtEq = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.005;
-  const vendorClose = (a, b) => { const x = nvLoose(a), y = nvLoose(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)); };
+  // ── Tolerant matching ──
+  const amtEq = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.01; // 2dp: 52.7 == 52.70
+  const dayDiff = (d1, d2) => { const a = new Date(d1 + 'T12:00:00'), b = new Date(d2 + 'T12:00:00'); if (isNaN(a) || isNaN(b)) return 999; return Math.abs(Math.round((a - b) / 86400000)); };
+  const dateClose = (a, b) => !!a && !!b && dayDiff(a, b) <= 1; // +/- 1 calendar day, tz-safe
+  const lettersOnly = (v) => String(v || '').toLowerCase().replace(/[^a-z]/g, ''); // drops digits/#/punct
+  const tokens = (v) => String(v || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+  const vendorClose = (a, b) => {
+    const x = lettersOnly(a), y = lettersOnly(b);
+    if (!x || !y) return false;
+    if (x === y || x.includes(y) || y.includes(x)) return true;
+    const ta = new Set(tokens(a)); return tokens(b).some((w) => ta.has(w)); // share a 3+ letter word
+  };
 
   const results = [];
-  let relinked = 0, added = 0, failed = 0;
+  let relinked = 0, addedNew = 0, alreadyLinked = 0, unmatched = 0, failed = 0;
 
-  for (const file of batch) {
+  for (const file of slice) {
+    if (linkedFileIds.has(file.id)) { alreadyLinked++; results.push({ file: file.name, fileId: file.id, action: 'already-linked (skip)' }); continue; }
     let p;
     try {
       const meta = await driveDownloadFile(token, file.id);
       const ex = await anthropicExtract(meta.base64, meta.mimeType);
       if (!ex.ok) throw new Error(ex.error || 'extraction failed');
       p = ex.parsed || {};
-    } catch (e) {
-      failed++; results.push({ file: file.name, fileId: file.id, action: 'failed', error: String(e.message).slice(0, 140) });
-      if (!dryRun) { try { await driveMoveFile(token, file.id, failedId, inboxId); } catch (_) {} }
-      continue;
-    }
+    } catch (e) { failed++; results.push({ file: file.name, fileId: file.id, action: 'failed', error: String(e.message).slice(0, 140) }); continue; }
 
-    // Link that records THIS file's id (so it's marked done and never reprocessed).
-    let url = '';
-    if (!dryRun) { try { url = await driveGetWebLink(token, file.id) || ''; } catch (e) { /* fall through */ } }
-    if (!url) url = `https://drive.google.com/file/d/${file.id}/view`; // always id-bearing fallback
-
-    const canMatch = !!p.date && Number(p.amount_total) > 0;
-    const match = canMatch ? existing.find((r) => amtEq(r.amount, p.amount_total) && (r.date || '') === (p.date || '') && vendorClose(r.vendor, p.vendor)) : null;
+    const url = `https://drive.google.com/file/d/${file.id}/view`; // id-bearing, reliable
+    const cands = (p.date && Number(p.amount_total) > 0)
+      ? existing.filter((r) => amtEq(r.amount, p.amount_total) && dateClose(r.date, p.date) && vendorClose(r.vendor, p.vendor))
+      : [];
+    const match = cands.find((r) => !(r.receipt_url && String(r.receipt_url).trim())) || cands[0];
 
     if (match) {
       relinked++;
-      const rr = { file: file.name, fileId: file.id, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id, receipt_url_written: url };
+      const rr = { file: file.name, fileId: file.id, action: 'RELINK (no total change)', extracted: { vendor: p.vendor, amount: p.amount_total, date: p.date }, matched: { expense_id: match.expense_id, vendor: match.vendor, amount: match.amount, date: match.date }, receipt_url_written: url };
       results.push(rr);
       if (!dryRun) {
         try {
           const merged = { ...match, receipt_url: url };
           delete merged._rowIndex; delete merged.flags_computed;
           await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
-          match.receipt_url = url; // keep in-memory existing in sync within this batch
+          match.receipt_url = url;
         } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
-        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0, 120); }
+        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) { /* move optional */ }
       }
-    } else {
-      added++;
-      const rr = { file: file.name, fileId: file.id, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion, receipt_url_written: url };
+    } else if (allowAdd) {
+      addedNew++;
+      const rr = { file: file.name, fileId: file.id, action: 'ADD new (allowAdd)', extracted: { vendor: p.vendor, amount: p.amount_total, date: p.date }, receipt_url_written: url };
       results.push(rr);
       if (!dryRun) {
-        const row = {
-          expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD',
-          category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '',
-          payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: url,
-          auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '',
-          extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '',
-          entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog',
-        };
-        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); existing.push({ ...row, receipt_url: url }); } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
-        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0, 120); }
+        const row = { expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD', category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '', payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: url, auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '', extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '', entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog' };
+        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); existing.push({ ...row }); } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
       }
+    } else {
+      unmatched++;
+      results.push({ file: file.name, fileId: file.id, action: 'UNMATCHED (left as-is, no row added)', extracted: { vendor: p.vendor, amount: p.amount_total, date: p.date } });
     }
   }
 
-  const remaining = dryRun ? totalPending : Math.max(0, totalPending - batch.length);
+  const nextOffset = offset + slice.length;
   return res.status(200).json({
-    mode: dryRun ? 'DRY-RUN — preview only, nothing written' : 'COMMITTED — changes written',
-    totalImagesInInbox: totalInInbox,
-    alreadyImported: totalInInbox - totalPending,
-    pendingBeforeThisCall: totalPending,
-    processedThisCall: batch.length,
-    remainingAfterThisCall: remaining,
-    summary: { relinked, added_new: added, failed },
-    nextStep: dryRun
-      ? 'Preview only. Re-run with &commit=1 to apply (repeat until remaining = 0).'
-      : (remaining > 0 ? 'More remain — run the &commit=1 url again to continue.' : 'Done — all receipts imported.'),
+    mode: dryRun ? 'DRY-RUN — preview only' : 'COMMITTED',
+    relinkOnly: !allowAdd,
+    totalImagesInInbox: total,
+    offset, processedThisCall: slice.length, nextOffset, done: nextOffset >= total,
+    summary: { relinked, addedNew, alreadyLinked, unmatched, failed },
+    nextStep: nextOffset >= total ? 'Done — full pass complete.' : `More to scan — call again with &offset=${nextOffset}.`,
     details: results,
   });
 }
@@ -814,7 +804,14 @@ async function handleBooksDiag(req, res) {
         withoutReceiptUrl: exps.length - withUrl.length,
         unreviewedTotal: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true').length,
         unreviewedWithReceipt: exps.filter((r) => String(r.reviewed).toLowerCase() !== 'true' && r.receipt_url && String(r.receipt_url).trim()).length,
-        sampleRecords: exps.slice(-10).map((r) => ({ id: (r.expense_id||'').slice(0,8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed, receipt_url: r.receipt_url ? r.receipt_url : '(EMPTY)' })),
+        expensesYtdTotal: exps.reduce((sm, r) => sm + (Number(r.amount) || 0), 0).toFixed(2),
+        possibleDuplicates: (() => {
+          const groups = {};
+          exps.forEach((r) => { const k = (r.date||'') + '|' + (Number(r.amount)||0).toFixed(2); (groups[k] = groups[k] || []).push(r); });
+          return Object.entries(groups).filter(([, rows]) => rows.length > 1)
+            .map(([k, rows]) => ({ key: k, count: rows.length, vendors: rows.map((r) => r.vendor), ids: rows.map((r) => (r.expense_id||'').slice(0,8)) }));
+        })(),
+        allRecords: exps.map((r) => ({ id: (r.expense_id||'').slice(0,8), vendor: r.vendor, amount: r.amount, date: r.date, reviewed: r.reviewed, linked: !!(r.receipt_url && String(r.receipt_url).trim()) })),
       };
     }
   } catch (e) { out.lastSync = { error: e.message }; }
