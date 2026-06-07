@@ -3296,7 +3296,17 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
 
   // ── Business-purpose template fill (writes through the per-card draft path) ──
   const bpRef = useRef(null);
+  const [imgError, setImgError] = useState(false);
   const _id8 = (row.expense_id || '').slice(0, 8);
+  // Receipt image: derive a Drive thumbnail URL from the stored receipt_url
+  // (webViewLink). receipt_url persistence happens server-side during extraction;
+  // here we render the actual image instead of only a text link.
+  const _receiptUrl = row.receipt_url || '';
+  const _driveFileId = (() => { const m = _receiptUrl.match(/\/d\/([^/]+)/) || _receiptUrl.match(/[?&]id=([^&]+)/); return m ? m[1] : null; })();
+  const _receiptThumb = _driveFileId ? `https://drive.google.com/thumbnail?id=${_driveFileId}&sz=w240` : null;
+  useEffect(() => {
+    console.log('[receipts] card ' + _id8 + ' receipt_url=' + (_receiptUrl ? 'present' : 'EMPTY') + ' thumb=' + (_receiptThumb || 'none'));
+  }, []);
   useEffect(() => {
     console.log('[books-template] dropdown rendered on Inbox card ' + _id8 + ' with ' + MEAL_PURPOSE_TEMPLATES.length + ' templates');
   }, []);
@@ -3346,10 +3356,32 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
     setSaving(false);
   };
 
-  const dealOptions = deals
-    .slice()
-    .sort((a, b) => Number(b.deal_value || 0) - Number(a.deal_value || 0))
-    .map((d) => ({ id: d.deal_id, label: `${d.brand} (${d.status})` }));
+  // ── Linked Deal dropdown: current, post-pitch deals within the last 60 days ──
+  // Source = the Books deal pipeline (data.deals; statuses use DEAL_STATUSES).
+  // Include stages PAST "Pitching" (In Discussions / Sold In / Paid); exclude
+  // "Pitching" and anything declined. Recency anchor = paid_date -> shoot_end_date
+  // -> shoot_start_date; a deal with NO date is treated as still-active (not yet
+  // closed) and kept. Deals older than 60 days drop out (books are closed by then).
+  const POST_PITCH_STAGES = ['In Discussions', 'Sold In', 'Paid'];
+  const dealAnchor = (d) => d.paid_date || d.shoot_end_date || d.shoot_start_date || '';
+  const dealOptions = (() => {
+    const now = Date.now();
+    const considered = (deals || []).map((d) => {
+      const status = d.status || '';
+      const stageOk = POST_PITCH_STAGES.includes(status) && !/declin/i.test(status);
+      const anchor = dealAnchor(d);
+      let ageDays = null, recent = true;
+      if (anchor) { ageDays = Math.floor((now - new Date(anchor + 'T12:00:00').getTime()) / 86400000); recent = ageDays <= 60; }
+      const included = stageOk && recent;
+      const reason = included ? 'INCLUDED' : (!stageOk ? 'EXCLUDED(stage)' : 'EXCLUDED(>60d)');
+      return { d, status, anchor, ageDays, included, reason };
+    });
+    console.log('[linked-deal] card ' + ((row.expense_id||'').slice(0,8)) + ' — ' + considered.length + ' deal(s) considered:');
+    considered.forEach((c) => console.log('[linked-deal]   ' + (c.d.brand || '(no brand)') + ' | stage=' + (c.status || '(none)') + ' | anchor=' + (c.anchor || 'none') + ' | ageDays=' + (c.ageDays == null ? 'n/a' : c.ageDays) + ' | ' + c.reason));
+    return considered.filter((c) => c.included)
+      .sort((a, b) => Number(b.d.deal_value || 0) - Number(a.d.deal_value || 0))
+      .map((c) => ({ id: c.d.deal_id, label: `${c.d.brand} (${c.status})` }));
+  })();
 
   const inputStyle = {
     background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:6,
@@ -3363,10 +3395,16 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
       gridTemplateColumns: isMobile ? '1fr' : '110px 1fr',
       gap:14,
     }}>
-      {/* Left: thumbnail / receipt link */}
+      {/* Left: receipt image thumbnail (click to open full in Drive) */}
       <div style={{ alignSelf:'start' }}>
-        {row.receipt_url ? (
-          <a href={row.receipt_url} target="_blank" rel="noreferrer"
+        {_receiptThumb && !imgError ? (
+          <a href={_receiptUrl} target="_blank" rel="noreferrer" title="Open receipt in Drive"
+             style={{ display:'block', height: isMobile?80:110, borderRadius:8, overflow:'hidden', border:`1px solid ${BOOKS.border}` }}>
+            <img src={_receiptThumb} alt="receipt" onError={() => setImgError(true)}
+              style={{ width:'100%', height: isMobile?80:110, objectFit:'cover', display:'block' }} />
+          </a>
+        ) : _receiptUrl ? (
+          <a href={_receiptUrl} target="_blank" rel="noreferrer"
              style={{ display:'block', height: isMobile?80:110, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px', textDecoration:'none' }}>
             View receipt ↗
           </a>

@@ -615,6 +615,56 @@ async function logComplete(token, sheetId, logId, status, errMsg, expenseId) {
 // ─────────────────────────────────────────────────────────────
 // books-data action (read for the dashboard)
 // ─────────────────────────────────────────────────────────────
+async function handleBooksDiag(req, res) {
+  // GET /api/sync?action=books-diag&secret=...  → live auth + inbox folder + sync log + receipt_url population
+  const secret = (req.query.secret || '').toString();
+  const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
+  if (secret !== expected) return res.status(403).json({ error: 'bad or missing secret' });
+
+  const out = {
+    env: {
+      GOOGLE_SHEETS_ID: !!process.env.GOOGLE_SHEETS_ID,
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      GOOGLE_SERVICE_ACCOUNT_KEY: !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      GOOGLE_DRIVE_INBOX_ID: !!process.env.GOOGLE_DRIVE_INBOX_ID,
+      GOOGLE_DRIVE_PROCESSED_ID: !!process.env.GOOGLE_DRIVE_PROCESSED_ID,
+      APPS_SCRIPT_SHARED_SECRET: !!process.env.APPS_SCRIPT_SHARED_SECRET,
+      ANTHROPIC_API_KEY: !!process.env.ANTHROPIC_API_KEY,
+    },
+    auth: null, inboxFolder: null, lastSync: null, receipts: null,
+  };
+
+  let token;
+  try { token = await getGoogleAccessToken(); out.auth = { ok: true, note: 'Google service-account token obtained' }; }
+  catch (e) { out.auth = { ok: false, error: e.message }; return res.status(200).json(out); }
+
+  // Inbox folder file count (THE top suspect for "stopped pulling")
+  try {
+    const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
+    if (!inboxId) { out.inboxFolder = { error: 'GOOGLE_DRIVE_INBOX_ID not set' }; }
+    else {
+      const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
+      const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,createdTime)&pageSize=100&orderBy=createdTime desc`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) out.inboxFolder = { error: `${r.status} ${(await r.text()).slice(0,300)}` };
+      else { const j = await r.json(); const files = j.files || []; out.inboxFolder = { folderId: inboxId, count: files.length, sample: files.slice(0, 10).map((x) => ({ name: x.name, mimeType: x.mimeType, createdTime: x.createdTime })) }; }
+    }
+  } catch (e) { out.inboxFolder = { error: e.message }; }
+
+  // Last sync log + receipt_url population on existing expenses
+  try {
+    const sheetId = process.env.GOOGLE_SHEETS_ID;
+    const [logVals, eVals] = await Promise.all([
+      sheetsGet(token, sheetId, 'ProcessingLog!A1:H').catch(() => null),
+      sheetsGet(token, sheetId, 'Expenses!A1:W').catch(() => null),
+    ]);
+    if (logVals) { const lg = rowsToObjects(logVals); const last = lg[lg.length - 1]; out.lastSync = { logRows: lg.length, mostRecent: last ? { started_at: last.started_at, completed_at: last.completed_at, status: last.status, file_name: last.file_name, error_message: last.error_message } : 'no rows' }; }
+    else out.lastSync = { note: 'ProcessingLog sheet not readable' };
+    if (eVals) { const exps = rowsToObjects(eVals).filter((r) => r.expense_id); const withUrl = exps.filter((r) => r.receipt_url && String(r.receipt_url).trim()); out.receipts = { totalExpenseRows: exps.length, withReceiptUrl: withUrl.length, withoutReceiptUrl: exps.length - withUrl.length, sampleReceiptUrls: withUrl.slice(0, 3).map((r) => r.receipt_url) }; }
+  } catch (e) { out.lastSync = { error: e.message }; }
+
+  return res.status(200).json(out);
+}
+
 async function handleBooksData(req, res) {
   const sheetId = process.env.GOOGLE_SHEETS_ID;
   if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
@@ -1094,6 +1144,7 @@ export default async function handler(req, res) {
   // Books actions take precedence when action= is set
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
   if (action === 'books-data')       return handleBooksData(req, res);
+  if (action === 'books-diag')       return handleBooksDiag(req, res);
   if (action === 'update-expense')   return handleUpdateExpense(req, res);
   if (action === 'upsert-deal')      return handleUpsertDeal(req, res);
   if (action === 'manual-expense')   return handleManualExpense(req, res);
