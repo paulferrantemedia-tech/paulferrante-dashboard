@@ -3055,7 +3055,7 @@ function _ssSet(key, value) {
 function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
   const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
-  const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [] });
+  const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
 
@@ -3068,7 +3068,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
     setError(null);
     try {
       const j = await booksApi('books-data', { query: { year } });
-      setData({ expenses: j.expenses || [], deals: j.deals || [], vendorMemory: j.vendorMemory || [] });
+      setData({ expenses: j.expenses || [], deals: j.deals || [], vendorMemory: j.vendorMemory || [], pendingDuplicates: j.pendingDuplicates || [] });
     } catch (e) { setError(e.message); }
     setLoading(false);
   };
@@ -3224,6 +3224,50 @@ function priorityScore(flags) {
   return best;
 }
 
+// Probable-duplicate review card: shows the incoming receipt next to the booked
+// entry it matched, with Skip (default) / Add anyway. Only "Add anyway" books it.
+function DupCard({ dup, reload, showToast }) {
+  const [busy, setBusy] = useState(false);
+  const inc = dup.incoming || {}, mat = dup.matched || {};
+  const money = (a) => (a === '' || a == null || isNaN(Number(a))) ? '—' : ('$' + Number(a).toFixed(2));
+  const resolve = async (action) => {
+    setBusy(true);
+    try {
+      await booksApi('resolve-dup', { method: 'POST', body: { dup_id: dup.dup_id, action } });
+      showToast && showToast(action === 'add' ? 'Added as a separate expense' : 'Skipped duplicate');
+      reload();
+    } catch (e) { alert('Failed: ' + e.message); setBusy(false); }
+  };
+  return (
+    <div style={{ border:'1px solid #F59E0B', background:'#FFFBEB', borderRadius:10, padding:'12px 14px', marginBottom:8 }}>
+      <div style={{ fontSize:11, fontWeight:800, color:'#B45309', marginBottom:8 }}>Possible duplicate — NOT added to your books</div>
+      <div style={{ display:'flex', gap:14, flexWrap:'wrap' }}>
+        <div style={{ flex:1, minWidth:150 }}>
+          <div style={{ fontSize:9, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px', marginBottom:3 }}>Incoming receipt</div>
+          <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{inc.vendor || '(no vendor)'}</div>
+          <div style={{ fontSize:12, color:BOOKS.ink }}>{inc.date || '—'} · {money(inc.amount)}</div>
+          {dup.receipt_url && <a href={dup.receipt_url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#2563EB' }}>View receipt ↗</a>}
+        </div>
+        <div style={{ flex:1, minWidth:150 }}>
+          <div style={{ fontSize:9, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px', marginBottom:3 }}>Already booked</div>
+          <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{mat.vendor || '(no vendor)'}</div>
+          <div style={{ fontSize:12, color:BOOKS.ink }}>{mat.date || '—'} · {money(mat.amount)}</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:8, marginTop:10, flexWrap:'wrap' }}>
+        <button onClick={() => resolve('skip')} disabled={busy}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'7px 14px', fontSize:12, fontWeight:700, cursor: busy?'wait':'pointer', fontFamily:'inherit' }}>
+          Skip (it's a duplicate)
+        </button>
+        <button onClick={() => resolve('add')} disabled={busy}
+          style={{ background:'none', color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'7px 14px', fontSize:12, cursor: busy?'wait':'pointer', fontFamily:'inherit' }}>
+          Add anyway (separate expense)
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function InboxTab({ data, reload, isMobile, showToast }) {
   // Show ALL unreviewed rows so every AI extraction lands in your approval queue.
   // Sorted by flag priority — flagged items bubble to top, clean ones below.
@@ -3268,6 +3312,17 @@ function InboxTab({ data, reload, isMobile, showToast }) {
     setImporting(false);
     reload();
   };
+  // Probable-duplicate review section (Feature 2) — shown above the queue.
+  const dupList = data.pendingDuplicates || [];
+  const dupSection = dupList.length > 0 ? (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ fontSize:12, fontWeight:800, color:'#B45309', marginBottom:8 }}>
+        ⚠ {dupList.length} possible duplicate{dupList.length === 1 ? '' : 's'} — review before booking
+      </div>
+      {dupList.map((d) => <DupCard key={d.dup_id} dup={d} reload={reload} showToast={showToast} />)}
+    </div>
+  ) : null;
+
   const importBtn = (
     <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
       <button onClick={runBacklogImport} disabled={importing}
@@ -3298,6 +3353,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
   if (queue.length === 0) {
     return (
       <div>
+        {dupSection}
         <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>{importBtn}</div>
         <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:'40px 24px', textAlign:'center' }}>
           <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
@@ -3309,6 +3365,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
 
   return (
     <div>
+      {dupSection}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
         <div style={{ fontSize:13, color:BOOKS.muted }}>
           {queue.length} item{queue.length === 1 ? '' : 's'} need{queue.length === 1 ? 's' : ''} review · sorted by priority

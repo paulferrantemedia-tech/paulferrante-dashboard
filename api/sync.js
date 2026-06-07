@@ -562,6 +562,16 @@ async function handleProcessReceipt(req, res) {
     return res.status(500).json({ error: e.message, logId });
   }
 
+  // ── Dedup tier 1: exact file-content hash (same file re-uploaded) ──
+  let fileHash = '';
+  try { fileHash = await sha256Hex(Buffer.from(fileMeta.base64, 'base64')); } catch (_) {}
+  const dedup = await loadDedup();
+  if (fileHash && dedup.hashes[fileHash]) {
+    try { await driveMoveFile(token, fileId, processedId, inboxId); } catch (_) {}
+    await logComplete(token, sheetId, logId, 'exact_duplicate', '', dedup.hashes[fileHash].expense_id || '');
+    return res.status(200).json({ ok: true, skipped: 'exact_duplicate', matched_expense_id: dedup.hashes[fileHash].expense_id || null });
+  }
+
   if (!extractRes.ok) {
     try { await driveMoveFile(token, fileId, failedId, inboxId); } catch (_) {}
     // Still write a row marked extraction_failed so Paul can manually fix
@@ -635,6 +645,7 @@ async function handleProcessReceipt(req, res) {
     await driveMoveFile(token, fileId, processedId, inboxId);
     receiptUrl = await driveGetWebLink(token, fileId) || '';
   } catch (_) {}
+  if (!receiptUrl) receiptUrl = `https://drive.google.com/file/d/${fileId}/view`;
 
   const expenseId = uuid();
   const row = {
@@ -663,10 +674,34 @@ async function handleProcessReceipt(req, res) {
     reviewed: 'FALSE',
     notes: '',
   };
+  // ── Dedup tier 2: probable duplicate (strict vendor+date+amount, no hash match) ──
+  let existingRows = [];
+  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
+  const probable = strictDupMatch(existingRows, p.vendor, p.date, p.amount_total);
+  if (probable) {
+    // Do NOT auto-book. Surface for Paul's Skip / Add-anyway decision (persisted).
+    const already = dedup.pending.some((x) => (fileHash && x.hash === fileHash) || x.file_id === fileId);
+    if (!already) {
+      dedup.pending.push({
+        dup_id: uuid(), hash: fileHash, file_id: fileId, file_name: fileName || '', receipt_url: receiptUrl, row,
+        incoming: { vendor: p.vendor, date: p.date, amount: p.amount_total },
+        matched: { expense_id: probable.expense_id, vendor: probable.vendor, date: probable.date, amount: probable.amount },
+        at: nowIso(),
+      });
+      await saveDedup(dedup);
+    }
+    await logComplete(token, sheetId, logId, 'probable_duplicate', '', '');
+    return res.status(200).json({ ok: true, skipped: 'probable_duplicate', matched_expense_id: probable.expense_id });
+  }
+
+  // ── Net-new: book it + record content hash so future exact re-drops are caught ──
   await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
+  if (fileHash) {
+    dedup.hashes[fileHash] = { expense_id: expenseId, vendor: p.vendor, date: p.date, amount: p.amount_total, file_id: fileId, at: nowIso() };
+    await saveDedup(dedup);
+  }
   await logComplete(token, sheetId, logId,
     p.confidence === 'low' ? 'low_confidence' : 'success', '', expenseId);
-
   return res.status(200).json({ ok: true, expense_id: expenseId, parsed: p, auto_linked_deal_id: autoLinkedDealId });
 }
 
@@ -793,6 +828,29 @@ async function handleProcessInbox(req, res) {
   });
 }
 
+async function handleResolveDup(req, res) {
+  // Body: { dup_id, action: 'add' | 'skip' }. Called from the dashboard.
+  const { dup_id, action } = req.body || {};
+  if (!dup_id || (action !== 'add' && action !== 'skip')) return res.status(400).json({ error: 'dup_id and action (add|skip) required' });
+  const dedup = await loadDedup();
+  const idx = dedup.pending.findIndex((p) => p.dup_id === dup_id);
+  if (idx < 0) return res.status(200).json({ ok: true, note: 'already resolved' });
+  const item = dedup.pending[idx];
+  if (action === 'add') {
+    const sheetId = process.env.GOOGLE_SHEETS_ID;
+    let token;
+    try { token = await getGoogleAccessToken(); await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(item.row, EXPENSE_HEADERS)]); }
+    catch (e) { return res.status(500).json({ error: 'add failed: ' + e.message }); }
+    if (item.hash) dedup.hashes[item.hash] = { expense_id: item.row && item.row.expense_id, vendor: item.incoming.vendor, date: item.incoming.date, amount: item.incoming.amount, file_id: item.file_id, at: nowIso() };
+  } else {
+    // skip -> record the hash so the same file re-dropped later is auto-skipped (exact tier)
+    if (item.hash) dedup.hashes[item.hash] = { skipped: true, vendor: item.incoming.vendor, date: item.incoming.date, amount: item.incoming.amount, file_id: item.file_id, at: nowIso() };
+  }
+  dedup.pending.splice(idx, 1);
+  await saveDedup(dedup);
+  return res.status(200).json({ ok: true, action, booked: action === 'add' ? (item.row && item.row.expense_id) : null });
+}
+
 async function handleBooksDiag(req, res) {
   // GET /api/sync?action=books-diag&secret=...  → live auth + inbox folder + sync log + receipt_url population
   const secret = (req.query.secret || '').toString();
@@ -902,7 +960,9 @@ async function handleBooksData(req, res) {
     const vmSet = new Set(vendorMemory.map((v) => normalizeVendor(v.vendor_normalized)));
     expenses.forEach((r) => { r.flags_computed = computeFlags(r, vmSet); });
 
-    return res.status(200).json({ ok: true, year: Number(year), expenses, deals, vendorMemory });
+    let pendingDuplicates = [];
+    try { pendingDuplicates = (await loadDedup()).pending || []; } catch (_) {}
+    return res.status(200).json({ ok: true, year: Number(year), expenses, deals, vendorMemory, pendingDuplicates });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
@@ -1356,6 +1416,7 @@ export default async function handler(req, res) {
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
   if (action === 'process-inbox')    return handleProcessInbox(req, res);
   if (action === 'books-data')       return handleBooksData(req, res);
+  if (action === 'resolve-dup')      return handleResolveDup(req, res);
   if (action === 'books-diag')       return handleBooksDiag(req, res);
   if (action === 'update-expense')   return handleUpdateExpense(req, res);
   if (action === 'upsert-deal')      return handleUpsertDeal(req, res);
