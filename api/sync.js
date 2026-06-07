@@ -23,6 +23,7 @@
 //   APPS_SCRIPT_SHARED_SECRET       — random string; Apps Script must send this in X-Books-Secret header
 
 const KEY = 'pf_dashboard_state';
+export const config = { maxDuration: 60 }; // allow the backlog importer time for vision calls
 
 // ─────────────────────────────────────────────────────────────
 // Existing Redis helpers (unchanged)
@@ -619,6 +620,118 @@ async function logComplete(token, sheetId, logId, status, errMsg, expenseId) {
 // ─────────────────────────────────────────────────────────────
 // books-data action (read for the dashboard)
 // ─────────────────────────────────────────────────────────────
+async function handleProcessInbox(req, res) {
+  // Safe backlog importer for receipts stuck in the Drive inbox.
+  // Default = DRY RUN (no writes). Add &commit=1 to apply. &limit=N per call.
+  // For each inbox file: extract (vendor/date/amount), then:
+  //   - matches an existing expense WITHOUT a receipt image  -> RELINK (no new row, no total change)
+  //   - matches an existing expense that already has an image -> just move file out of inbox
+  //   - matches nothing -> ADD a new expense row (genuinely new receipt)
+  const secret = (req.query.secret || '').toString();
+  const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
+  if (secret !== expected) return res.status(403).json({ error: 'bad or missing secret' });
+
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  const inboxId = cleanDriveId(process.env.GOOGLE_DRIVE_INBOX_ID);
+  const processedId = cleanDriveId(process.env.GOOGLE_DRIVE_PROCESSED_ID);
+  const failedId = cleanDriveId(process.env.GOOGLE_DRIVE_FAILED_ID);
+  if (!sheetId || !inboxId || !processedId || !failedId) return res.status(500).json({ error: 'Books env vars missing' });
+
+  const dryRun = String(req.query.commit || '') !== '1';
+  const limit = Math.max(1, Math.min(8, parseInt(req.query.limit || '5', 10) || 5));
+
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+
+  let files = [];
+  try {
+    const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=200&orderBy=createdTime`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return res.status(500).json({ error: `inbox list failed: ${r.status} ${(await r.text()).slice(0, 200)}` });
+    files = ((await r.json()).files || []).filter((x) => /^image\//.test(x.mimeType) || x.mimeType === 'application/pdf');
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+
+  const totalInbox = files.length;
+  const batch = files.slice(0, limit);
+
+  let existing = [];
+  try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
+  // Loose vendor compare (punctuation-insensitive) so AI re-extraction variance
+  // never causes a false ADD (= duplicate). Amount+date are the strong anchors.
+  const nvLoose = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const amtEq = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.005;
+  const vendorClose = (a, b) => { const x = nvLoose(a), y = nvLoose(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)); };
+
+  const results = [];
+  let relinked = 0, added = 0, alreadyLinked = 0, failed = 0;
+
+  for (const file of batch) {
+    let p;
+    try {
+      const meta = await driveDownloadFile(token, file.id);
+      const ex = await anthropicExtract(meta.base64, meta.mimeType);
+      if (!ex.ok) throw new Error(ex.error || 'extraction failed');
+      p = ex.parsed || {};
+    } catch (e) {
+      failed++; results.push({ file: file.name, action: 'failed', error: String(e.message).slice(0, 140) });
+      if (!dryRun) { try { await driveMoveFile(token, file.id, failedId, inboxId); } catch (_) {} }
+      continue;
+    }
+
+    // Only dedupe when we have a real amount + date to anchor on; otherwise add.
+    const canMatch = !!p.date && Number(p.amount_total) > 0;
+    const match = canMatch ? existing.find((r) => amtEq(r.amount, p.amount_total) && (r.date || '') === (p.date || '') && vendorClose(r.vendor, p.vendor)) : null;
+    const hasImg = match && match.receipt_url && String(match.receipt_url).trim();
+
+    if (hasImg) {
+      alreadyLinked++;
+      results.push({ file: file.name, action: 'already-linked (skip, no change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id });
+      if (!dryRun) { try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) {} }
+    } else if (match) {
+      relinked++;
+      results.push({ file: file.name, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id });
+      if (!dryRun) {
+        try {
+          await driveMoveFile(token, file.id, processedId, inboxId);
+          const url = await driveGetWebLink(token, file.id) || '';
+          const merged = { ...match, receipt_url: url };
+          delete merged._rowIndex; delete merged.flags_computed;
+          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
+        } catch (_) {}
+      }
+    } else {
+      added++;
+      results.push({ file: file.name, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion });
+      if (!dryRun) {
+        let receiptUrl = '';
+        try { await driveMoveFile(token, file.id, processedId, inboxId); receiptUrl = await driveGetWebLink(token, file.id) || ''; } catch (_) {}
+        const row = {
+          expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD',
+          category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '',
+          payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: receiptUrl,
+          auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '',
+          extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '',
+          entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog',
+        };
+        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); } catch (_) {}
+      }
+    }
+  }
+
+  return res.status(200).json({
+    mode: dryRun ? 'DRY-RUN — preview only, nothing written' : 'COMMITTED — changes written',
+    totalImagesInInbox: totalInbox,
+    processedThisCall: batch.length,
+    remainingAfterThisCall: dryRun ? totalInbox : Math.max(0, totalInbox - batch.length),
+    summary: { relinked, added_new: added, alreadyLinked, failed },
+    nextStep: dryRun
+      ? 'Looks right? Re-run the SAME url with &commit=1 added to apply. (Repeat until remaining = 0.)'
+      : (totalInbox - batch.length > 0 ? 'More remain — run the &commit=1 url again to continue.' : 'Done — inbox cleared.'),
+    details: results,
+  });
+}
+
 async function handleBooksDiag(req, res) {
   // GET /api/sync?action=books-diag&secret=...  → live auth + inbox folder + sync log + receipt_url population
   const secret = (req.query.secret || '').toString();
@@ -1164,6 +1277,7 @@ export default async function handler(req, res) {
 
   // Books actions take precedence when action= is set
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
+  if (action === 'process-inbox')    return handleProcessInbox(req, res);
   if (action === 'books-data')       return handleBooksData(req, res);
   if (action === 'books-diag')       return handleBooksDiag(req, res);
   if (action === 'update-expense')   return handleUpdateExpense(req, res);
