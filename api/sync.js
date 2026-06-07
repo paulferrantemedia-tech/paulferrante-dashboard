@@ -638,17 +638,34 @@ async function handleBooksDiag(req, res) {
   try { token = await getGoogleAccessToken(); out.auth = { ok: true, note: 'Google service-account token obtained' }; }
   catch (e) { out.auth = { ok: false, error: e.message }; return res.status(200).json(out); }
 
-  // Inbox folder file count (THE top suspect for "stopped pulling")
+  out.serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null;
+
+  // Inbox folder access (THE top suspect for "stopped pulling")
+  const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
+  const listInbox = async (allDrives) => {
+    const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
+    const extra = allDrives ? '&supportsAllDrives=true&includeItemsFromAllDrives=true' : '';
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,createdTime)&pageSize=100&orderBy=createdTime desc${extra}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return { ok:false, status:r.status, body:(await r.text()).slice(0,200) };
+    const j = await r.json(); const files = j.files || [];
+    return { ok:true, count: files.length, sample: files.slice(0,10).map((x)=>({ name:x.name, mimeType:x.mimeType, createdTime:x.createdTime })) };
+  };
   try {
-    const inboxId = process.env.GOOGLE_DRIVE_INBOX_ID;
     if (!inboxId) { out.inboxFolder = { error: 'GOOGLE_DRIVE_INBOX_ID not set' }; }
     else {
-      const q = encodeURIComponent(`'${inboxId}' in parents and trashed=false`);
-      const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType,createdTime)&pageSize=100&orderBy=createdTime desc`, { headers: { Authorization: `Bearer ${token}` } });
-      if (!r.ok) out.inboxFolder = { error: `${r.status} ${(await r.text()).slice(0,300)}` };
-      else { const j = await r.json(); const files = j.files || []; out.inboxFolder = { folderId: inboxId, count: files.length, sample: files.slice(0, 10).map((x) => ({ name: x.name, mimeType: x.mimeType, createdTime: x.createdTime })) }; }
+      out.inboxFolder = { folderId: inboxId, plain: await listInbox(false), withSharedDriveFlags: await listInbox(true) };
+      // folder metadata by id
+      const mr = await fetch(`https://www.googleapis.com/drive/v3/files/${inboxId}?fields=id,name,parents,trashed,driveId&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } });
+      out.inboxFolderMeta = mr.ok ? await mr.json() : { error: `${mr.status} ${(await mr.text()).slice(0,160)}` };
     }
   } catch (e) { out.inboxFolder = { error: e.message }; }
+
+  // Which folders CAN the service account see? (helps find the real inbox id)
+  try {
+    const q = encodeURIComponent("mimeType='application/vnd.google-apps.folder' and trashed=false");
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,parents,driveId)&pageSize=50&supportsAllDrives=true&includeItemsFromAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } });
+    out.accessibleFolders = r.ok ? ((await r.json()).files || []).map((x)=>({ id:x.id, name:x.name, driveId:x.driveId||null })) : { error: `${r.status}` };
+  } catch (e) { out.accessibleFolders = { error: e.message }; }
 
   // Last sync log + receipt_url population on existing expenses
   try {
