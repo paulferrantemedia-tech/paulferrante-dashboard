@@ -2990,6 +2990,15 @@ const MEAL_PURPOSE_TEMPLATES = [
   { group:'Client / prospect present', label:'Coffee with brand rep', text:'Coffee meeting with [name] from [Brand] regarding potential content partnership.' },
   { group:'Client / prospect present', label:'Lunch with prospective partner', text:'Lunch with [name] from [Brand] to discuss sponsorship opportunities and campaign concepts.' },
   { group:'Client / prospect present', label:'Dinner with agency rep', text:'Dinner with [name] from [Agency] regarding creator campaign opportunities.' },
+  { group:'Equipment & tech', label:'Equipment / electronics', text:'Equipment purchased for content production, filming, editing, and creator business operations for RGG Media.' },
+  { group:'Equipment & tech', label:'Software / subscription', text:'Software or subscription used for content production, editing, scheduling, and creator business operations for RGG Media.' },
+  { group:'Office & overhead', label:'Internet / phone / utilities', text:'Internet, phone, or communications service used for content production and creator business operations for RGG Media.' },
+  { group:'Office & overhead', label:'Home office (business-use portion)', text:'Business-use portion of home office expense supporting content production, administration, and creator business operations for RGG Media.' },
+  { group:'Office & overhead', label:'Office supplies', text:'Office supplies used for creator business operations and administration for RGG Media.' },
+  { group:'Production & growth', label:'Production materials / props', text:'Materials or props purchased for content production and creator content for RGG Media.' },
+  { group:'Production & growth', label:'Advertising / promotion', text:'Advertising and promotion expense supporting RGG Media content and audience growth.' },
+  { group:'Production & growth', label:'Professional services', text:'Professional services supporting RGG Media business operations, compliance, and administration.' },
+  { group:'General', label:'General business expense', text:'Ordinary and necessary business expense incurred for creator business operations for RGG Media.' },
 ];
 const TEMPLATE_GROUPS = [...new Set(MEAL_PURPOSE_TEMPLATES.map(t => t.group))]; // preserve order, one source
 
@@ -3240,6 +3249,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
     // entry. No rows are added, so totals can't change. Slow files are skipped.
     let offset = 0, relinked = 0, unmatched = 0, total = 0, guard = 0;
     while (guard++ < 400) {
+      if (guard > 1) await new Promise((r) => setTimeout(r, 1200)); // throttle: stay under Sheets 60 reads/min
       let j = null;
       try {
         const r = await fetch('/api/sync?action=process-inbox&commit=1&limit=1&offset=' + offset + '&secret=pf_secret_2026&t=' + Date.now(), { cache: 'no-store' });

@@ -51,6 +51,51 @@ async function kvSet(baseUrl, token, value) {
   return res.json();
 }
 
+// ── Arbitrary-key KV (for the dedup store) ───────────────────────────────────
+async function kvGetKey(key) {
+  const baseUrl = process.env.KV_REST_API_URL, token = process.env.KV_REST_API_TOKEN;
+  if (!baseUrl || !token) return null;
+  try {
+    const res = await fetch(`${baseUrl}/get/${encodeURIComponent(key)}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.result) return null;
+    if (typeof data.result === 'string') { try { return JSON.parse(data.result); } catch { return null; } }
+    return data.result;
+  } catch (_) { return null; }
+}
+async function kvSetKey(key, value) {
+  const baseUrl = process.env.KV_REST_API_URL, token = process.env.KV_REST_API_TOKEN;
+  if (!baseUrl || !token) return false;
+  try {
+    const res = await fetch(`${baseUrl}/pipeline`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify([['SET', key, JSON.stringify(value)]]) });
+    return res.ok;
+  } catch (_) { return false; }
+}
+
+// ── Receipt dedup state (persists across runs: backlog tool + folder watcher) ──
+// Shape: { hashes: { "<sha256>": {expense_id, vendor, date, amount, file_id, at} },
+//          pending: [ {dup_id, hash, file_id, file_name, receipt_url, row, incoming, matched, at} ] }
+const DEDUP_KEY = 'books:dedup_v1';
+async function loadDedup() {
+  const d = await kvGetKey(DEDUP_KEY);
+  return (d && typeof d === 'object') ? { hashes: d.hashes || {}, pending: Array.isArray(d.pending) ? d.pending : [] } : { hashes: {}, pending: [] };
+}
+async function saveDedup(state) { return kvSetKey(DEDUP_KEY, { hashes: state.hashes || {}, pending: state.pending || [] }); }
+
+async function sha256Hex(buf) { const { createHash } = await import('node:crypto'); return createHash('sha256').update(buf).digest('hex'); }
+
+// STRICT dedup matcher — deliberately stricter than the loose image-relink matcher
+// (which uses +/-1 day and fuzzy vendor). Here: normalized-exact vendor (keeps store
+// numbers so "STATER BROS #123" != "#456"), EXACT calendar day, amount to 2 decimals.
+function dedupVendorNorm(v) { return String(v || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function amt2(a) { return Math.round(Number(a || 0) * 100); }
+function strictDupMatch(existingRows, vendor, date, amount) {
+  const nv = dedupVendorNorm(vendor), c = amt2(amount);
+  if (!nv || !date || !(Number(amount) > 0)) return null; // need all three to call it a dup
+  return existingRows.find((r) => dedupVendorNorm(r.vendor) === nv && (r.date || '') === (date || '') && amt2(r.amount) === c) || null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Google API auth (service-account JWT — no extra deps)
 // ─────────────────────────────────────────────────────────────
@@ -101,14 +146,30 @@ async function getGoogleAccessToken() {
 function cleanDriveId(x) { return String(x || '').replace(/[?#&].*$/, '').trim(); }
 function driveFileIdFromUrl(u) { const t = String(u || ''); const m = t.match(/\/d\/([^/]+)/) || t.match(/[?&]id=([^&]+)/); return m ? m[1] : null; }
 
+const _sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 async function sheetsGet(token, sheetId, range) {
-  const r = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!r.ok) throw new Error(`Sheets GET ${range} failed: ${r.status} ${await r.text()}`);
-  const j = await r.json();
-  return j.values || [];
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (r.ok) { const j = await r.json(); return j.values || []; }
+    const body = await r.text();
+    // Sheets read quota is 60/min/user — back off and retry on rate-limit/transient.
+    if ((r.status === 429 || r.status === 503) && attempt < 5) { await _sleep(400 * Math.pow(2, attempt)); continue; }
+    throw new Error(`Sheets GET ${range} failed: ${r.status} ${body}`);
+  }
+}
+// Batch multiple ranges into ONE read request (cuts books-data from 3 reads to 1).
+async function sheetsBatchGet(token, sheetId, ranges) {
+  const qs = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
+  for (let attempt = 0; ; attempt++) {
+    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?${qs}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (r.ok) { const j = await r.json(); return (j.valueRanges || []).map((vr) => vr.values || []); }
+    const body = await r.text();
+    if ((r.status === 429 || r.status === 503) && attempt < 5) { await _sleep(400 * Math.pow(2, attempt)); continue; }
+    throw new Error(`Sheets batchGet failed: ${r.status} ${body}`);
+  }
 }
 
 async function sheetsAppend(token, sheetId, range, values) {
@@ -829,11 +890,7 @@ async function handleBooksData(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const [eVals, dVals, vVals] = await Promise.all([
-      sheetsGet(token, sheetId, 'Expenses!A1:W'),
-      sheetsGet(token, sheetId, 'Deals!A1:L'),
-      sheetsGet(token, sheetId, 'VendorMemory!A1:E'),
-    ]);
+    const [eVals, dVals, vVals] = await sheetsBatchGet(token, sheetId, ['Expenses!A1:W', 'Deals!A1:L', 'VendorMemory!A1:E']);
     // Filter out deleted (blank) rows AND rows outside the requested year
     const expenses = rowsToObjects(eVals).filter((r) => {
       if (!r.expense_id) return false; // blank/deleted row
