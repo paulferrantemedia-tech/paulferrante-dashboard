@@ -99,6 +99,7 @@ async function getGoogleAccessToken() {
 // Drive folder IDs are sometimes pasted from a browser URL with trailing junk
 // like "<id>?dmr=1&ec=...". Strip anything after the id so lookups don't 404.
 function cleanDriveId(x) { return String(x || '').replace(/[?#&].*$/, '').trim(); }
+function driveFileIdFromUrl(u) { const t = String(u || ''); const m = t.match(/\/d\/([^/]+)/) || t.match(/[?&]id=([^&]+)/); return m ? m[1] : null; }
 
 async function sheetsGet(token, sheetId, range) {
   const r = await fetch(
@@ -621,12 +622,15 @@ async function logComplete(token, sheetId, logId, status, errMsg, expenseId) {
 // books-data action (read for the dashboard)
 // ─────────────────────────────────────────────────────────────
 async function handleProcessInbox(req, res) {
-  // Safe backlog importer for receipts stuck in the Drive inbox.
-  // Default = DRY RUN (no writes). Add &commit=1 to apply. &limit=N per call.
-  // For each inbox file: extract (vendor/date/amount), then:
-  //   - matches an existing expense WITHOUT a receipt image  -> RELINK (no new row, no total change)
-  //   - matches an existing expense that already has an image -> just move file out of inbox
-  //   - matches nothing -> ADD a new expense row (genuinely new receipt)
+  // SAFE, IDEMPOTENT backlog importer.
+  // Every receipt is tracked by its Drive FILE ID. A file whose id already
+  // appears in any expense's receipt_url is considered done and is never
+  // processed again — so even if the file can't be moved out of the inbox
+  // (e.g. the service account has read-only Drive access), it can NEVER create
+  // a duplicate. For each still-pending file: extract -> if it matches an
+  // existing expense (amount+date+vendor) RELINK that row's receipt_url (no new
+  // row, no total change); otherwise ADD a new expense. Best-effort move after.
+  // Default = DRY RUN. Add &commit=1 to apply. &limit=N per call.
   const secret = (req.query.secret || '').toString();
   const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
   if (secret !== expected) return res.status(403).json({ error: 'bad or missing secret' });
@@ -652,19 +656,22 @@ async function handleProcessInbox(req, res) {
     files = ((await r.json()).files || []).filter((x) => /^image\//.test(x.mimeType) || x.mimeType === 'application/pdf');
   } catch (e) { return res.status(500).json({ error: e.message }); }
 
-  const totalInbox = files.length;
-  const batch = files.slice(0, limit);
-
   let existing = [];
   try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
-  // Loose vendor compare (punctuation-insensitive) so AI re-extraction variance
-  // never causes a false ADD (= duplicate). Amount+date are the strong anchors.
+
+  // Files already represented in the books (by Drive file id in a receipt_url) are DONE.
+  const linkedFileIds = new Set(existing.map((r) => driveFileIdFromUrl(r.receipt_url)).filter(Boolean));
+  const pending = files.filter((file) => !linkedFileIds.has(file.id));
+  const totalInInbox = files.length;
+  const totalPending = pending.length;
+  const batch = pending.slice(0, limit);
+
   const nvLoose = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const amtEq = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.005;
   const vendorClose = (a, b) => { const x = nvLoose(a), y = nvLoose(b); return !!x && !!y && (x === y || x.includes(y) || y.includes(x)); };
 
   const results = [];
-  let relinked = 0, added = 0, alreadyLinked = 0, failed = 0;
+  let relinked = 0, added = 0, failed = 0;
 
   for (const file of batch) {
     let p;
@@ -674,70 +681,63 @@ async function handleProcessInbox(req, res) {
       if (!ex.ok) throw new Error(ex.error || 'extraction failed');
       p = ex.parsed || {};
     } catch (e) {
-      failed++; results.push({ file: file.name, action: 'failed', error: String(e.message).slice(0, 140) });
+      failed++; results.push({ file: file.name, fileId: file.id, action: 'failed', error: String(e.message).slice(0, 140) });
       if (!dryRun) { try { await driveMoveFile(token, file.id, failedId, inboxId); } catch (_) {} }
       continue;
     }
 
-    // Only dedupe when we have a real amount + date to anchor on; otherwise add.
+    // Link that records THIS file's id (so it's marked done and never reprocessed).
+    let url = '';
+    if (!dryRun) { try { url = await driveGetWebLink(token, file.id) || ''; } catch (e) { /* fall through */ } }
+    if (!url) url = `https://drive.google.com/file/d/${file.id}/view`; // always id-bearing fallback
+
     const canMatch = !!p.date && Number(p.amount_total) > 0;
     const match = canMatch ? existing.find((r) => amtEq(r.amount, p.amount_total) && (r.date || '') === (p.date || '') && vendorClose(r.vendor, p.vendor)) : null;
-    const hasImg = match && match.receipt_url && String(match.receipt_url).trim();
 
-    if (hasImg) {
-      alreadyLinked++;
-      results.push({ file: file.name, action: 'already-linked (skip, no change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id });
-      if (!dryRun) { try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) {} }
-    } else if (match) {
+    if (match) {
       relinked++;
-      const rr = { file: file.name, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id };
+      const rr = { file: file.name, fileId: file.id, action: 'RELINK existing expense (no total change)', vendor: p.vendor, amount: p.amount_total, date: p.date, expense_id: match.expense_id, receipt_url_written: url };
       results.push(rr);
       if (!dryRun) {
-        // Write receipt_url FIRST (data persistence must NOT depend on the file move).
-        let url = '';
-        try { url = await driveGetWebLink(token, file.id) || ''; } catch (e) { rr.linkError = String(e.message).slice(0,120); }
-        rr.receipt_url_written = url || '(empty)';
-        if (url) {
-          try {
-            const merged = { ...match, receipt_url: url };
-            delete merged._rowIndex; delete merged.flags_computed;
-            await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
-          } catch (e) { rr.writeError = String(e.message).slice(0,120); }
-        }
-        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0,120); }
+        try {
+          const merged = { ...match, receipt_url: url };
+          delete merged._rowIndex; delete merged.flags_computed;
+          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
+          match.receipt_url = url; // keep in-memory existing in sync within this batch
+        } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
+        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0, 120); }
       }
     } else {
       added++;
-      const rr = { file: file.name, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion };
+      const rr = { file: file.name, fileId: file.id, action: 'ADD new expense', vendor: p.vendor, amount: p.amount_total, date: p.date, category: p.category_suggestion, receipt_url_written: url };
       results.push(rr);
       if (!dryRun) {
-        // Get the link + append the row FIRST; move the file afterward (independently).
-        let receiptUrl = '';
-        try { receiptUrl = await driveGetWebLink(token, file.id) || ''; } catch (e) { rr.linkError = String(e.message).slice(0,120); }
-        rr.receipt_url_written = receiptUrl || '(empty)';
         const row = {
           expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD',
           category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '',
-          payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: receiptUrl,
+          payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: url,
           auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '',
           extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '',
           entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog',
         };
-        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); } catch (e) { rr.writeError = String(e.message).slice(0,120); }
-        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0,120); }
+        try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); existing.push({ ...row, receipt_url: url }); } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
+        try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (e) { rr.moveError = String(e.message).slice(0, 120); }
       }
     }
   }
 
+  const remaining = dryRun ? totalPending : Math.max(0, totalPending - batch.length);
   return res.status(200).json({
     mode: dryRun ? 'DRY-RUN — preview only, nothing written' : 'COMMITTED — changes written',
-    totalImagesInInbox: totalInbox,
+    totalImagesInInbox: totalInInbox,
+    alreadyImported: totalInInbox - totalPending,
+    pendingBeforeThisCall: totalPending,
     processedThisCall: batch.length,
-    remainingAfterThisCall: dryRun ? totalInbox : Math.max(0, totalInbox - batch.length),
-    summary: { relinked, added_new: added, alreadyLinked, failed },
+    remainingAfterThisCall: remaining,
+    summary: { relinked, added_new: added, failed },
     nextStep: dryRun
-      ? 'Looks right? Re-run the SAME url with &commit=1 added to apply. (Repeat until remaining = 0.)'
-      : (totalInbox - batch.length > 0 ? 'More remain — run the &commit=1 url again to continue.' : 'Done — inbox cleared.'),
+      ? 'Preview only. Re-run with &commit=1 to apply (repeat until remaining = 0).'
+      : (remaining > 0 ? 'More remain — run the &commit=1 url again to continue.' : 'Done — all receipts imported.'),
     details: results,
   });
 }
@@ -784,6 +784,8 @@ async function handleBooksDiag(req, res) {
       // folder metadata by id
       const mr = await fetch(`https://www.googleapis.com/drive/v3/files/${inboxId}?fields=id,name,parents,trashed,driveId&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } });
       out.inboxFolderMeta = mr.ok ? await mr.json() : { error: `${mr.status} ${(await mr.text()).slice(0,160)}` };
+      const cr = await fetch(`https://www.googleapis.com/drive/v3/files/${inboxId}?fields=capabilities(canEdit,canAddChildren,canRemoveChildren,canDelete)&supportsAllDrives=true`, { headers: { Authorization: `Bearer ${token}` } });
+      out.inboxWriteAccess = cr.ok ? (await cr.json()).capabilities : { error: `${cr.status}` };
     }
   } catch (e) { out.inboxFolder = { error: e.message }; }
 
