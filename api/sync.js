@@ -1449,7 +1449,6 @@ export default async function handler(req, res) {
   if (action === 'catalog-sync')     return handleCatalogSync(req, res);
   if (action === 'catalog-classify') return handleCatalogClassify(req, res);
   if (action === 'catalog-override') return handleCatalogOverride(req, res);
-  if (action === 'catalog-verify')   return handleCatalogVerify(req, res);
 
   // Books actions take precedence when action= is set
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
@@ -1595,7 +1594,9 @@ async function catIgToken() {
 
 // ── one-page platform fetchers (normalize to a common post shape) ─────────────
 function catNormalize(platform, postId, dateISO, text, thumbnail, url, metrics) {
-  const { tags, mentions } = catParse(text);
+  const parsed = catParse(text);
+  const tags = [...new Set(parsed.tags)];
+  const mentions = [...new Set(parsed.mentions)];
   const { branded, disclosureTags } = catDetectBranded(tags);
   return {
     key: `${platform}:${postId}`, platform, postId,
@@ -1740,14 +1741,7 @@ async function catLoad() {
   if (c && c.posts) return c;
   return { posts: {}, meta: { lastSync: null, counts: {}, cursors: {}, coverage: {} } };
 }
-async function catSave(cat) {
-  const baseUrl = process.env.KV_REST_API_URL, token = process.env.KV_REST_API_TOKEN;
-  try {
-    const res = await fetch(`${baseUrl}/pipeline`, { method:'POST', headers:{ Authorization:`Bearer ${token}`,'Content-Type':'application/json' }, body: JSON.stringify([['SET', CATALOG_KEY, JSON.stringify(cat)]]) });
-    const txt = await res.text();
-    return { ok: res.ok, status: res.status, body: (txt||'').slice(0,160) };
-  } catch (e) { return { ok:false, error: e.message }; }
-}
+async function catSave(cat) { return kvSetKey(CATALOG_KEY, cat); }
 
 // ── action handlers ───────────────────────────────────────────────────────────
 function catSecretOk(req) {
@@ -1809,11 +1803,9 @@ async function handleCatalogSync(req, res) {
   cat.meta.coverage = cat.meta.coverage || {};
   cat.meta.coverage[platform] = { reached: totalForPlatform, hasMore: !!page.hasMore };
   cat.meta.lastSync = Date.now();
-  const saveResult = await catSave(cat);
-  const rb = await kvGetKey(CATALOG_KEY);
-  const readbackCount = rb && rb.posts ? Object.keys(rb.posts).length : 0;
+  await catSave(cat);
 
-  return res.status(200).json({ ok: true, platform, added, totalForPlatform, nextCursor: page.nextCursor || null, hasMore: !!page.hasMore, _diag: { saveResult, readbackCount, valueBytes: JSON.stringify(cat).length } });
+  return res.status(200).json({ ok: true, platform, added, totalForPlatform, nextCursor: page.nextCursor || null, hasMore: !!page.hasMore });
 }
 
 async function handleCatalogClassify(req, res) {
@@ -1864,47 +1856,3 @@ async function handleCatalogOverride(req, res) {
 // test-only exports (do not affect the serverless default export)
 export { catParse, catDetectBranded, FTC_TAGS, CAT_VISUAL_SLUGS };
 
-// ── TEMP verification endpoint (removed in cleanup commit) ───────────────────
-async function handleCatalogVerify(req, res) {
-  const cat = await catLoad();
-  const all = Object.values(cat.posts || {});
-  const byPlat = p => all.filter(x => x.platform === p);
-  const trim = p => ({ key: p.key, date: (p.date||'').slice(0,10), text: (p.text || '').slice(0, 70), hashtags: (p.hashtags||[]).slice(0,6), mentions: p.mentions, brandedAuto: p.brandedAuto, disclosureTags: p.disclosureTags, hasThumb: !!p.thumbnail, visualTags: p.visualTags || null });
-  const q = (req.query.q || 'japan').toString().toLowerCase();
-  const searchMatches = all.filter(p => (p.text || '').toLowerCase().includes(q) || (p.hashtags || []).some(h => h.includes(q)));
-  const branded = all.filter(p => p.brandedAuto);
-  const mentionOnlyOrganic = all.filter(p => !p.brandedAuto && (p.mentions || []).length > 0).slice(0, 6);
-  const classified = all.filter(p => p.visionAt);
-  if (req.query.setTestOverride) { const ov = (await kvGetKey(CAT_OVR_KEY)) || {}; ov[req.query.setTestOverride] = { branded: true, brand: '__TEST__', visualTags: ['pets'], _at: Date.now() }; await kvSetKey(CAT_OVR_KEY, ov); }
-  if (req.query.clearTestOverride) { const ov = (await kvGetKey(CAT_OVR_KEY)) || {}; delete ov[req.query.clearTestOverride]; await kvSetKey(CAT_OVR_KEY, ov); }
-  const overrides = (await kvGetKey(CAT_OVR_KEY)) || {};
-  const combine = (platforms, brandedMode, visuals) => all.filter(p => {
-    if (platforms.length && !platforms.includes(p.platform)) return false;
-    if (brandedMode === 'branded' && !p.brandedAuto) return false;
-    if (brandedMode === 'organic' && p.brandedAuto) return false;
-    if (visuals.length && !(p.visualTags || []).some(v => visuals.includes(v))) return false;
-    return true;
-  }).length;
-  return res.status(200).json({
-    ok: true,
-    counts: { tiktok: byPlat('tiktok').length, instagram: byPlat('instagram').length, youtube: byPlat('youtube').length, total: all.length },
-    coverage: cat.meta && cat.meta.coverage,
-    samples: { tiktok: byPlat('tiktok').slice(0, 2).map(trim), instagram: byPlat('instagram').slice(0, 2).map(trim), youtube: byPlat('youtube').slice(0, 2).map(trim) },
-    searchTest: { query: q, matches: searchMatches.length, sampleKeys: searchMatches.slice(0, 5).map(p => p.key) },
-    brandedTest: {
-      brandedCount: branded.length, organicCount: all.length - branded.length,
-      brandedSamples: branded.slice(0, 4).map(p => ({ key: p.key, disclosureTags: p.disclosureTags })),
-      mentionOnlyOrganic: mentionOnlyOrganic.map(p => ({ key: p.key, mentions: p.mentions, brandedAuto: p.brandedAuto })),
-    },
-    visionTest: { classifiedCount: classified.length, sampleTagged: classified.slice(0, 4).map(p => ({ key: p.key, visualTags: p.visualTags })) },
-    combiningTest: {
-      tiktok_AND_organic: combine(['tiktok'], 'organic', []),
-      platform_tiktok_OR_instagram: combine(['tiktok', 'instagram'], 'all', []),
-      brandedOnly: combine([], 'branded', []),
-      visual_union_outdoorTravel_OR_pets: combine([], 'all', ['outdoor-travel', 'pets']),
-      tiktok_AND_visual_pets: combine(['tiktok'], 'all', ['pets']),
-    },
-    overrideStoreKeys: Object.keys(overrides),
-    checkOverride: req.query.checkOverride ? (overrides[req.query.checkOverride] || null) : undefined,
-  });
-}
