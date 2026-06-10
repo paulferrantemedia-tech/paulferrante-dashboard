@@ -1842,6 +1842,14 @@ async function handleCatalogClassify(req, res) {
 
 async function handleCatalogOverride(req, res) {
   if (!catSecretOk(req)) return res.status(401).json({ ok: false, error: 'bad secret' });
+  // GET form: read one override (?postKey=..) or clear it (?postKey=..&clear=1)
+  if (req.method === 'GET') {
+    const postKey = (req.query.postKey || '').toString();
+    if (!postKey) return res.status(400).json({ ok: false, error: 'postKey required' });
+    const overrides = (await kvGetKey(CAT_OVR_KEY)) || {};
+    if (req.query.clear) { delete overrides[postKey]; await kvSetKey(CAT_OVR_KEY, overrides); return res.status(200).json({ ok: true, cleared: postKey, remainingKeys: Object.keys(overrides) }); }
+    return res.status(200).json({ ok: true, postKey, override: overrides[postKey] || null });
+  }
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
   const postKey = body && body.postKey;
