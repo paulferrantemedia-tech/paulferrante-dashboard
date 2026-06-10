@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import html2canvas from "html2canvas";
 
@@ -1818,6 +1818,368 @@ function castingScoreColor(s) {
   if (s >= 6) return { bg:`${YELL}33`, color:'#8A6A10', border:`${YELL}AA` };
   if (s >= 5) return { bg:'#F4F6F9',   color:SLATE,    border:BDR };
   return        { bg:'#F4F6F9',         color:'#94A3B8', border:BDR };
+}
+
+// ══ DISCOVERY ════════════════════════════════════════════════════════════════
+// Searchable, filterable index of Paul's OWN posts across TikTok / IG / YouTube.
+// Pull example posts instantly when a brand reaches out or he's pitching.
+// Reads from /api/sync catalog actions. Brand reconciliation + the CRM-miss
+// cross-check happen here on the client, where the CRM data already lives.
+const DISCO_SECRET = 'pf_secret_2026';
+const DISCO_PLATFORMS = [
+  ['tiktok', 'TikTok', '🎵'],
+  ['instagram', 'Instagram', '📸'],
+  ['youtube', 'YouTube', '▶️'],
+];
+const DISCO_PLAT_ICON = { tiktok: '🎵', instagram: '📸', youtube: '▶️' };
+const DISCO_VISUALS = [
+  ['outdoor-travel', 'Outdoor / travel'],
+  ['indoor-accommodation', 'Indoor / hotel / home'],
+  ['active-movement', 'Active / movement'],
+  ['stylish-lifestyle', 'Stylish / lifestyle'],
+  ['food-dining', 'Food / dining'],
+  ['product-demo', 'Product / demo'],
+  ['talking-to-camera', 'Talking to camera'],
+  ['people-social', 'People / social'],
+  ['pets', 'Pets'],
+];
+const DISCO_VISUAL_LABEL = Object.fromEntries(DISCO_VISUALS);
+function discoNorm(s) { return (s || '').toString().toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+function DiscoveryTab({ crm, deals, showToast, isMobile }) {
+  const [posts, setPosts] = useState(null);          // null = not loaded yet
+  const [overrides, setOverrides] = useState({});
+  const [meta, setMeta] = useState({});
+  const [building, setBuilding] = useState(null);     // progress string or null
+  const [authIssues, setAuthIssues] = useState([]);
+  const [editKey, setEditKey] = useState(null);
+  const [editBuf, setEditBuf] = useState({});
+
+  const [search, setSearch] = useState('');
+  const [fPlatform, setFPlatform] = useState(new Set());
+  const [fBranded, setFBranded] = useState('all');    // all | branded | organic | review
+  const [fBrand, setFBrand] = useState(new Set());
+  const [fCategory, setFCategory] = useState(new Set());
+  const [fVisual, setFVisual] = useState(new Set());
+
+  async function loadCatalog() {
+    try {
+      const r = await fetch(`/api/sync?action=catalog-data&t=${Date.now()}`, { cache: 'no-store' });
+      const j = await r.json();
+      if (j.ok) { setPosts(j.catalog.posts || []); setOverrides(j.overrides || {}); setMeta(j.catalog.meta || {}); }
+      else setPosts([]);
+    } catch { setPosts([]); }
+  }
+  useEffect(() => { loadCatalog(); }, []);
+
+  // CRM brand index for client-side reconciliation
+  const crmBrands = useMemo(() => (crm || []).map(c => ({
+    name: c.b, niche: Array.isArray(c.niche) ? c.niche : (c.niche ? [c.niche] : []),
+    paid: !!c.paidDeal, date: c.lastDate || null,
+    keys: [c.b, ...String(c.brands || '').split(/[,/]/)]
+      .map(discoNorm).filter(k => k.length >= 3 && k !== 'various'),
+  })), [crm]);
+
+  function reconcile(post) {
+    const hay = discoNorm(post.text) + ' ' + (post.mentions || []).map(discoNorm).join(' ');
+    for (const b of crmBrands) { if (b.keys.some(k => hay.includes(k))) return b; }
+    return null;
+  }
+
+  // Enrich every post: apply override, reconcile brand/category, compute review flag
+  const enriched = useMemo(() => {
+    if (!posts) return [];
+    return posts.map(p => {
+      const ov = overrides[p.key] || {};
+      const match = reconcile(p);
+      const effBranded = ov.branded != null ? ov.branded : !!p.brandedAuto;
+      const brand = ov.brand != null ? ov.brand : (match ? match.name : (effBranded ? '(unknown brand)' : null));
+      const categories = ov.brandCategory != null ? ov.brandCategory : (match ? match.niche : []);
+      const visualTags = ov.visualTags != null ? ov.visualTags : (p.visualTags || []);
+      // CRM cross-check: not branded, but matches a PAID deal brand near the deal date
+      let review = false;
+      if (!effBranded && match && match.paid) {
+        if (!match.date) review = true;
+        else {
+          const dd = Math.abs(new Date(p.date) - new Date(match.date)) / 86400000;
+          if (dd <= 45) review = true;
+        }
+      }
+      return { ...p, effBranded, brand, categories: categories || [], visualTags, review, overridden: !!overrides[p.key] };
+    });
+  }, [posts, overrides, crmBrands]);
+
+  // Filter option lists, derived from what's actually in the catalog
+  const brandOptions = useMemo(() => {
+    const s = new Set(); enriched.forEach(p => { if (p.brand && p.brand !== '(unknown brand)') s.add(p.brand); });
+    return [...s].sort();
+  }, [enriched]);
+  const categoryOptions = useMemo(() => {
+    const s = new Set(); enriched.forEach(p => (p.categories || []).forEach(c => s.add(c)));
+    return [...s].sort();
+  }, [enriched]);
+
+  // ── THE COMBINING LOGIC: AND across filter types, OR within a filter type ──
+  const results = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return enriched.filter(p => {
+      if (fPlatform.size && !fPlatform.has(p.platform)) return false;          // OR within platform
+      if (fBranded === 'branded' && !p.effBranded) return false;
+      if (fBranded === 'organic' && p.effBranded) return false;
+      if (fBranded === 'review' && !p.review) return false;
+      if (fBrand.size && !(p.brand && fBrand.has(p.brand))) return false;       // OR within brand
+      if (fCategory.size && !(p.categories || []).some(c => fCategory.has(c))) return false; // OR within category
+      if (fVisual.size && !(p.visualTags || []).some(v => fVisual.has(v))) return false;      // OR within visual
+      if (q) {                                                                  // free text ANDs with all
+        const inText = (p.text || '').toLowerCase().includes(q);
+        const inTags = (p.hashtags || []).some(h => h.includes(q));
+        const inBrand = (p.brand || '').toLowerCase().includes(q);
+        if (!inText && !inTags && !inBrand) return false;
+      }
+      return true;
+    }).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [enriched, search, fPlatform, fBranded, fBrand, fCategory, fVisual]);
+
+  function toggleSet(setter, set, val) {
+    const n = new Set(set); n.has(val) ? n.delete(val) : n.add(val); setter(n);
+  }
+
+  async function buildCatalog() {
+    setBuilding('Starting…'); const issues = [];
+    for (const [plat] of DISCO_PLATFORMS) {
+      let cursor = null, guard = 0;
+      do {
+        let u = `/api/sync?action=catalog-sync&platform=${plat}&secret=${DISCO_SECRET}&t=${Date.now()}`;
+        if (cursor) u += `&cursor=${encodeURIComponent(cursor)}`;
+        let j;
+        try { j = await (await fetch(u, { cache: 'no-store' })).json(); }
+        catch { issues.push(plat); break; }
+        if (j.authDown) { issues.push(plat); break; }
+        setBuilding(`Pulling ${plat}… ${j.totalForPlatform || 0} posts`);
+        cursor = j.nextCursor; guard++;
+      } while (cursor && guard < 90);
+    }
+    // Visual tagging pass (branded + most-recent ~150), chunked + cached
+    let remaining = 1, guard = 0;
+    do {
+      let j;
+      try { j = await (await fetch(`/api/sync?action=catalog-classify&limit=3&scope=branded-recent&recent=150&secret=${DISCO_SECRET}&t=${Date.now()}`, { cache: 'no-store' })).json(); }
+      catch { break; }
+      remaining = j.remaining != null ? j.remaining : 0;
+      setBuilding(`Tagging visuals… ${remaining} left`);
+      guard++;
+    } while (remaining > 0 && guard < 250);
+    setAuthIssues(issues);
+    await loadCatalog();
+    setBuilding(null);
+    showToast && showToast(issues.length ? `Catalog updated (${issues.join(', ')} unavailable)` : 'Catalog updated');
+  }
+
+  async function saveOverride(key, override) {
+    try {
+      await fetch(`/api/sync?action=catalog-override&secret=${DISCO_SECRET}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postKey: key, override }),
+      });
+      setOverrides(prev => {
+        const n = { ...prev };
+        if (override === null) delete n[key]; else n[key] = { ...(n[key] || {}), ...override };
+        return n;
+      });
+      showToast && showToast('Saved');
+    } catch { showToast && showToast('Save failed'); }
+  }
+
+  function copyLink(url) {
+    if (!url) return;
+    try { navigator.clipboard.writeText(url); showToast && showToast('Link copied'); } catch { showToast && showToast('Copy failed'); }
+  }
+
+  const CHIP = { display: 'inline-block', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600, marginRight: 5, marginBottom: 4 };
+  const pillBtn = (active) => ({
+    padding: '6px 12px', border: `1px solid ${active ? BLUE : BDR}`, borderRadius: 20,
+    background: active ? `${BLUE}33` : '#fff', color: TEXT, fontSize: 12, fontWeight: active ? 700 : 500,
+    cursor: 'pointer', fontFamily: 'inherit', marginRight: 6, marginBottom: 6,
+  });
+
+  // ── Loading / empty states ──
+  if (posts === null) {
+    return <div style={{ padding: 40, color: '#4A6080', fontSize: 14 }}>Loading catalog…</div>;
+  }
+
+  const hasCatalog = posts.length > 0;
+  const visionCount = posts.filter(p => p.visionAt).length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>Discovery</div>
+          <div style={{ fontSize: 12, color: '#4A6080', marginTop: 2 }}>
+            Search your own posts to pull examples for a brand. {hasCatalog ? `${posts.length} posts indexed · ${visionCount} visually tagged` : 'Catalog not built yet.'}
+          </div>
+        </div>
+        <button onClick={() => !building && buildCatalog()} disabled={!!building}
+          style={{ background: building ? '#E2E8F0' : BLUE, color: TEXT, border: 'none', borderRadius: 10, padding: '11px 18px', fontWeight: 800, fontSize: 13, cursor: building ? 'wait' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+          {building ? building : (hasCatalog ? '↻ Refresh catalog' : '⤓ Build catalog')}
+        </button>
+      </div>
+
+      {/* Auth-down banner */}
+      {authIssues.length > 0 && (
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#B91C1C' }}>
+          ⚠ Couldn't reach {authIssues.map(p => DISCO_PLATFORMS.find(x => x[0] === p)?.[1] || p).join(', ')} — those posts may be missing or out of date. The connection token may need refreshing on the Analytics tab.
+        </div>
+      )}
+
+      {!hasCatalog && !building && (
+        <Card>
+          <div style={{ textAlign: 'center', padding: '24px 12px', color: '#4A6080' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 6 }}>Build your post catalog</div>
+            <div style={{ fontSize: 12, maxWidth: 460, margin: '0 auto 14px' }}>
+              Pulls your TikTok, Instagram and YouTube posts into one searchable index, tags sponsored vs organic from your disclosure hashtags, and visually tags the look of each post.
+            </div>
+            <button onClick={buildCatalog} style={{ background: BLUE, color: TEXT, border: 'none', borderRadius: 10, padding: '12px 22px', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>⤓ Build catalog</button>
+          </div>
+        </Card>
+      )}
+
+      {hasCatalog && (
+        <>
+          {/* Search + filters */}
+          <Card>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search caption, title, hashtag, brand…"
+              style={{ width: '100%', background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 8, padding: '10px 12px', color: TEXT, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 12 }} />
+
+            <FilterRow label="Platform">
+              {DISCO_PLATFORMS.map(([id, lbl, ic]) => (
+                <button key={id} onClick={() => toggleSet(setFPlatform, fPlatform, id)} style={pillBtn(fPlatform.has(id))}>{ic} {lbl}</button>
+              ))}
+            </FilterRow>
+
+            <FilterRow label="Type">
+              {[['all', 'All'], ['branded', 'Branded'], ['organic', 'Organic'], ['review', '⚠ Needs review']].map(([id, lbl]) => (
+                <button key={id} onClick={() => setFBranded(id)} style={pillBtn(fBranded === id)}>{lbl}</button>
+              ))}
+            </FilterRow>
+
+            {brandOptions.length > 0 && (
+              <FilterRow label="Brand">
+                {brandOptions.map(b => (
+                  <button key={b} onClick={() => toggleSet(setFBrand, fBrand, b)} style={pillBtn(fBrand.has(b))}>{b}</button>
+                ))}
+              </FilterRow>
+            )}
+
+            {categoryOptions.length > 0 && (
+              <FilterRow label="Brand category">
+                {categoryOptions.map(c => (
+                  <button key={c} onClick={() => toggleSet(setFCategory, fCategory, c)} style={pillBtn(fCategory.has(c))}>{c}</button>
+                ))}
+              </FilterRow>
+            )}
+
+            <FilterRow label="Visual">
+              {DISCO_VISUALS.map(([id, lbl]) => (
+                <button key={id} onClick={() => toggleSet(setFVisual, fVisual, id)} style={pillBtn(fVisual.has(id))}>{lbl}</button>
+              ))}
+            </FilterRow>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <div style={{ fontSize: 12, color: '#4A6080', fontWeight: 600 }}>{results.length} of {posts.length} posts</div>
+              {(fPlatform.size || fBrand.size || fCategory.size || fVisual.size || fBranded !== 'all' || search) ? (
+                <button onClick={() => { setSearch(''); setFPlatform(new Set()); setFBranded('all'); setFBrand(new Set()); setFCategory(new Set()); setFVisual(new Set()); }}
+                  style={{ background: 'none', border: 'none', color: '#0E6A80', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
+              ) : null}
+            </div>
+          </Card>
+
+          {/* Results grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            {results.map(p => (
+              <DiscoCard key={p.key} p={p} CHIP={CHIP}
+                editing={editKey === p.key}
+                onEdit={() => { setEditKey(p.key); setEditBuf({ branded: p.effBranded, brand: p.brand === '(unknown brand)' ? '' : (p.brand || ''), visualTags: [...(p.visualTags || [])] }); }}
+                onCancel={() => setEditKey(null)}
+                editBuf={editBuf} setEditBuf={setEditBuf}
+                onSave={() => { saveOverride(p.key, { branded: editBuf.branded, brand: editBuf.brand || null, visualTags: editBuf.visualTags }); setEditKey(null); }}
+                onClearOverride={() => { saveOverride(p.key, null); setEditKey(null); }}
+                onCopy={() => copyLink(p.url)}
+                crmBrandNames={crmBrands.map(b => b.name)} />
+            ))}
+          </div>
+          {results.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8', fontSize: 13 }}>No posts match these filters.</div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function FilterRow({ label, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+      <div style={{ fontSize: 10, color: '#0E6A80', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, minWidth: 92, paddingTop: 7 }}>{label}</div>
+      <div style={{ flex: 1 }}>{children}</div>
+    </div>
+  );
+}
+
+function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, onSave, onClearOverride, onCopy, crmBrandNames }) {
+  const date = p.date ? new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const snippet = (p.text || '').replace(/\s+/g, ' ').slice(0, 110);
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${BDR}`, borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', width: '100%', paddingTop: '100%', background: '#EEF2F7' }}>
+        {p.thumbnail ? <img src={p.thumbnail} alt="" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+        <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(255,255,255,0.92)', borderRadius: 6, padding: '2px 7px', fontSize: 13 }}>{DISCO_PLAT_ICON[p.platform]}</div>
+        {p.effBranded ? <div style={{ position: 'absolute', top: 8, right: 8, background: '#0E6A80', color: '#fff', borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>BRANDED</div> : null}
+        {!p.effBranded && p.review ? <div style={{ position: 'absolute', top: 8, right: 8, background: '#D97706', color: '#fff', borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>⚠ REVIEW</div> : null}
+      </div>
+      <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <div style={{ fontSize: 11, color: '#94A3B8' }}>{date} · {(p.metrics?.views || 0).toLocaleString()} views</div>
+        <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.35, minHeight: 32 }}>{snippet}{(p.text || '').length > 110 ? '…' : ''}</div>
+        <div>
+          {p.brand && p.brand !== '(unknown brand)' ? <span style={{ ...CHIP, background: '#0E6A8018', color: '#0E6A80' }}>{p.brand}</span> : null}
+          {(p.categories || []).map(c => <span key={c} style={{ ...CHIP, background: '#E1D9AE55', color: '#6B5E1A' }}>{c}</span>)}
+          {(p.visualTags || []).map(v => <span key={v} style={{ ...CHIP, background: '#88EAF633', color: '#0E6A80' }}>{DISCO_VISUAL_LABEL[v] || v}</span>)}
+          {p.overridden ? <span style={{ ...CHIP, background: '#F1F5F9', color: '#64748B' }}>✎ edited</span> : null}
+        </div>
+
+        {editing ? (
+          <div style={{ borderTop: `1px solid ${BDR}`, paddingTop: 8, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={{ fontSize: 11, color: TEXT, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={!!editBuf.branded} onChange={e => setEditBuf({ ...editBuf, branded: e.target.checked })} /> Branded (sponsored)
+            </label>
+            <input list="disco-brands" value={editBuf.brand} onChange={e => setEditBuf({ ...editBuf, brand: e.target.value })} placeholder="Brand name"
+              style={{ width: '100%', background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+            <datalist id="disco-brands">{(crmBrandNames || []).map(b => <option key={b} value={b} />)}</datalist>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {DISCO_VISUALS.map(([id, lbl]) => {
+                const on = (editBuf.visualTags || []).includes(id);
+                return <button key={id} onClick={() => {
+                  const n = new Set(editBuf.visualTags || []); on ? n.delete(id) : n.add(id); setEditBuf({ ...editBuf, visualTags: [...n] });
+                }} style={{ padding: '3px 7px', border: `1px solid ${on ? BLUE : BDR}`, borderRadius: 14, background: on ? `${BLUE}33` : '#fff', color: TEXT, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>{lbl}</button>;
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+              <button onClick={onSave} style={{ flex: 1, background: BLUE, color: TEXT, border: 'none', borderRadius: 7, padding: '7px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
+              <button onClick={onClearOverride} style={{ background: '#fff', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
+              <button onClick={onCancel} style={{ background: '#fff', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
+            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#F7F9FC', color: '#0E6A80', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
+            <button onClick={onCopy} style={{ flex: 1, background: '#F7F9FC', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Copy link</button>
+            <button onClick={onEdit} title="Edit tags" style={{ background: '#F7F9FC', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✎</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function RealityCastingTab() {
@@ -4533,7 +4895,7 @@ function ExportTab({ data, year }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // END BOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════
-  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
+  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['discovery','Discovery'],['crm','CRM'],['deliverables','Deliverables'],['reality-casting','Reality TV Casting']];
 
   return (
     <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Inter', system-ui, sans-serif" }}>
@@ -6693,6 +7055,8 @@ function ExportTab({ data, year }) {
         {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
         {tab === 'reality-casting' && <RealityCastingTab />}
         {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} />}
+        {/* ══ DISCOVERY ════════════════════════════════ */}
+        {tab === 'discovery' && <DiscoveryTab crm={crm} deals={deals} showToast={showToast} isMobile={isMobile} />}
 
         </div>
       </div>

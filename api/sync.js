@@ -1444,6 +1444,12 @@ export default async function handler(req, res) {
 
   const action = (req.query.action || '').toString();
 
+  // Discovery catalog actions
+  if (action === 'catalog-data')     return handleCatalogData(req, res);
+  if (action === 'catalog-sync')     return handleCatalogSync(req, res);
+  if (action === 'catalog-classify') return handleCatalogClassify(req, res);
+  if (action === 'catalog-override') return handleCatalogOverride(req, res);
+
   // Books actions take precedence when action= is set
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
   if (action === 'process-inbox')    return handleProcessInbox(req, res);
@@ -1487,3 +1493,363 @@ export default async function handler(req, res) {
 
   return res.status(405).json({ error: 'Method not allowed' });
 }
+
+// ============================================================================
+// DISCOVERY CATALOG  (Discovery page backend — added; touches no other feature)
+// A searchable, tagged index of Paul's OWN posts across TikTok / IG / YouTube.
+// Stored in Redis. Every action is chunked to respect Vercel Hobby's ~10s
+// serverless function limit — the client loops these calls with a progress bar.
+//
+//   GET  /api/sync?action=catalog-data
+//        -> { ok, catalog:{posts,meta}, overrides }                (read-only, fast)
+//   GET  /api/sync?action=catalog-sync&platform=tiktok|instagram|youtube&cursor=..&secret=..
+//        -> pulls ONE page, merges into catalog, preserves vision tags
+//        -> { ok, platform, added, totalForPlatform, nextCursor, hasMore, authDown? }
+//   GET  /api/sync?action=catalog-classify&limit=3&scope=branded-recent&recent=150&secret=..
+//        -> runs vision on up to `limit` un-classified in-scope thumbnails (cached)
+//        -> { ok, classified, remaining, calls }
+//   POST /api/sync?action=catalog-override   body:{ postKey, override|null }
+//        -> upserts/clears a manual override (PERSISTS; never wiped by a re-sync)
+// ============================================================================
+
+const CATALOG_KEY = 'pf_catalog_v1';
+const CAT_OVR_KEY = 'pf_catalog_overrides_v1';
+const CAT_YT_KEY = 'AIzaSyBw6nbEtl_ZN_aaijpp4njYgXT6enGj-pU';
+const CAT_YT_CHANNEL = 'UCpi1tHHbTLZmGvOoREHZDsw';
+const CAT_TT_BASE = 'https://open.tiktokapis.com/v2';
+const CAT_IG_BASE = 'https://graph.facebook.com/v20.0';
+const CAT_YT_BASE = 'https://www.googleapis.com/youtube/v3';
+
+// FTC disclosure hashtags — matched as EXACT lowercase tokens against parsed
+// hashtags, never as substrings. This is critical: Paul uses #adhd and #advice
+// constantly, and a substring match on "ad" would wrongly flag dozens of posts.
+const FTC_TAGS = new Set([
+  'ad', 'ads', 'advert', 'advertisement',
+  'sponsored', 'sponsoredby', 'sponsor', 'sponsorship', 'spon',
+  'paid', 'paidpartnership', 'paidpartner', 'paidad', 'paidad',
+  'partner', 'brandpartner', 'brandpartnership',
+  'ambassador', 'brandambassador',
+  'gifted', 'giftedby',
+]);
+
+// Visual-category taxonomy (slug -> label). Multi-label per post.
+const CAT_VISUAL_TAXONOMY = [
+  ['outdoor-travel', 'Outdoor / scenic / travel'],
+  ['indoor-accommodation', 'Indoor / accommodation / hotel / home'],
+  ['active-movement', 'Active / movement'],
+  ['stylish-lifestyle', 'Stylish / aesthetic / lifestyle'],
+  ['food-dining', 'Food / dining'],
+  ['product-demo', 'Product in-hand / close-up / demo'],
+  ['talking-to-camera', 'Talking to camera'],
+  ['people-social', 'People / group / social'],
+  ['pets', 'Pets'],
+];
+const CAT_VISUAL_SLUGS = CAT_VISUAL_TAXONOMY.map(t => t[0]);
+
+// ── text parsing ─────────────────────────────────────────────────────────────
+function catParse(text) {
+  const t = (text || '').toString();
+  const tags = (t.match(/#[\p{L}\p{N}_]+/gu) || []).map(s => s.slice(1).toLowerCase());
+  const mentions = (t.match(/@[\p{L}\p{N}_.]+/gu) || []).map(s => s.slice(1));
+  return { tags, mentions };
+}
+function catDetectBranded(tags) {
+  const hits = (tags || []).filter(t => FTC_TAGS.has(t));
+  return { branded: hits.length > 0, disclosureTags: hits };
+}
+
+// ── token getters (reuse Redis token keys written by the stats endpoints) ─────
+async function catTtToken() {
+  const stored = await kvGetKey('pf_tt_tokens_v1');
+  if (!stored || !stored.accessToken) return null;
+  if (stored.expiresAt && Date.now() < stored.expiresAt - 300000) return stored.accessToken;
+  const clientKey = process.env.TT_CLIENT_KEY || process.env.TIKTOK_CLIENT_KEY;
+  const clientSecret = process.env.TT_CLIENT_SECRET || process.env.TIKTOK_CLIENT_SECRET;
+  if (!clientKey || !clientSecret || !stored.refreshToken) return stored.accessToken;
+  try {
+    const r = await fetch(`${CAT_TT_BASE}/oauth/token/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_key: clientKey, client_secret: clientSecret,
+        grant_type: 'refresh_token', refresh_token: stored.refreshToken,
+      }),
+    });
+    const d = await r.json();
+    if (d.error || !d.access_token) return stored.accessToken;
+    const updated = {
+      ...stored, accessToken: d.access_token,
+      refreshToken: d.refresh_token || stored.refreshToken,
+      expiresAt: Date.now() + ((d.expires_in || 86400) * 1000),
+    };
+    await kvSetKey('pf_tt_tokens_v1', updated);
+    return updated.accessToken;
+  } catch { return stored.accessToken; }
+}
+async function catIgToken() {
+  const stored = await kvGetKey('pf_ig_token_v1');
+  if (stored && stored.token && (!stored.expiresAt || Date.now() < stored.expiresAt)) return stored.token;
+  return process.env.IG_ACCESS_TOKEN || (stored && stored.token) || null;
+}
+
+// ── one-page platform fetchers (normalize to a common post shape) ─────────────
+function catNormalize(platform, postId, dateISO, text, thumbnail, url, metrics) {
+  const { tags, mentions } = catParse(text);
+  const { branded, disclosureTags } = catDetectBranded(tags);
+  return {
+    key: `${platform}:${postId}`, platform, postId,
+    date: dateISO, text: (text || '').slice(0, 600),
+    hashtags: tags, mentions, thumbnail: thumbnail || null, url: url || null,
+    metrics: metrics || {}, brandedAuto: branded, disclosureTags,
+  };
+}
+
+async function catTtPage(cursor) {
+  const token = await catTtToken();
+  if (!token) return { authDown: true, items: [], nextCursor: null, hasMore: false };
+  const fields = 'id,title,video_description,create_time,cover_image_url,embed_link,share_url,like_count,comment_count,share_count,view_count,duration';
+  const body = { max_count: 20 };
+  if (cursor) body.cursor = Number(cursor) || 0;
+  const r = await fetch(`${CAT_TT_BASE}/video/list/?fields=${fields}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (d.error && d.error.code && d.error.code !== 'ok') {
+    return { authDown: true, items: [], nextCursor: null, hasMore: false, error: d.error.message };
+  }
+  const vids = (d.data && d.data.videos) || [];
+  const items = vids.map(v => {
+    const text = [v.title, v.video_description].filter(Boolean).join(' ').trim() || '(untitled)';
+    const url = v.share_url || v.embed_link || `https://www.tiktok.com/@_paul_ferrante_/video/${v.id}`;
+    return catNormalize('tiktok', v.id,
+      new Date((v.create_time || 0) * 1000).toISOString(), text,
+      v.cover_image_url || null, url,
+      { views: v.view_count || 0, likes: v.like_count || 0, comments: v.comment_count || 0, shares: v.share_count || 0, duration: v.duration || 0 });
+  });
+  return { items, nextCursor: (d.data && d.data.has_more) ? (d.data.cursor || null) : null, hasMore: !!(d.data && d.data.has_more) };
+}
+
+async function catIgPage(after) {
+  const token = await catIgToken();
+  const userId = process.env.IG_USER_ID;
+  if (!token || !userId) return { authDown: true, items: [], nextCursor: null, hasMore: false };
+  let url = `${CAT_IG_BASE}/${userId}/media?fields=id,caption,media_type,timestamp,permalink,thumbnail_url,media_url,like_count,comments_count&limit=50&access_token=${token}`;
+  if (after) url += `&after=${encodeURIComponent(after)}`;
+  const r = await fetch(url);
+  const d = await r.json();
+  if (d.error) return { authDown: true, items: [], nextCursor: null, hasMore: false, error: d.error.message };
+  const items = (d.data || []).map(m =>
+    catNormalize('instagram', m.id, m.timestamp, m.caption || '',
+      m.thumbnail_url || m.media_url || null, m.permalink,
+      { likes: m.like_count || 0, comments: m.comments_count || 0, mediaType: m.media_type }));
+  const after2 = d.paging && d.paging.cursors && d.paging.cursors.after;
+  const hasMore = !!(d.paging && d.paging.next && after2);
+  return { items, nextCursor: hasMore ? after2 : null, hasMore };
+}
+
+async function catYtPage(pageToken) {
+  // resolve uploads playlist (cached on the catalog meta the first time)
+  let uploads = null;
+  const chRes = await fetch(`${CAT_YT_BASE}/channels?part=contentDetails&id=${CAT_YT_CHANNEL}&key=${CAT_YT_KEY}`);
+  const chData = await chRes.json();
+  uploads = chData.items && chData.items[0] && chData.items[0].contentDetails &&
+    chData.items[0].contentDetails.relatedPlaylists && chData.items[0].contentDetails.relatedPlaylists.uploads;
+  if (!uploads) return { authDown: true, items: [], nextCursor: null, hasMore: false };
+  let plUrl = `${CAT_YT_BASE}/playlistItems?part=snippet,contentDetails&playlistId=${uploads}&maxResults=50&key=${CAT_YT_KEY}`;
+  if (pageToken) plUrl += `&pageToken=${encodeURIComponent(pageToken)}`;
+  const plRes = await fetch(plUrl);
+  const plData = await plRes.json();
+  if (plData.error) return { authDown: true, items: [], nextCursor: null, hasMore: false, error: plData.error.message };
+  const ids = (plData.items || []).map(it => it.contentDetails && it.contentDetails.videoId).filter(Boolean);
+  let stats = {};
+  if (ids.length) {
+    const vRes = await fetch(`${CAT_YT_BASE}/videos?part=snippet,statistics&id=${ids.join(',')}&key=${CAT_YT_KEY}`);
+    const vData = await vRes.json();
+    (vData.items || []).forEach(v => { stats[v.id] = v; });
+  }
+  const items = ids.map(id => {
+    const v = stats[id];
+    const sn = (v && v.snippet) || {};
+    const st = (v && v.statistics) || {};
+    const text = [sn.title, sn.description].filter(Boolean).join(' ').trim();
+    const thumb = sn.thumbnails && (sn.thumbnails.medium || sn.thumbnails.high || sn.thumbnails.default);
+    return catNormalize('youtube', id, sn.publishedAt || null, text,
+      thumb ? thumb.url : `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+      `https://www.youtube.com/watch?v=${id}`,
+      { views: parseInt(st.viewCount) || 0, likes: parseInt(st.likeCount) || 0, comments: parseInt(st.commentCount) || 0 });
+  });
+  return { items, nextCursor: plData.nextPageToken || null, hasMore: !!plData.nextPageToken };
+}
+
+// ── vision classification (reuses the Anthropic key; multi-label) ─────────────
+const CAT_VISION_PROMPT = `You are tagging a social video by what its COVER FRAME visually shows, so a brand can find the look they want. This is about the VISUALS, not the topic or caption.
+
+Return ONLY a JSON object: {"tags": ["slug", ...]} using any that apply from this exact list (multi-label, choose all that fit, or [] if none clearly apply):
+- "outdoor-travel": outdoors, scenery, streets, nature, landmarks, travel settings
+- "indoor-accommodation": hotel room, home, indoor accommodation, interior
+- "active-movement": walking, sport, gym, motion, doing an activity
+- "stylish-lifestyle": fashion, aesthetic styling, polished lifestyle framing
+- "food-dining": food, drinks, cafe, restaurant, eating
+- "product-demo": a product held in hand, close-up, or being demonstrated
+- "talking-to-camera": a person facing the camera talking / selfie framing
+- "people-social": multiple people, a group, social setting
+- "pets": a dog, cat, or other pet visible
+No prose, no code fences, just the JSON object.`;
+
+async function catClassifyThumb(thumbUrl) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { ok: false, error: 'ANTHROPIC_API_KEY missing', tags: [] };
+  let base64, mime = 'image/jpeg';
+  try {
+    const ir = await fetch(thumbUrl);
+    if (!ir.ok) return { ok: false, error: `thumb fetch ${ir.status}`, tags: [] };
+    const ct = ir.headers.get('content-type') || '';
+    if (ct.startsWith('image/')) mime = ct.split(';')[0];
+    const buf = Buffer.from(await ir.arrayBuffer());
+    if (buf.length > 5_000_000) return { ok: false, error: 'thumb too large', tags: [] };
+    base64 = buf.toString('base64');
+  } catch (e) { return { ok: false, error: `thumb fetch failed: ${e.message}`, tags: [] }; }
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6', max_tokens: 200,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: mime, data: base64 } },
+          { type: 'text', text: CAT_VISION_PROMPT },
+        ] }],
+      }),
+    });
+    if (!r.ok) return { ok: false, error: `Anthropic ${r.status}`, tags: [] };
+    const j = await r.json();
+    const txt = (j && j.content && j.content[0] && j.content[0].text) || '';
+    const clean = txt.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    let parsed; try { parsed = JSON.parse(clean); } catch { return { ok: false, error: 'parse', tags: [] }; }
+    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter(t => CAT_VISUAL_SLUGS.includes(t)) : [];
+    return { ok: true, tags };
+  } catch (e) { return { ok: false, error: e.message, tags: [] }; }
+}
+
+// ── catalog store helpers ─────────────────────────────────────────────────────
+async function catLoad() {
+  const c = await kvGetKey(CATALOG_KEY);
+  if (c && c.posts) return c;
+  return { posts: {}, meta: { lastSync: null, counts: {}, cursors: {}, coverage: {} } };
+}
+async function catSave(cat) { return kvSetKey(CATALOG_KEY, cat); }
+
+// ── action handlers ───────────────────────────────────────────────────────────
+function catSecretOk(req) {
+  const secret = (req.query.secret || '').toString();
+  const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
+  return secret === expected;
+}
+
+async function handleCatalogData(req, res) {
+  const cat = await catLoad();
+  const overrides = (await kvGetKey(CAT_OVR_KEY)) || {};
+  const posts = Object.values(cat.posts || {});
+  return res.status(200).json({ ok: true, catalog: { meta: cat.meta || {}, posts }, overrides, count: posts.length });
+}
+
+async function handleCatalogSync(req, res) {
+  if (!catSecretOk(req)) return res.status(401).json({ ok: false, error: 'bad secret' });
+  const platform = (req.query.platform || '').toString();
+  const cursor = req.query.cursor ? req.query.cursor.toString() : null;
+  if (!['tiktok', 'instagram', 'youtube'].includes(platform)) {
+    return res.status(400).json({ ok: false, error: 'platform must be tiktok|instagram|youtube' });
+  }
+  let page;
+  try {
+    if (platform === 'tiktok') page = await catTtPage(cursor);
+    else if (platform === 'instagram') page = await catIgPage(cursor);
+    else page = await catYtPage(cursor);
+  } catch (e) {
+    return res.status(200).json({ ok: false, platform, authDown: true, error: e.message, added: 0, hasMore: false, nextCursor: null });
+  }
+  if (page.authDown) {
+    return res.status(200).json({ ok: false, platform, authDown: true, error: page.error || 'auth/token unavailable', added: 0, hasMore: false, nextCursor: null });
+  }
+
+  const cat = await catLoad();
+  cat.posts = cat.posts || {};
+  let added = 0;
+  for (const it of page.items) {
+    const prev = cat.posts[it.key];
+    if (prev) {
+      // Update volatile fields but PRESERVE cached vision results.
+      cat.posts[it.key] = {
+        ...it,
+        visualTags: prev.visualTags, visionAt: prev.visionAt, thumbSig: prev.thumbSig,
+        visionError: prev.visionError,
+      };
+    } else {
+      cat.posts[it.key] = it;
+      added++;
+    }
+  }
+  // counts for this platform
+  const totalForPlatform = Object.values(cat.posts).filter(p => p.platform === platform).length;
+  cat.meta = cat.meta || {};
+  cat.meta.counts = cat.meta.counts || {};
+  cat.meta.counts[platform] = totalForPlatform;
+  cat.meta.cursors = cat.meta.cursors || {};
+  cat.meta.cursors[platform] = page.nextCursor || null;
+  cat.meta.coverage = cat.meta.coverage || {};
+  cat.meta.coverage[platform] = { reached: totalForPlatform, hasMore: !!page.hasMore };
+  cat.meta.lastSync = Date.now();
+  await catSave(cat);
+
+  return res.status(200).json({ ok: true, platform, added, totalForPlatform, nextCursor: page.nextCursor || null, hasMore: !!page.hasMore });
+}
+
+async function handleCatalogClassify(req, res) {
+  if (!catSecretOk(req)) return res.status(401).json({ ok: false, error: 'bad secret' });
+  const limit = Math.max(1, Math.min(5, parseInt(req.query.limit || '3', 10) || 3));
+  const recentN = Math.max(0, parseInt(req.query.recent || '150', 10) || 150);
+  const scope = (req.query.scope || 'branded-recent').toString();
+
+  const cat = await catLoad();
+  const all = Object.values(cat.posts || {}).sort((a, b) => (a.date < b.date ? 1 : -1));
+  // in-scope set: all branded posts + the most recent N (union)
+  const inScope = new Set();
+  if (scope === 'all') { all.forEach(p => inScope.add(p.key)); }
+  else {
+    all.forEach(p => { if (p.brandedAuto) inScope.add(p.key); });
+    all.slice(0, recentN).forEach(p => inScope.add(p.key));
+  }
+  const todo = all.filter(p => inScope.has(p.key) && !p.visionAt && p.thumbnail);
+  const batch = todo.slice(0, limit);
+
+  let classified = 0, calls = 0;
+  for (const p of batch) {
+    const r = await catClassifyThumb(p.thumbnail);
+    calls++;
+    const post = cat.posts[p.key];
+    if (!post) continue;
+    if (r.ok) { post.visualTags = r.tags; post.visionAt = Date.now(); post.thumbSig = p.thumbnail; delete post.visionError; classified++; }
+    else { post.visionError = r.error; post.visionAt = Date.now(); post.thumbSig = p.thumbnail; post.visualTags = post.visualTags || []; }
+  }
+  await catSave(cat);
+  const remaining = todo.length - batch.length;
+  return res.status(200).json({ ok: true, classified, calls, remaining, inScope: inScope.size });
+}
+
+async function handleCatalogOverride(req, res) {
+  if (!catSecretOk(req)) return res.status(401).json({ ok: false, error: 'bad secret' });
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+  const postKey = body && body.postKey;
+  if (!postKey) return res.status(400).json({ ok: false, error: 'postKey required' });
+  const overrides = (await kvGetKey(CAT_OVR_KEY)) || {};
+  if (body.override === null) { delete overrides[postKey]; }
+  else { overrides[postKey] = { ...(overrides[postKey] || {}), ...(body.override || {}), _at: Date.now() }; }
+  await kvSetKey(CAT_OVR_KEY, overrides);
+  return res.status(200).json({ ok: true, postKey, override: overrides[postKey] || null });
+}
+
+// test-only exports (do not affect the serverless default export)
+export { catParse, catDetectBranded, FTC_TAGS, CAT_VISUAL_SLUGS };
