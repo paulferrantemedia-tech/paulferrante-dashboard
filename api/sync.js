@@ -1739,7 +1739,14 @@ async function catLoad() {
   if (c && c.posts) return c;
   return { posts: {}, meta: { lastSync: null, counts: {}, cursors: {}, coverage: {} } };
 }
-async function catSave(cat) { return kvSetKey(CATALOG_KEY, cat); }
+async function catSave(cat) {
+  const baseUrl = process.env.KV_REST_API_URL, token = process.env.KV_REST_API_TOKEN;
+  try {
+    const res = await fetch(`${baseUrl}/pipeline`, { method:'POST', headers:{ Authorization:`Bearer ${token}`,'Content-Type':'application/json' }, body: JSON.stringify([['SET', CATALOG_KEY, JSON.stringify(cat)]]) });
+    const txt = await res.text();
+    return { ok: res.ok, status: res.status, body: (txt||'').slice(0,160) };
+  } catch (e) { return { ok:false, error: e.message }; }
+}
 
 // ── action handlers ───────────────────────────────────────────────────────────
 function catSecretOk(req) {
@@ -1801,9 +1808,11 @@ async function handleCatalogSync(req, res) {
   cat.meta.coverage = cat.meta.coverage || {};
   cat.meta.coverage[platform] = { reached: totalForPlatform, hasMore: !!page.hasMore };
   cat.meta.lastSync = Date.now();
-  await catSave(cat);
+  const saveResult = await catSave(cat);
+  const rb = await kvGetKey(CATALOG_KEY);
+  const readbackCount = rb && rb.posts ? Object.keys(rb.posts).length : 0;
 
-  return res.status(200).json({ ok: true, platform, added, totalForPlatform, nextCursor: page.nextCursor || null, hasMore: !!page.hasMore });
+  return res.status(200).json({ ok: true, platform, added, totalForPlatform, nextCursor: page.nextCursor || null, hasMore: !!page.hasMore, _diag: { saveResult, readbackCount, valueBytes: JSON.stringify(cat).length } });
 }
 
 async function handleCatalogClassify(req, res) {
