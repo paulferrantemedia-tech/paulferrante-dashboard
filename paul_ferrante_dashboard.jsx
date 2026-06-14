@@ -2734,7 +2734,7 @@ export default function App() {
   if (!authed) return <LoginScreen onAuth={() => setAuthed(true)} />;
 
   // ── All state (must be declared before any effects that reference them) ──────
-  const [deals,      setDeals]      = useState(() => load('pf_deals',      INIT_DEALS));
+  const [deals,      setDeals]      = useState(() => (load('pf_deals', INIT_DEALS) || []).map(d => ({ ...d, s: canonStage(d.s) })));
   const [crm,        setCrm]        = useState(INIT_CRM);
   const [delivs,     setDelivs]     = useState(() => load('pf_delivs',     INIT_DELIVS));
   const [milestones, setMilestones] = useState(() => load('pf_milestones', INIT_MILESTONES));
@@ -2819,7 +2819,7 @@ export default function App() {
     if (!state) return;
     // Block pushToCloud from firing while we apply cloud data — prevents feedback loop
     isApplyingCloud.current = true;
-    if (state.deals)       { setDeals(state.deals);             localStorage.setItem('pf_deals',        JSON.stringify(state.deals)); }
+    if (state.deals)       { const _nd = (state.deals||[]).map(d=>({ ...d, s: canonStage(d.s) })); setDeals(_nd); localStorage.setItem('pf_deals', JSON.stringify(_nd)); }
     if (state.crm) {
       // INIT_CRM is always the permanent base. Cloud data overrides any edited entries
       // and appends any manually-added contacts that aren't in the base set.
@@ -3232,7 +3232,7 @@ export default function App() {
   // ── Derived ───────────────────────────────────────────────────
   const paidDeals     = deals.filter(d => d.s === 'Paid');
   const totalRevenue  = paidDeals.reduce((s, d) => s + (d.v || 0), 0);
-  const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval'].includes(d.s)).reduce((s, d) => s + (d.v || 0), 0);
+  const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s))).reduce((s, d) => s + dealAmount(d.v), 0);
   const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
@@ -3339,7 +3339,64 @@ const CATEGORIES = [
   'Bank & Payment Fees','Office Supplies','Other',
 ];
 
-const DEAL_STATUSES = ['Pitching','In Discussions','Sold In','Paid'];
+// ── Canonical deal stages — ONE taxonomy shared by the Deals tab and Books. ──
+// Legacy labels ("In Discussions", "Sold In") are mapped onto these on read so
+// any old data coerces cleanly. There is no other stage vocabulary anywhere.
+const DEAL_STATUSES = ['Pitching','Awaiting Approval','Delivered','Paid','Not Paid'];
+const LEGACY_STAGE_MAP = { 'In Discussions':'Pitching', 'In Discussion':'Pitching', 'Sold In':'Delivered' };
+function canonStage(s) { return LEGACY_STAGE_MAP[s] || s || 'Pitching'; }
+
+// Coerce any amount (number | "1200" | "-" | "" | null) to a finite number.
+// Guards the sums against the Meta Ray-Bans "-" row and string-typed values.
+function dealAmount(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+
+// Parse a year out of a deal's freeform date: "Nov 25" -> 2025, "Jan 2026" -> 2026,
+// bare "Jan"/"TBC"/"" -> fallbackYear. Used only for year-scoped revenue.
+function dealYear(monthStr, fallbackYear) {
+  const t = String(monthStr == null ? '' : monthStr).trim();
+  let m = t.match(/(20\d{2})/); if (m) return Number(m[1]);
+  m = t.match(/\b(\d{2})\b/);   if (m) return 2000 + Number(m[1]);
+  return fallbackYear;
+}
+
+// Project the dashboard's single source-of-truth deals (state `deals`, schema
+// {id,b,s,v,d,p,...}) into the shape the Books components expect. This is a VIEW
+// of the same store — never a second copy. deal_id ('pf-<id>') is stable across
+// sessions so expense links survive reloads.
+function projectDealsForBooks(deals) {
+  return (deals || []).map((d) => ({
+    deal_id: 'pf-' + d.id,
+    brand: d.b || '',
+    deal_value: dealAmount(d.v),
+    status: canonStage(d.s),
+    platform: d.p || '',
+    month: d.d || '',
+    deliverable: d.del || '',
+    paid_date: d.paid_date || '',
+    shoot_start_date: d.shoot_start_date || '',
+    shoot_end_date: d.shoot_end_date || '',
+    deliverable_url: d.deliverable_url || '',
+    invoice_url: d.invoice_url || '',
+    auto_linked_deal_id: '',
+    _src_id: d.id,
+  }));
+}
+
+// Revenue YTD = SUM(amount where stage===Paid AND year===selected). Pitching,
+// Awaiting Approval, Delivered, Not Paid and Declined never count toward revenue.
+// Bare-month deals (no explicit year) are attributed to the current calendar year.
+function paidSumForYear(projected, year) {
+  const fb = new Date().getFullYear();
+  return (projected || []).reduce((s, d) =>
+    (canonStage(d.status) === 'Paid' && dealYear(d.month, fb) === year)
+      ? s + dealAmount(d.deal_value) : s, 0);
+}
+// Pipeline value (NOT revenue) = SUM(amount where stage in the active funnel).
+const PIPELINE_STAGES = ['Pitching', 'Awaiting Approval', 'Delivered'];
+function pipelineSum(projected) {
+  return (projected || []).reduce((s, d) =>
+    PIPELINE_STAGES.includes(canonStage(d.status)) ? s + dealAmount(d.deal_value) : s, 0);
+}
 
 // ── Single source of truth for the Inbox "Business purpose" template dropdown ──
 // { group, label, text }. Short label shows in the menu; full text fills the
@@ -3451,27 +3508,45 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
 
   useEffect(() => { reload(); /* eslint-disable-line */ }, [year]);
 
+  // ── SINGLE SOURCE OF TRUTH ──────────────────────────────────────────────
+  // Every deal figure in Books derives from `dashboardDeals` (the Deals-tab
+  // store), projected into the Books shape. We never read the Books sheet's
+  // deals tab — `data2` replaces data.deals with the projected store so every
+  // child component (Inbox links, Deals board, Audit, Export) sees the SAME
+  // deals as the Deals tab. Expenses still come from the sheet (data.expenses).
+  const storeDeals = projectDealsForBooks(dashboardDeals);
+  const data2 = { ...data, deals: storeDeals };
+
   // KPIs
   // Convert each receipt to USD by its currency before summing — foreign-currency
   // receipts (KRW/JPY/AUD/…) must not be added as raw dollars.
   const totalExpenses = data.expenses.reduce((s, r) => s + toUSD(r.amount, r.currency), 0);
-  // Revenue: prefer the dashboard's live deals state (Deals tab / Revenue tab)
-  // filtered to the selected year, falling back to whatever the Books sheet has.
-  // Previously this only pulled from data.deals (the Books Sheet), so it showed
-  // $0 until the user duplicated their deals into the Books backend — confusing.
-  const dashboardRevenueForYear = (dashboardPaidDeals || []).reduce((s, d) => {
-    // d.d is "Mon YYYY" (e.g., "Jan 2026"); parse the trailing year token.
-    const parts = String(d.d || '').trim().split(/\s+/);
-    const yr = parts[1] ? parseInt(parts[1], 10) : null;
-    if (yr && yr !== year) return s;
-    return s + Number(d.v || 0);
-  }, 0);
-  const booksSheetRevenue = data.deals.filter((d) => d.status === 'Paid').reduce((s, d) => s + Number(d.deal_value || 0), 0);
-  const totalRevenue = Math.max(dashboardRevenueForYear, booksSheetRevenue);
+
+  // Revenue YTD = SUM(amount where stage===Paid AND year===selected). Derived,
+  // never duplicated. Pipeline / Awaiting / Delivered / Not Paid never count.
+  const totalRevenue  = paidSumForYear(storeDeals, year);
+  const pipelineTotal = pipelineSum(storeDeals);
   const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
 
-  // Proof: financial values are computed exactly as before — the fix is render/refresh-only.
-  console.log('[books-fix] KPIs unchanged by fix → Expenses YTD ' + fmtMoney(totalExpenses) + ' · Revenue YTD ' + fmtMoney(totalRevenue) + ' · Net ' + fmtMoney(totalRevenue - totalExpenses));
+  // ── PHASE 4 guardrail: recompute the Paid total a SECOND, independent way
+  // (straight off dashboardDeals, not via the projection) and assert it equals
+  // the KPI. If any future edit reintroduces a divergent deals source, this
+  // fires a visible badge + console.error instead of drifting silently.
+  const guardDealsPaid = (dashboardDeals || []).reduce((s, d) =>
+    (canonStage(d.s) === 'Paid' && dealYear(d.d, new Date().getFullYear()) === year)
+      ? s + dealAmount(d.v) : s, 0);
+  const driftOk = Math.round(guardDealsPaid * 100) === Math.round(totalRevenue * 100);
+  if (!driftOk) {
+    console.error('[books-guard] DRIFT — Books Revenue YTD (' + fmtMoney(totalRevenue) +
+      ') !== Deals paid total (' + fmtMoney(guardDealsPaid) + ') for year ' + year);
+  }
+  console.log('[books-fix] year=' + year +
+    ' · Revenue YTD ' + fmtMoney(totalRevenue) +
+    ' · Pipeline ' + fmtMoney(pipelineTotal) +
+    ' · Expenses ' + fmtMoney(totalExpenses) +
+    ' · Net ' + fmtMoney(totalRevenue - totalExpenses) +
+    ' · deals=' + storeDeals.length +
+    ' · drift ' + (driftOk ? 'OK' : 'MISMATCH'));
 
   const SUB_TABS = [
     ['inbox',       'Inbox'],
@@ -3499,6 +3574,13 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
           {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
+
+      {/* ── PHASE 4 drift guardrail badge ────────────────────────── */}
+      {!driftOk && (
+        <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:14, fontSize:12, fontWeight:600, display:'flex', alignItems:'center', gap:8 }}>
+          ⚠ Numbers out of sync — Books Revenue YTD {fmtMoney(totalRevenue)} ≠ Deals paid total {fmtMoney(guardDealsPaid)} for {year}. The Deals tab is the source of truth; reload or check the Deals tab.
+        </div>
+      )}
 
       {/* ── KPI strip ────────────────────────────────────────────── */}
       <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
@@ -3535,11 +3617,11 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
       {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
       {!loading && !error && (
         <>
-          {sub === 'inbox'    && <InboxTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'expenses' && <ExpensesTab data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'deals'    && <DealsTab    data={data} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'audit'    && <AuditTab    data={data} year={year} isMobile={isMobile} />}
-          {sub === 'export'   && <ExportTab   data={data} year={year} />}
+          {sub === 'inbox'    && <InboxTab    data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'expenses' && <ExpensesTab data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'deals'    && <DealsTab    data={data2} year={year} pipelineTotal={pipelineTotal} revenueYTD={totalRevenue} reload={reload} isMobile={isMobile} showToast={showToast} />}
+          {sub === 'audit'    && <AuditTab    data={data2} year={year} isMobile={isMobile} />}
+          {sub === 'export'   && <ExportTab   data={data2} year={year} />}
         </>
       )}
     </div>
@@ -3866,17 +3948,17 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
   };
 
   // ── Linked Deal dropdown: current, post-pitch deals within the last 60 days ──
-  // Source = the Books deal pipeline (data.deals; statuses use DEAL_STATUSES).
-  // Include stages PAST "Pitching" (In Discussions / Sold In / Paid); exclude
-  // "Pitching" and anything declined. Recency anchor = paid_date -> shoot_end_date
+  // Source = the SINGLE deals store (projected; canonical stages). Include stages
+  // PAST "Pitching" (Awaiting Approval / Delivered / Paid); exclude "Pitching",
+  // "Not Paid" and anything declined. Recency anchor = paid_date -> shoot_end_date
   // -> shoot_start_date; a deal with NO date is treated as still-active (not yet
   // closed) and kept. Deals older than 60 days drop out (books are closed by then).
-  const POST_PITCH_STAGES = ['In Discussions', 'Sold In', 'Paid'];
+  const POST_PITCH_STAGES = ['Awaiting Approval', 'Delivered', 'Paid'];
   const dealAnchor = (d) => d.paid_date || d.shoot_end_date || d.shoot_start_date || '';
   const dealOptions = (() => {
     const now = Date.now();
     const considered = (deals || []).map((d) => {
-      const status = d.status || '';
+      const status = canonStage(d.status || '');
       const stageOk = POST_PITCH_STAGES.includes(status) && !/declin/i.test(status);
       const anchor = dealAnchor(d);
       let ageDays = null, recent = true;
@@ -4488,24 +4570,36 @@ function CsvImportModal({ year, onClose, reload, showToast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // DealsTab — pipeline kanban
 // ─────────────────────────────────────────────────────────────────────────────
-function DealsTab({ data, reload, isMobile, showToast }) {
-  const [editing, setEditing] = useState(null); // null | 'new' | dealObj
-  const cols = DEAL_STATUSES;
+function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, showToast }) {
+  // Read-only MIRROR of the Deals tab (the single source of truth). Cards render
+  // from data.deals, which BooksTab has replaced with the projected dashboard
+  // store — so these are the exact same deals, same canonical stages. Editing
+  // happens on the Deals tab to keep one writable copy.
+  const cols = DEAL_STATUSES; // canonical 5 stages
+  const allDeals = data.deals || [];
+
+  // PHASE 4 cross-check: the board's Paid column total must equal the Books
+  // Revenue YTD KPI when scoped to the same paid set. Logged for proof.
+  const fb = new Date().getFullYear();
+  const boardPaidYTD = allDeals.reduce((s, d) =>
+    (canonStage(d.status) === 'Paid' && dealYear(d.month, fb) === (year || fb)) ? s + dealAmount(d.deal_value) : s, 0);
+  console.log('[books-fix] Deals board paid YTD ' + fmtMoney(boardPaidYTD) + ' (should equal Revenue YTD ' + fmtMoney(revenueYTD) + ')');
+  console.log('[books-fix] Deals board: ' + allDeals.length + ' deal(s) · ' +
+    cols.map((st) => st + '=' + allDeals.filter((d) => canonStage(d.status) === st).length).join(' '));
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <div style={{ fontSize:13, color:BOOKS.muted }}>{data.deals.length} deal{data.deals.length === 1 ? '' : 's'} this year</div>
-        <button onClick={() => setEditing({})}
-          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
-          + Add deal
-        </button>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12, flexWrap:'wrap', gap:8 }}>
+        <div style={{ fontSize:13, color:BOOKS.muted }}>
+          {allDeals.length} deal{allDeals.length === 1 ? '' : 's'} · Pipeline {fmtMoney(pipelineTotal)} · Revenue YTD {fmtMoney(revenueYTD)}
+        </div>
+        <div style={{ fontSize:11, color:BOOKS.muted, fontStyle:'italic' }}>Synced from the Deals tab · edit there</div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)', gap:12 }}>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(5, 1fr)', gap:12 }}>
         {cols.map((status) => {
-          const list = data.deals.filter((d) => d.status === status);
-          const total = list.reduce((s, d) => s + Number(d.deal_value || 0), 0);
+          const list = allDeals.filter((d) => canonStage(d.status) === status);
+          const total = list.reduce((s, d) => s + dealAmount(d.deal_value), 0);
           return (
             <div key={status} style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:10, padding:12, minHeight:200 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
@@ -4514,20 +4608,13 @@ function DealsTab({ data, reload, isMobile, showToast }) {
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {list.map((d) => (
-                  <div key={d.deal_id} onClick={() => setEditing(d)}
-                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', cursor:'pointer', transition:'all 0.12s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = BOOKS.ink}
-                    onMouseLeave={(e) => e.currentTarget.style.borderColor = BOOKS.border}>
+                  <div key={d.deal_id}
+                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px' }}>
                     <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{d.brand}</div>
                     <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3, display:'flex', justifyContent:'space-between' }}>
-                      <span>{d.platform || '—'}</span>
-                      <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600, color:SLATE }}>{fmtMoney(d.deal_value)}</span>
+                      <span>{d.platform || '—'}{d.month ? ' · ' + d.month : ''}</span>
+                      <span style={{ fontVariantNumeric:'tabular-nums', fontWeight:600, color:SLATE }}>{d.deal_value ? fmtMoney(d.deal_value) : 'gifted'}</span>
                     </div>
-                    {(d.shoot_start_date || d.shoot_end_date) && (
-                      <div style={{ fontSize:10, color:BOOKS.muted, marginTop:3 }}>
-                        Shoot: {d.shoot_start_date || '?'} → {d.shoot_end_date || '?'}
-                      </div>
-                    )}
                   </div>
                 ))}
                 {list.length === 0 && <div style={{ fontSize:11, color:BOOKS.muted, textAlign:'center', padding:'14px 0' }}>No deals</div>}
@@ -4537,7 +4624,35 @@ function DealsTab({ data, reload, isMobile, showToast }) {
         })}
       </div>
 
-      {editing && <BooksDealModal deal={editing.deal_id ? editing : null} expenses={data.expenses} onClose={() => setEditing(null)} reload={reload} showToast={showToast} />}
+      {/* ── Campaign breakdown table — same store: brand, platform, amount, stage, month ── */}
+      <div style={{ marginTop:20 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:8 }}>Campaign breakdown</div>
+        <div style={{ overflowX:'auto', border:`1px solid ${BOOKS.border}`, borderRadius:10 }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:BOOKS.surface, color:BOOKS.muted, textAlign:'left' }}>
+                {['Brand','Platform','Amount','Stage','Month'].map((h) => (
+                  <th key={h} style={{ padding:'8px 12px', fontWeight:700, borderBottom:`1px solid ${BOOKS.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allDeals.slice().sort((a, b) => dealAmount(b.deal_value) - dealAmount(a.deal_value)).map((d) => (
+                <tr key={d.deal_id} style={{ borderBottom:`1px solid ${BOOKS.border}` }}>
+                  <td style={{ padding:'8px 12px', fontWeight:600, color:BOOKS.ink }}>{d.brand}</td>
+                  <td style={{ padding:'8px 12px', color:BOOKS.muted }}>{d.platform || '—'}</td>
+                  <td style={{ padding:'8px 12px', fontVariantNumeric:'tabular-nums', color:SLATE }}>{d.deal_value ? fmtMoney(d.deal_value) : '—'}</td>
+                  <td style={{ padding:'8px 12px' }}>{canonStage(d.status)}</td>
+                  <td style={{ padding:'8px 12px', color:BOOKS.muted }}>{d.month || '—'}</td>
+                </tr>
+              ))}
+              {allDeals.length === 0 && (
+                <tr><td colSpan={5} style={{ padding:'14px 12px', textAlign:'center', color:BOOKS.muted }}>No deals yet — add them on the Deals tab.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
