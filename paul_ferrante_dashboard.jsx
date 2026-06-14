@@ -3343,8 +3343,14 @@ const CATEGORIES = [
 // Legacy labels ("In Discussions", "Sold In") are mapped onto these on read so
 // any old data coerces cleanly. There is no other stage vocabulary anywhere.
 const DEAL_STATUSES = ['Pitching','Awaiting Approval','Delivered','Paid','Not Paid'];
-const LEGACY_STAGE_MAP = { 'In Discussions':'Pitching', 'In Discussion':'Pitching', 'Sold In':'Delivered' };
-function canonStage(s) { return LEGACY_STAGE_MAP[s] || s || 'Pitching'; }
+// Map legacy labels onto canonical stages. Inlined (no module-level const) so it
+// is safe to call from the `deals` state initializer during the very first
+// render, before later module consts have initialized (avoids a TDZ crash).
+function canonStage(s) {
+  if (s === 'In Discussions' || s === 'In Discussion') return 'Pitching';
+  if (s === 'Sold In') return 'Delivered';
+  return s || 'Pitching';
+}
 
 // Coerce any amount (number | "1200" | "-" | "" | null) to a finite number.
 // Guards the sums against the Meta Ray-Bans "-" row and string-typed values.
@@ -3392,10 +3398,9 @@ function paidSumForYear(projected, year) {
       ? s + dealAmount(d.deal_value) : s, 0);
 }
 // Pipeline value (NOT revenue) = SUM(amount where stage in the active funnel).
-const PIPELINE_STAGES = ['Pitching', 'Awaiting Approval', 'Delivered'];
 function pipelineSum(projected) {
   return (projected || []).reduce((s, d) =>
-    PIPELINE_STAGES.includes(canonStage(d.status)) ? s + dealAmount(d.deal_value) : s, 0);
+    ['Pitching', 'Awaiting Approval', 'Delivered'].includes(canonStage(d.status)) ? s + dealAmount(d.deal_value) : s, 0);
 }
 
 // ── Single source of truth for the Inbox "Business purpose" template dropdown ──
