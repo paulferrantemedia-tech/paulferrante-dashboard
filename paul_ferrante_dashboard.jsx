@@ -326,7 +326,7 @@ const CRM_TYPES      = ['Marketing Agency','Creator Agency','Brand Direct','Crea
 const CRM_COUNTRIES  = ['Australia','United States','Canada','China'];
 const CRM_NICHES     = ['Travel','Beauty','Fashion','Food','Tech','Fitness','Lifestyle','Finance','Entertainment'];
 const DELIV_STATUSES = ['Pitching','Scripting','In Production','Awaiting Approval','Delivered','Paid','Not Paid','Declined'];
-const EMPTY_DEAL = { b:'', v:'', p:'TikTok', s:'Pitching', d:'TBC', del:'', col:'#A8D8E0', nextStep:'', remindDate:'', videoLink:'', invoiceUrl:'' };
+const EMPTY_DEAL = { b:'', v:'', p:'TikTok', s:'Pitching', d:'TBC', del:'', col:'#A8D8E0', nextStep:'', remindDate:'', remindScheduledFor:'', remindEmailId:'', videoLink:'', invoiceUrl:'' };
 
 // ── Shared components ─────────────────────────────────────────
 function Card({ children, style }) {
@@ -3034,18 +3034,37 @@ export default function App() {
   const saveDeal = form => {
     if (!form.b?.trim()) return;
     const isNew = !form.id;
-    if (isNew) { setDeals(prev => [...prev, { ...form, id: Date.now() }]); }
-    else { setDeals(prev => prev.map(d => d.id === form.id ? form : d)); }
-    if (form.remindDate && form.nextStep) {
-      const today = new Date().toISOString().slice(0,10);
-      if (form.remindDate >= today) {
-        // Don't swallow failures silently — surface them so a broken email
-        // pipeline is visible instead of failing into the void.
-        fetch('/api/remind', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ brand:form.b, nextStep:form.nextStep, remindDate:form.remindDate, dealValue:form.v }) })
-          .then(async r => { const d = await r.json().catch(()=>({})); console.log('[remind] save response', r.status, d); if (!r.ok) showToast(`⚠ Reminder NOT sent (${r.status}) — check email setup`); })
-          .catch(e => { console.log('[remind] save error', e); showToast('⚠ Reminder request failed (network)'); });
-        showToast(`✓ Saved + reminder set for ${form.remindDate}`);
-      } else { showToast(isNew ? 'Deal added!' : 'Deal updated!'); }
+    const id = isNew ? Date.now() : form.id;
+    const dealRecord = { ...form, id };
+    if (isNew) { setDeals(prev => [...prev, dealRecord]); }
+    else { setDeals(prev => prev.map(d => d.id === id ? dealRecord : d)); }
+
+    // Reminder scheduling. today is a calendar day in Pacific (Paul is in Santa Monica)
+    // to match the backend's America/Los_Angeles comparison.
+    const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+    // Phase 2: only (re)schedule when a future/today date is set AND it differs from the
+    // date we've already scheduled for this deal — prevents duplicate emails on re-save.
+    const needsSchedule = form.remindDate && form.nextStep
+      && form.remindDate >= todayLA
+      && form.remindDate !== form.remindScheduledFor;
+
+    if (needsSchedule) {
+      const dateChanged = form.remindScheduledFor && form.remindScheduledFor !== form.remindDate;
+      // Don't swallow failures silently — surface them so a broken email pipeline is visible.
+      fetch('/api/remind', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+        brand:form.b, nextStep:form.nextStep, remindDate:form.remindDate, dealValue:form.v,
+        idempotencyKey: `remind-${id}-${form.remindDate}`,
+        cancelId: dateChanged ? (form.remindEmailId || null) : null,
+      }) })
+        .then(async r => {
+          const d = await r.json().catch(()=>({}));
+          console.log('[remind] save response', r.status, d);
+          if (!r.ok) { showToast(`⚠ Reminder NOT sent (${r.status}) — check email setup`); return; }
+          // Record which date we've scheduled (+ Resend id) so re-saves don't duplicate it.
+          setDeals(prev => prev.map(x => x.id === id ? { ...x, remindScheduledFor: form.remindDate, remindEmailId: d.id || x.remindEmailId } : x));
+        })
+        .catch(e => { console.log('[remind] save error', e); showToast('⚠ Reminder request failed (network)'); });
+      showToast(`✓ Saved + reminder set for ${form.remindDate}`);
     } else { showToast(isNew ? 'Deal added!' : 'Deal updated!'); }
     // After saving a NEW deal, check if brand is already in CRM
     if (isNew) {
