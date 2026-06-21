@@ -3107,6 +3107,7 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d.ok) {
+          diagLogPlatform('INSTAGRAM', d);
           setIgAnalytics(d);
           setIgConnected(true);
           if (d.profile?.followersCount) setIgFollowers(d.profile.followersCount);
@@ -3121,6 +3122,7 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d.ok) {
+          diagLogPlatform('TIKTOK', d);
           setTtAnalytics(d);
           setTtConnected(true);
           if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
@@ -3150,6 +3152,59 @@ export default function App() {
     return days.size;
   })();
 
+  // ── PHASE 0 DIAGNOSTIC — logs RAW api object vs MAPPED UI object, side by side.
+  //    Purely additive; changes no data logic. Remove after diagnosis.
+  const diagLogPlatform = (platform, raw) => {
+    try {
+      console.group(`%c[DIAG ${platform}] raw → mapped`, 'color:#fff;background:#0E6A80;padding:2px 6px;border-radius:3px');
+      console.log('RAW API object:', raw);
+
+      if (platform === 'INSTAGRAM') {
+        const agg = raw?.aggregates || {};
+        const prof = raw?.profile || {};
+        const posts = raw?.posts || [];
+        console.table([
+          { field:'reach',     path:'aggregates.avgReach',    raw:agg.avgReach,    mapped:(agg.avgReach>0?agg.avgReach:'— (blank)') },
+          { field:'saves',     path:'posts[].saveCount',      raw:posts[0]?.saveCount, mapped:(agg.avgReach>0?'saves÷reach':'saves÷followers') },
+          { field:'likes',     path:'posts[].likeCount',      raw:posts[0]?.likeCount, mapped:posts[0]?.likeCount },
+          { field:'comments',  path:'posts[].commentCount',   raw:posts[0]?.commentCount, mapped:posts[0]?.commentCount },
+          { field:'engRate',   path:'posts[].engagementRate', raw:posts[0]?.engagementRate, mapped:(posts[0]?.reach>0?posts[0]?.engagementRate:'FALLBACK: totalInt÷followers') },
+          { field:'thumbnail', path:'posts[].thumbnail',      raw:posts[0]?.thumbnail, mapped:posts[0]?.thumbnail||'(none)' },
+        ]);
+        console.log('followersCount:', prof.followersCount, '| mediaCount:', prof.mediaCount, '| reachAvailable:', agg.avgReach>0);
+        console.log('per-post {id, mediaType, reach, saves, thumbnailUrl}:');
+        console.table(posts.map(p => ({ id:p.id, mediaType:p.mediaType, reach:p.reach, saves:p.saveCount, thumbnailUrl:p.thumbnail })));
+      } else if (platform === 'TIKTOK') {
+        const agg = raw?.aggregates || {};
+        const vids = raw?.videos || [];
+        console.table([
+          { field:'reach',     path:'(TikTok has no reach — uses viewCount)', raw:vids[0]?.viewCount, mapped:vids[0]?.viewCount },
+          { field:'saves',     path:'(TikTok API returns no saves — shareCount only)', raw:vids[0]?.shareCount, mapped:'N/A' },
+          { field:'likes',     path:'videos[].likeCount',      raw:vids[0]?.likeCount, mapped:vids[0]?.likeCount },
+          { field:'comments',  path:'videos[].commentCount',   raw:vids[0]?.commentCount, mapped:vids[0]?.commentCount },
+          { field:'engRate',   path:'videos[].engagementRate', raw:vids[0]?.engagementRate, mapped:vids[0]?.engagementRate },
+          { field:'thumbnail', path:'videos[].thumbnail (cover_image_url)', raw:vids[0]?.thumbnail, mapped:vids[0]?.thumbnail||'(none)' },
+        ]);
+        console.log('per-video {id, reach(views), saves(shares), thumbnailUrl}:');
+        console.table(vids.map(v => ({ id:v.id, mediaType:'VIDEO', reach:v.viewCount, saves:v.shareCount, thumbnailUrl:v.thumbnail })));
+      } else if (platform === 'YOUTUBE') {
+        const agg = raw?.aggregates || {};
+        const vids = raw?.videos || [];
+        console.table([
+          { field:'reach',     path:'(YouTube uses viewCount)',  raw:vids[0]?.viewCount, mapped:vids[0]?.viewCount },
+          { field:'saves',     path:'(YouTube API exposes no saves)', raw:undefined, mapped:'N/A' },
+          { field:'likes',     path:'videos[].likeCount',      raw:vids[0]?.likeCount, mapped:vids[0]?.likeCount },
+          { field:'comments',  path:'videos[].commentCount',   raw:vids[0]?.commentCount, mapped:vids[0]?.commentCount },
+          { field:'engRate',   path:'videos[].engagementRate', raw:vids[0]?.engagementRate, mapped:vids[0]?.engagementRate },
+          { field:'thumbnail', path:'videos[].thumbnail',      raw:vids[0]?.thumbnail, mapped:vids[0]?.thumbnail||'(none)' },
+        ]);
+        console.log('per-video {id, reach(views), thumbnailUrl}:');
+        console.table(vids.map(v => ({ id:v.id, mediaType:'VIDEO', reach:v.viewCount, saves:'N/A', thumbnailUrl:v.thumbnail })));
+      }
+      console.groupEnd();
+    } catch (e) { console.warn('[DIAG] log failed for', platform, e); }
+  };
+
   // ── YouTube Analytics (fetched when Analytics tab is opened) ──
   const loadIgAnalytics = (force = false) => {
     setIgAnalyticsLoading(true); setIgAnalyticsError(null);
@@ -3157,6 +3212,7 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d.ok) {
+          diagLogPlatform('INSTAGRAM', d);
           setIgAnalytics(d);
           setIgConnected(true);
           if (d.profile?.followersCount) setIgFollowers(d.profile.followersCount);
@@ -3175,6 +3231,7 @@ export default function App() {
       .then(r => r.json())
       .then(d => {
         if (d.ok) {
+          diagLogPlatform('TIKTOK', d);
           setTtAnalytics(d);
           setTtConnected(true);
           if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
@@ -3191,7 +3248,7 @@ export default function App() {
     fetch(`/api/youtube-stats?t=${Date.now()}${force ? '&force=true' : ''}`, { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
-        if (data.ok) { setYtAnalytics(data); }
+        if (data.ok) { diagLogPlatform('YOUTUBE', data); setYtAnalytics(data); }
         else { setYtAnalyticsError(data.error || 'Failed to load analytics'); }
       })
       .catch(() => setYtAnalyticsError('Network error — check connection'))
@@ -6699,6 +6756,7 @@ function ExportTab({ data, year }) {
                               return (
                                 <div key={v.id} style={{ background:`${OCEAN}22`, borderRadius:10, padding:'12px 14px', border:`1px solid ${aboveAvg ? '#69C9D044' : OCEAN + '44'}` }}>
                                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8, marginBottom:8 }}>
+                                    {v.thumbnail && <img src={v.thumbnail} alt="" loading="lazy" style={{ width:44, height:44, borderRadius:6, objectFit:'cover', flexShrink:0 }} />}
                                     <div style={{ fontSize:11, fontWeight:700, lineHeight:1.4, flex:1 }}>{v.title}</div>
                                     {aboveAvg && <span style={{ fontSize:9, color:'#69C9D0', fontWeight:700, whiteSpace:'nowrap' }}>★ Top</span>}
                                   </div>
@@ -6727,9 +6785,12 @@ function ExportTab({ data, year }) {
                                   onMouseEnter={e => e.currentTarget.style.background=`${OCEAN}44`}
                                   onMouseLeave={e => e.currentTarget.style.background=i%2===0?`${OCEAN}18`:'transparent'}>
                                   <div style={{ fontSize:11, color:SLATE, fontWeight:700 }}>{i + 1}</div>
-                                  <div>
-                                    <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{v.title.length > 60 ? v.title.slice(0,60)+'…' : v.title}</div>
-                                    <div style={{ fontSize:10, color:SLATE, marginTop:2 }}>{new Date(v.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}{v.duration ? ` · ${v.duration}s` : ''}</div>
+                                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                    {v.thumbnail && <img src={v.thumbnail} alt="" loading="lazy" style={{ width:44, height:44, borderRadius:6, objectFit:'cover', flexShrink:0 }} />}
+                                    <div>
+                                      <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{v.title.length > 60 ? v.title.slice(0,60)+'…' : v.title}</div>
+                                      <div style={{ fontSize:10, color:SLATE, marginTop:2 }}>{new Date(v.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}{v.duration ? ` · ${v.duration}s` : ''}</div>
+                                    </div>
                                   </div>
                                   <div style={{ fontSize:13, fontWeight:700 }}>{fmtViews(v.viewCount)}{aboveAvg && <span style={{ marginLeft:4, fontSize:9, color:'#69C9D0' }}>★</span>}</div>
                                   <div style={{ fontSize:12, color:YELL }}>{fmtViews(v.likeCount)}</div>

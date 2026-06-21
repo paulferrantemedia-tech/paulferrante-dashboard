@@ -100,7 +100,7 @@ async function fetchTtData(tokenData) {
   }
 
   // 2. Video list (most recent 20)
-  const videoRes = await fetch(`${TT_BASE}/video/list/?fields=id,title,create_time,like_count,comment_count,share_count,view_count,duration`, {
+  const videoRes = await fetch(`${TT_BASE}/video/list/?fields=id,title,create_time,like_count,comment_count,share_count,view_count,duration,cover_image_url`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ max_count: 20 }),
@@ -128,6 +128,7 @@ async function fetchTtData(tokenData) {
       id:            v.id,
       title:         v.title || '(untitled)',
       createdAt:     new Date((v.create_time || 0) * 1000).toISOString(),
+      thumbnail:     v.cover_image_url || null,
       viewCount:     views,
       likeCount:     likes,
       commentCount:  comments,

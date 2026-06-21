@@ -148,6 +148,30 @@ function extractInsightValue(metric, insightsData) {
   return 0;
 }
 
+// Fetch per-media insights resiliently.
+// Meta deprecated `impressions`, `plays`, `video_views`, and
+// `ig_reels_aggregated_all_plays_count` on 2025-04-21 — they are replaced by a
+// single universal `views` metric. Requesting a deprecated metric makes the
+// WHOLE call 400, which previously zeroed reach + saved for every post.
+// We try a rich set first, then degrade so one bad metric can't wipe everything,
+// and we RETURN the error instead of swallowing it.
+async function fetchPostInsights(item, token) {
+  const isVideo = item.media_type === 'REEL' || item.media_type === 'VIDEO';
+  const sets = isVideo
+    ? ['reach,saved,views,total_interactions', 'reach,saved,views', 'reach,saved', 'reach']
+    : ['reach,saved,total_interactions', 'reach,saved', 'reach'];
+  let lastErr = null;
+  for (const metrics of sets) {
+    try {
+      const insRes  = await fetch(`${IG_BASE}/${item.id}/insights?metric=${metrics}&access_token=${token}`);
+      const insData = await insRes.json();
+      if (insData.error) { lastErr = insData.error.message || JSON.stringify(insData.error); continue; }
+      return { ins: insData.data || [], err: null, metricsUsed: metrics };
+    } catch (e) { lastErr = e.message; }
+  }
+  return { ins: [], err: lastErr, metricsUsed: null };
+}
+
 // ── Main IG data fetch ─────────────────────────────────────────────
 async function fetchIgData(userId, token) {
   const profileRes = await fetch(`${IG_BASE}/${userId}?fields=followers_count,follows_count,media_count,name,username&access_token=${token}`);
@@ -160,27 +184,19 @@ async function fetchIgData(userId, token) {
   const mediaData = await mediaRes.json();
   if (mediaData.error) throw new Error(`Instagram media: ${mediaData.error.message}`);
 
+  let firstInsightsError = null;
   const posts = await Promise.all((mediaData.data || []).map(async (item) => {
     let reach = 0, impressions = 0, saved = 0, plays = 0;
-    try {
-      let metrics;
-      if (item.media_type === 'REEL') {
-        metrics = 'reach,saved,ig_reels_plays,total_interactions';
-      } else if (item.media_type === 'VIDEO') {
-        metrics = 'reach,saved,video_views,total_interactions';
-      } else {
-        metrics = 'reach,impressions,saved,total_interactions';
-      }
-      const insRes  = await fetch(`${IG_BASE}/${item.id}/insights?metric=${metrics}&access_token=${token}`);
-      const insData = await insRes.json();
-      const ins = insData.data || [];
-      reach       = extractInsightValue('reach',              ins);
-      impressions = extractInsightValue('impressions',        ins);
-      saved       = extractInsightValue('saved',              ins);
-      plays       = extractInsightValue('ig_reels_plays',     ins) ||
-                    extractInsightValue('video_views',        ins) ||
-                    extractInsightValue('plays',              ins);
-    } catch {}
+    const { ins, err } = await fetchPostInsights(item, token);
+    if (err && !firstInsightsError) firstInsightsError = err;
+    reach       = extractInsightValue('reach',  ins);
+    saved       = extractInsightValue('saved',  ins);
+    // `views` is the post-2025 universal replacement for plays/video_views/impressions
+    plays       = extractInsightValue('views',          ins) ||
+                  extractInsightValue('ig_reels_plays', ins) ||
+                  extractInsightValue('video_views',    ins) ||
+                  extractInsightValue('plays',          ins);
+    impressions = extractInsightValue('impressions', ins); // legacy; 0 post-deprecation
 
     const totalEng = (item.like_count || 0) + (item.comments_count || 0) + saved;
     const engRate  = reach > 0 ? parseFloat(((totalEng / reach) * 100).toFixed(2)) : 0;
@@ -223,6 +239,7 @@ async function fetchIgData(userId, token) {
     },
     posts,
     aggregates: { total: n, avgReach, avgEngRate, avgLikeRate, avgSaveRate },
+    _debug: { insightsError: firstInsightsError },
     _cachedAt: Date.now(),
   };
 }
