@@ -2557,10 +2557,17 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
   const coldDaysLeft = Math.max(1, N - histDays);
 
   const curVals = {
-    ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? null },
+    // IG aggregates expose avgReach, not avgViews — fall back to avgReach so IG's
+    // "Avg Views" cell populates (IG's closest analog to views is reach).
+    ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? igAnalytics?.aggregates?.avgReach ?? null },
     tt: { f: ttFollowers || 0, e: ttAnalytics?.aggregates?.avgEngRate ?? null, v: ttAnalytics?.aggregates?.avgViews ?? null },
     yt: { f: ytSubs || 0,      e: ytAnalytics?.aggregates?.avgEngRate ?? null, v: ytAnalytics?.aggregates?.avgViews ?? null },
   };
+  // [overview-delta] Phase 0: is each platform's analytics object even loaded here?
+  console.log('[overview-delta] objects loaded —',
+    'ig:', !!igAnalytics, '(v src:', igAnalytics?.aggregates?.avgViews != null ? 'avgViews' : (igAnalytics?.aggregates?.avgReach != null ? 'avgReach' : 'none') + ')',
+    '| tt:', !!ttAnalytics, '| yt:', !!ytAnalytics,
+    '| curVals:', JSON.stringify(curVals));
   const delta = (k, metric) => {
     const cur = curVals[k][metric];
     const comp = compSnap?.[k]?.[metric];
@@ -2924,7 +2931,7 @@ export default function App() {
     if (!igFollowers && !ttFollowers && !ytSubs) return;
     const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
     const rec = {
-      ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? null },
+      ig: { f: igFollowers || 0, e: igAnalytics?.aggregates?.avgEngRate ?? null, v: igAnalytics?.aggregates?.avgViews ?? igAnalytics?.aggregates?.avgReach ?? null },
       tt: { f: ttFollowers || 0, e: ttAnalytics?.aggregates?.avgEngRate ?? null, v: ttAnalytics?.aggregates?.avgViews ?? null },
       yt: { f: ytSubs || 0,      e: ytAnalytics?.aggregates?.avgEngRate ?? null, v: ytAnalytics?.aggregates?.avgViews ?? null },
     };
@@ -3145,6 +3152,23 @@ export default function App() {
           setTtAnalytics(d);
           setTtConnected(true);
           if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── YouTube FULL analytics on startup (powers Overview trends) ──
+  // The other startup effect only fetches subscriberCount into ytSubs; without this,
+  // ytAnalytics (engagement + avg views) was null on Overview until the Analytics tab
+  // was opened, so YouTube's trend cells never populated there.
+  useEffect(() => {
+    fetch(`/api/youtube-stats?t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok) {
+          diagLogPlatform('YOUTUBE', d);
+          setYtAnalytics(d);
+          if (d.channel?.subscriberCount) { setYtSubs(d.channel.subscriberCount); setYtConnected(true); }
         }
       })
       .catch(() => {});

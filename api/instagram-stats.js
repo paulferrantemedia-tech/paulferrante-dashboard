@@ -238,7 +238,10 @@ async function fetchIgData(userId, token) {
       mediaCount:     profile.media_count     || 0,
     },
     posts,
-    aggregates: { total: n, avgReach, avgEngRate, avgLikeRate, avgSaveRate },
+    // avgViews is an alias of avgReach so the Overview trends panel (which reads
+    // aggregates.avgViews for every platform) populates for IG too. IG has no true
+    // "views" metric — reach is its closest analog.
+    aggregates: { total: n, avgReach, avgViews: avgReach, avgEngRate, avgLikeRate, avgSaveRate },
     _debug: { insightsError: firstInsightsError },
     _cachedAt: Date.now(),
   };
