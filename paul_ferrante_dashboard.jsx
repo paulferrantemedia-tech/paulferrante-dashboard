@@ -1801,6 +1801,39 @@ const SEED_CASTINGS = [
   makeCasting({ id:'c12', showName:'The Quiz With Balls — Season 2', network:'Fox', formatType:'one-off-game', market:'US', deadline:castingDaysFromNow(10), pipelineStatus:'researching', applyLink:'https://foxcasting.com', oneLineWhy:'Low-time one-off. DQ risk for full-season casts — confirm before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
   makeCasting({ id:'c13', showName:'The Challenge: Global Championship — Season 3', network:'CBS / Paramount+', formatType:'hybrid-physical-social', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Squid Game alumni route. Heavy physical but social strategy carries equal weight.', flags:['solo','annual','returnee-angle'], dqRisk:false, scoreInputs:{ brandFit:7, audienceOverlap:7, exposureValue:8, careerUpside:9, networkEcosystem:9, timeCommitmentDays:35, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
 ];
+// ── Apply Now link resolution ───────────────────────────────────────────────
+// The seed applyLink values were AI-generated deep links and many 404 (verified:
+// e.g. netflix.com/casting redirects to a 404 "NSES-404", nbc.com/casting etc.).
+// We do NOT trust raw seed deep links. Apply Now resolves down a hierarchy so it
+// can NEVER be a dead end:
+//   1. a curated, verified per-show application portal
+//   2. the network's official casting hub (verified, stable)
+//   3. a Google search for the show's casting application (always resolves)
+const CASTING_LINKS_CHECKED = '2026-06-22';
+// Verified official network casting hubs (checked 2026-06-22). Matched by substring
+// of the show's network string, so "CBS / Paramount+" still maps to the CBS hub.
+const NETWORK_CASTING_HUBS = {
+  'CBS':        'https://www.cbs.com/casting/',
+  'NBC':        'https://www.nbc.com/global/pages/casting',
+  'Channel 10': 'https://10.com.au/casting',
+};
+// Verified per-show application portals (checked 2026-06-22).
+const SHOW_APPLY_PORTALS = {
+  c2: 'https://www.theamazingracecasting.com/home',  // The Amazing Race US (verified via cbs.com/casting)
+  c7: 'https://www.bigbrothercasting.tv/',            // Big Brother US (verified via cbs.com/casting)
+};
+const castingSearchUrl = (name) =>
+  `https://www.google.com/search?q=${encodeURIComponent((name || 'reality tv') + ' casting application apply')}`;
+// Returns { url, label, source, status, checked } — label is honest about whether
+// it's a direct application ("Apply Now") or a fallback ("Find the application").
+function resolveApply(show) {
+  if (!show) return null;
+  const portal = SHOW_APPLY_PORTALS[show.id];
+  if (portal) return { url: portal, label: 'Apply Now', source: 'verified-portal', status: 'valid', checked: CASTING_LINKS_CHECKED };
+  const netKey = Object.keys(NETWORK_CASTING_HUBS).find(n => (show.network || '').includes(n));
+  if (netKey) return { url: NETWORK_CASTING_HUBS[netKey], label: 'Find the application', source: 'network-hub', status: 'valid', checked: CASTING_LINKS_CHECKED };
+  return { url: castingSearchUrl(show.showName), label: 'Find the application', source: 'search', status: 'fallback', checked: CASTING_LINKS_CHECKED };
+}
 function castingDaysUntil(d) { if (!d) return null; return Math.ceil((new Date(d) - CASTING_TODAY_REF) / 86400000); }
 function castingDeadlineLabel(d) {
   if (!d) return 'Annual cycle — TBA';
@@ -2182,8 +2215,188 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
   );
 }
 
+// ── Application tracker — status engine ─────────────────────────────────────
+// Reality: no API reports application status. This is self-logged data + date math.
+// Thresholds are editable rules of thumb (casting timelines vary wildly), NOT facts.
+const APP_STATUS_RULES = {
+  likelyColdWeeks:  10,  // > this many weeks since applied, no contact, no premiere → Likely Cold
+  premiereSoonDays: 30,  // premiere/close within this many days (or passed), no contact → Probably Passed
+  remindWeeksBeforePremiere: 3, // schedule a "you likely won't hear back" reminder this far before premiere
+};
+const APP_STATUS_META = {
+  'in-process':      { label:'In Process',      tone:'#16A34A', order:0, blurb:'They’ve reached out. Keep this warm.' },
+  'waiting':         { label:'Waiting',         tone:'#0E6A80', order:1, blurb:'Still in play. Casting may still be reviewing.' },
+  'likely-cold':     { label:'Likely Cold',     tone:'#B45309', order:2, blurb:'No word in a while. Probably not moving forward, but not confirmed.' },
+  'probably-passed': { label:'Probably Passed', tone:'#DC2626', order:3, blurb:'Premiere is close/over and you haven’t heard — this season’s casting is likely locked.' },
+};
+const _appParse = s => (s ? new Date(s + 'T12:00:00') : null);
+const _appFmt   = s => (s ? new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—');
+// Returns { key, why, needPremiere } — status is ESTIMATE, never a guarantee.
+function computeAppStatus(app, ref = new Date()) {
+  const today    = new Date(ref.toISOString().slice(0,10) + 'T12:00:00');
+  const applied  = _appParse(app.appliedDate);
+  const premiere = _appParse(app.premiereDate);
+  const close    = _appParse(app.castingCloseDate);
+  const contact  = _appParse(app.lastContactDate);
+  const dDays    = d => Math.round((d - today) / 86400000);
+  // 1. IN PROCESS — they reached out (manual signal wins over everything)
+  if (contact) return { key:'in-process', why:`They reached out ${_appFmt(app.lastContactDate)}.` };
+  // 2. PROBABLY PASSED — premiere/close within 30d or already passed, no contact
+  if (premiere) {
+    const n = dDays(premiere);
+    if (n <= APP_STATUS_RULES.premiereSoonDays)
+      return { key:'probably-passed', why: n < 0 ? `Premiered ${-n} day${-n===1?'':'s'} ago and no word.` : `Premieres in ${n} day${n===1?'':'s'} and no word.` };
+  }
+  if (close) {
+    const n = dDays(close);
+    if (n <= APP_STATUS_RULES.premiereSoonDays)
+      return { key:'probably-passed', why: n < 0 ? `Casting closed ${-n} day${-n===1?'':'s'} ago with no word.` : `Casting closes in ${n} day${n===1?'':'s'} and no word.` };
+  }
+  // 3. LIKELY COLD — > 10 weeks since applied, no contact, no premiere known
+  if (applied && !premiere) {
+    const wks = Math.floor(-dDays(applied) / 7);
+    if (wks > APP_STATUS_RULES.likelyColdWeeks)
+      return { key:'likely-cold', why:`${wks} weeks since you applied, no word, no premiere date set.`, needPremiere:true };
+  }
+  // 4. WAITING / OPEN (default)
+  if (premiere) return { key:'waiting', why:`Premiere ~${dDays(premiere)} days out — casting may still be reviewing.` };
+  return { key:'waiting', why: applied ? `Applied ${-dDays(applied)} days ago — casting may still be reviewing.` : 'Casting may still be reviewing.', needPremiere:true };
+}
+
+// Compact tracker UI. applications persist to localStorage (the casting tab is
+// device-local; this matches that). Status is recomputed on every render/load, so
+// a Waiting app flips to Probably Passed automatically as its premiere approaches.
+function ApplicationTracker({ applications, setApplications }) {
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 700;
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ show:'', network:'', appliedDate:new Date().toISOString().slice(0,10), premiereDate:'', castingCloseDate:'', lastContactDate:'', notes:'', applyUrlUsed:'' });
+  const blank = { show:'', network:'', appliedDate:new Date().toISOString().slice(0,10), premiereDate:'', castingCloseDate:'', lastContactDate:'', notes:'', applyUrlUsed:'' };
+
+  const addApp = () => {
+    if (!form.show.trim()) return;
+    setApplications(prev => [...prev, { ...form, id:`app${Date.now()}`, remindedFor:'' }]);
+    setForm(blank); setAdding(false);
+  };
+  const patch = (id, fields) => setApplications(prev => prev.map(a => a.id === id ? { ...a, ...fields } : a));
+  const remove = id => setApplications(prev => prev.filter(a => a.id !== id));
+
+  // Phase 5 — schedule a status reminder via the FIXED /api/remind (fires on the
+  // right date via scheduled_at, not on creation). Dedupes per app+premiere date.
+  const scheduleReminder = (app) => {
+    if (!app.premiereDate) return;
+    const remind = new Date(app.premiereDate + 'T12:00:00');
+    remind.setDate(remind.getDate() - APP_STATUS_RULES.remindWeeksBeforePremiere * 7);
+    const remindDate = remind.toISOString().slice(0,10);
+    fetch('/api/remind', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+      brand: app.show,
+      nextStep: `${app.show} premieres in ~${APP_STATUS_RULES.remindWeeksBeforePremiere} weeks. If casting hasn't reached out, you likely won't hear back this season.`,
+      remindDate,
+      idempotencyKey: `appremind-${app.id}-${app.premiereDate}`,
+    }) })
+      .then(async r => { const d = await r.json().catch(()=>({})); console.log('[app-remind]', r.status, d); patch(app.id, { remindedFor: app.premiereDate }); })
+      .catch(e => console.log('[app-remind] error', e));
+  };
+
+  const groups = Object.keys(APP_STATUS_META).sort((a,b)=>APP_STATUS_META[a].order-APP_STATUS_META[b].order);
+  const withStatus = applications.map(a => ({ ...a, _status: computeAppStatus(a) }));
+  const dateField = (app, key, label) => (
+    <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>{label}
+      <input type="date" value={app[key] || ''} onChange={e => patch(app.id, { [key]: e.target.value })}
+        style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', color:TEXT, outline:'none', colorScheme:'light' }} />
+    </label>
+  );
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <div style={{ fontSize:12, color:SLATE }}>{applications.length} application{applications.length===1?'':'s'} tracked · statuses are date-based estimates, not guarantees</div>
+        {!adding && <button onClick={()=>setAdding(true)} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:10, padding:'8px 16px', fontWeight:800, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>+ Log application</button>}
+      </div>
+
+      {adding && (
+        <Card style={{ marginBottom:14 }}>
+          <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
+            <input placeholder="Show name" value={form.show} onChange={e=>setForm({...form, show:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+            <input placeholder="Network" value={form.network} onChange={e=>setForm({...form, network:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Applied date<input type="date" value={form.appliedDate} onChange={e=>setForm({...form, appliedDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Premiere date (optional)<input type="date" value={form.premiereDate} onChange={e=>setForm({...form, premiereDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Casting close (optional)<input type="date" value={form.castingCloseDate} onChange={e=>setForm({...form, castingCloseDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <input placeholder="Apply URL used (optional)" value={form.applyUrlUsed} onChange={e=>setForm({...form, applyUrlUsed:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+          </div>
+          <textarea rows="2" placeholder="Notes (tape sent, contact name, etc.)" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} style={{ width:'100%', marginTop:10, background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:10 }}>
+            <button onClick={()=>{setAdding(false); setForm(blank);}} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+            <button onClick={addApp} style={{ background:TEXT, color:'#fff', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Add</button>
+          </div>
+        </Card>
+      )}
+
+      {applications.length === 0 && !adding && (
+        <Card><div style={{ fontSize:13, color:SLATE }}>No applications logged yet. Hit <strong>+ Log application</strong> (or "Track this application" on a casting) to start. Statuses update automatically from the dates you enter.</div></Card>
+      )}
+
+      {groups.map(g => {
+        const items = withStatus.filter(a => a._status.key === g);
+        if (!items.length) return null;
+        const meta = APP_STATUS_META[g];
+        return (
+          <div key={g} style={{ marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+              <span style={{ width:9, height:9, borderRadius:9, background:meta.tone }} />
+              <div style={{ fontSize:11, color:TEXT, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:800 }}>{meta.label}</div>
+              <div style={{ fontSize:11, color:SLATE }}>· {items.length} · {meta.blurb}</div>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+              {items.map(app => (
+                <Card key={app.id}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:15, fontWeight:700, color:TEXT }}>{app.show || '(untitled)'}</div>
+                      <div style={{ fontSize:11, color:SLATE, marginTop:2 }}>{app.network || 'Network TBD'} · applied {_appFmt(app.appliedDate)}</div>
+                    </div>
+                    <span style={{ fontSize:10, fontWeight:800, color:'#fff', background:meta.tone, borderRadius:20, padding:'4px 10px', whiteSpace:'nowrap' }}>{meta.label}</span>
+                  </div>
+                  <div style={{ fontSize:12, color:TEXT, marginTop:8, background:`${meta.tone}14`, borderLeft:`3px solid ${meta.tone}`, borderRadius:4, padding:'7px 10px' }}>
+                    Why: {app._status.why} <span style={{ color:SLATE }}>(estimate)</span>
+                  </div>
+                  {app._status.needPremiere && (
+                    <div style={{ fontSize:11, color:'#B45309', marginTop:6 }}>↳ Add a premiere date to sharpen this status.</div>
+                  )}
+                  <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:8, marginTop:10 }}>
+                    {dateField(app, 'appliedDate', 'Applied')}
+                    {dateField(app, 'premiereDate', 'Premiere')}
+                    {dateField(app, 'castingCloseDate', 'Casting close')}
+                    {dateField(app, 'lastContactDate', 'Last contact')}
+                  </div>
+                  <textarea rows="2" placeholder="Notes" value={app.notes || ''} onChange={e=>patch(app.id, { notes:e.target.value })} style={{ width:'100%', marginTop:8, background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'6px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+                  <div style={{ display:'flex', gap:8, marginTop:8, flexWrap:'wrap', alignItems:'center' }}>
+                    {app.applyUrlUsed && <a href={app.applyUrlUsed} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#0E6A80', fontWeight:700 }}>Apply link used ↗</a>}
+                    {app.premiereDate && (app.remindedFor === app.premiereDate
+                      ? <span style={{ fontSize:11, color:'#16A34A' }}>🔔 Reminder set for ~3wk before premiere</span>
+                      : <button onClick={()=>scheduleReminder(app)} style={{ background:'none', border:`1px solid ${BLUE}`, color:'#0E6A80', borderRadius:7, padding:'5px 10px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>🔔 Remind me before premiere</button>)}
+                    <button onClick={()=>remove(app.id)} style={{ marginLeft:'auto', background:'none', border:`1px solid ${BDR}`, color:'#94A3B8', borderRadius:7, padding:'5px 10px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function RealityCastingTab() {
   const [cards, setCards] = useState(SEED_CASTINGS);
+  const [applications, setApplications] = useState(() => load('pf_applications', []));
+  useEffect(() => { save('pf_applications', applications); }, [applications]);
+  const trackApplication = (card) => {
+    const ap = resolveApply(card);
+    setApplications(prev => prev.some(a => a.fromCardId === card.id)
+      ? prev
+      : [...prev, { id:`app${Date.now()}`, fromCardId:card.id, show:card.showName, network:card.network, appliedDate:new Date().toISOString().slice(0,10), premiereDate:'', castingCloseDate:card.deadline||'', lastContactDate:'', notes:'', applyUrlUsed:ap?.url||'', remindedFor:'' }]);
+    setActiveTab('tracker');
+  };
   const [selected, setSelected] = useState(null);
   const [activeTab, setActiveTab] = useState('open');
   const [filters, setFilters] = useState({ market:'all', format:'all', deadline:'all', eligibility:'all', scoreFloor:5 });
@@ -2313,14 +2526,17 @@ function RealityCastingTab() {
       </Card>
 
       {/* Sub-tabs */}
-      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BDR}`, marginBottom:14 }}>
-        {[['open','Open Now'],['closing','Closing Soon'],['watchlist','Watchlist'],['annual','Annual Cycles']].map(([k,l]) => (
+      <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BDR}`, marginBottom:14, flexWrap:'wrap' }}>
+        {[['open','Open Now'],['closing','Closing Soon'],['watchlist','Watchlist'],['annual','Annual Cycles'],['tracker',`My Applications${applications.length?` (${applications.length})`:''}`]].map(([k,l]) => (
           <div key={k} onClick={() => setActiveTab(k)} style={{
             padding:'10px 18px', fontSize:12, fontWeight:600, cursor:'pointer',
             color: activeTab===k ? TEXT : SLATE, borderBottom: activeTab===k ? `2px solid ${TEXT}` : '2px solid transparent', marginBottom:'-1px',
           }}>{l}</div>
         ))}
       </div>
+
+      {activeTab === 'tracker' && <ApplicationTracker applications={applications} setApplications={setApplications} />}
+      {activeTab !== 'tracker' && (<>
 
       {/* Filters */}
       <Card style={{ marginBottom:14 }}>
@@ -2405,6 +2621,7 @@ function RealityCastingTab() {
       <div style={{ fontSize:10, color:'#94A3B8', marginTop:18, paddingBottom:8 }}>
         Phase 1 — feed, fit score, filters. Auto-archived shows (cooking / dating / athletic / etc.) hidden by default.
       </div>
+      </>)}
 
       {/* Detail modal */}
       {selected && (
@@ -2457,9 +2674,24 @@ function RealityCastingTab() {
                   {['researching','applied','first-tape','callback','producer-interview','booked','rejected','ghosted'].map(s => <option key={s} value={s}>{s.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}</option>)}
                 </select>
               </div>
-              {selected.applyLink && (
-                <a href={selected.applyLink} target="_blank" rel="noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>Open apply link →</a>
-              )}
+              {(() => {
+                const ap = resolveApply(selected);
+                const note = ap.source === 'verified-portal' ? 'Verified application page'
+                  : ap.source === 'network-hub' ? `${selected.network} official casting hub — this show's application is listed here`
+                  : 'Opens a search for this show\'s casting application';
+                const alreadyTracked = applications.some(a => a.fromCardId === selected.id);
+                return (
+                  <div>
+                    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                      <a href={ap.url} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>
+                      <button onClick={() => { trackApplication(selected); setSelected(null); }} disabled={alreadyTracked}
+                        style={{ background: alreadyTracked ? '#F1F5F9' : '#fff', color: alreadyTracked ? '#94A3B8' : '#0E6A80', border:`1px solid ${alreadyTracked ? BDR : BLUE}`, borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700, cursor: alreadyTracked ? 'default' : 'pointer', fontFamily:'inherit' }}>
+                        {alreadyTracked ? '✓ Tracked' : '+ Track this application'}</button>
+                    </div>
+                    <div style={{ fontSize:10, color:SLATE, marginTop:6, lineHeight:1.5 }}>{note} · link checked {ap.checked}</div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
