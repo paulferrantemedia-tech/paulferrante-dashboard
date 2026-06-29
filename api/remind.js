@@ -53,10 +53,44 @@ async function cancelResend(key, id) {
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
+// GET /api/remind?action=notify&key=SECRET&title=...&summary=...&idemp=...
+// Emails an arbitrary summary immediately via Resend. Added for the daily brand-deal scan task,
+// which can only make GET requests. Recipient is FIXED to your own address (no open relay); a key
+// gates it. No new serverless function (kept in remind.js to stay within the Hobby 12-function cap).
+async function handleNotify(req, res, key) {
+  const env = process.env.VERCEL_ENV || 'unknown';
+  const expected = process.env.NOTIFY_SECRET || process.env.DASHBOARD_SECRET || 'pf_secret_2026';
+  if (String(req.query.key || '') !== expected) return res.status(403).json({ error: 'bad or missing key' });
+  const title = String(req.query.title || 'Daily Brand-Deal Scan');
+  const summary = String(req.query.summary || '');
+  if (!summary) return res.status(400).json({ error: 'missing summary' });
+  if (!key) return res.status(500).json({ error: 'Email service not configured (RESEND_API_KEY missing)', env });
+  const recipient = process.env.REMINDER_TO || DEFAULT_TO; // FIXED to your address — not caller-supplied
+  const idempotencyKey = req.query.idemp ? String(req.query.idemp) : undefined;
+  const payload = {
+    from: FROM,
+    to: [recipient],
+    subject: title,
+    html: `<div style="font-family:Inter,Arial,sans-serif;background:#0a0a0a;color:#fff;padding:28px;border-radius:12px;max-width:600px;">
+      <div style="color:#88EAF6;font-size:12px;letter-spacing:3px;text-transform:uppercase;margin-bottom:10px;">paul_ferrante | command center</div>
+      <h2 style="margin:0 0 18px;font-size:20px;">${title}</h2>
+      <div style="font-size:14px;line-height:1.55;color:#eaeaea;">${summary}</div>
+      <div style="margin-top:22px;"><a href="https://paulferrante-dashboard-deploy.vercel.app" style="background:#88EAF6;color:#0a0a0a;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:800;font-size:12px;">Open Command Center →</a></div>
+    </div>`,
+  };
+  const result = await sendViaResend(key, payload, idempotencyKey); // no scheduled_at -> sends now
+  console.log('[notify]', JSON.stringify({ env, recipient, ok: result.ok, status: result.status, idempotencyKey: idempotencyKey || null }));
+  if (!result.ok) return res.status(502).json({ error: 'Failed to send summary email', resend: result });
+  return res.status(200).json({ ok: true, recipient });
+}
+
 export default async function handler(req, res) {
+  const key = process.env.RESEND_API_KEY;
+  // GET notify mode (daily scan summary email).
+  if (req.method === 'GET' && req.query.action === 'notify') return handleNotify(req, res, key);
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const key = process.env.RESEND_API_KEY;
   const env = process.env.VERCEL_ENV || 'unknown';
   const { brand, nextStep, remindDate, dealValue, to, idempotencyKey, cancelId } = req.body || {};
   if (!brand || !nextStep || !remindDate) return res.status(400).json({ error: 'Missing required fields' });
