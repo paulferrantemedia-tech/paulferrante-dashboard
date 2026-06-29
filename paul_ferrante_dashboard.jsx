@@ -2974,7 +2974,7 @@ function BrandGuidelinesTab() {
   const [copied, setCopied] = useState(null);
   const [avail, setAvail]   = useState({});      // filename -> bool
   const [iconVar, setIconVar] = useState({});    // cardKey -> variant
-  const VARIANTS = ['transparent','black-on-white','white-on-black'];
+  const VARIANTS = ['bright-sky','sand','ink'];
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
   const PILLARS = [
@@ -3021,9 +3021,9 @@ function BrandGuidelinesTab() {
   }, []);
 
   const copyHex = (hex) => { try { navigator.clipboard.writeText(hex); } catch (e) {} setCopied(hex); setTimeout(() => setCopied(c => (c === hex ? null : c)), 1400); };
-  const dl = async (path, outName) => {
+  const dlFile = async (rel, outName) => {
     try {
-      const r = await fetch(`/assets/brand/${path}.png`); if (!r.ok) { setAvail(a => ({ ...a, [path]: false })); return; }
+      const r = await fetch(`/assets/brand/${rel}`); if (!r.ok) { return; }
       const blob = await r.blob(); const u = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = u; a.download = outName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
     } catch (e) { setAvail(a => ({ ...a, [path]: false })); }
@@ -3070,7 +3070,7 @@ function BrandGuidelinesTab() {
   // ── icon card with variant picker ───────────────────────────
   const IconCard = ({ slug, lab }) => {
     const key = slug;
-    const sel = iconVar[key] || (avail[`icons/${slug}-transparent`] ? 'transparent' : (VARIANTS.find(v => avail[`icons/${slug}-${v}`]) || 'transparent'));
+    const sel = iconVar[key] || (avail[`icons/${slug}-bright-sky`] ? 'bright-sky' : (VARIANTS.find(v => avail[`icons/${slug}-${v}`]) || 'bright-sky'));
     const selOk = avail[`icons/${slug}-${sel}`];
     const anyOk = VARIANTS.some(v => avail[`icons/${slug}-${v}`]);
     return (
@@ -3092,12 +3092,12 @@ function BrandGuidelinesTab() {
                 title={v}
                 style={{ fontSize:9.5, fontWeight:700, fontFamily:'inherit', border:`1px solid ${active ? B.ocean : B.ink+'22'}`, borderRadius:6, padding:'4px 6px',
                   cursor: vok ? 'pointer' : 'not-allowed', background: active ? B.ocean : 'transparent', color: !vok ? B.ink+'44' : (active ? B.white : B.ocean) }}>
-                {v === 'transparent' ? 'transp.' : v === 'black-on-white' ? 'b/w' : 'w/b'}
+                {v === 'bright-sky' ? 'sky' : v === 'sand' ? 'sand' : 'line'}
               </button>
             );
           })}
         </div>
-        <DlBtn ok={!!selOk} onClick={() => dl(`icons/${slug}-${sel}`, `rgg-${slug}-${sel}.png`)}>
+        <DlBtn ok={!!selOk} onClick={() => dlFile(`icons/${slug}-${sel}.png`, `rgg-${slug}-${sel}.png`)}>
           {anyOk ? 'download' : 'file not added'}
         </DlBtn>
       </div>
@@ -3126,7 +3126,7 @@ function BrandGuidelinesTab() {
             <div style={{ ...caption, fontSize:11 }}>the media company</div>
             <div style={{ width:2, height:26, background:`${B.ink}33` }} />
             <div style={{ display:'flex', gap:'clamp(20px,8vw,90px)', alignItems:'flex-start' }}>
-              {[['consulting services','agency / client work'],['paulferrante','the creator arm']].map(([t, s]) => (
+              {[['consulting services','agency / client work'],['paul_ferrante','the creator arm']].map(([t, s]) => (
                 <div key={t} style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
                   <div style={{ width:2, height:18, background:`${B.ink}33` }} />
                   <div style={{ background:`${B.ocean}14`, color:B.ocean, border:`1.5px solid ${B.ocean}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
@@ -3159,7 +3159,7 @@ function BrandGuidelinesTab() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
             {PILLARS.map(([t, slug, desc]) => (
               <div key={t} style={surf}>
-                <img src={`/assets/brand/icons/${slug}-transparent.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', marginBottom:10 }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
+                <img src={`/assets/brand/icons/${slug}-bright-sky.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', marginBottom:10 }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
                 <div style={{ fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ink, marginBottom:8 }}>{t}</div>
                 <p style={{ fontSize:13.5, lineHeight:1.6, margin:0, color:B.ink }}>{desc}</p>
               </div>
@@ -3202,7 +3202,7 @@ function BrandGuidelinesTab() {
                     <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} onError={(e)=>{e.currentTarget.style.opacity=0.2;}} />
                   </div>
                   <div style={{ fontSize:13, fontWeight:600, marginBottom:10, textAlign:'center' }}>{name}</div>
-                  <DlBtn ok={ok} onClick={() => dl(`logo/${file}`, `${file}.png`)}>{ok ? 'download' : 'file not added'}</DlBtn>
+                  <DlBtn ok={ok} onClick={() => dlFile(`logo/${file}.png`, `${file}.png`)}>{ok ? 'download' : 'file not added'}</DlBtn>
                 </div>
               );
             })}
@@ -3274,8 +3274,30 @@ function BrandGuidelinesTab() {
           ))}
         </Section>
 
+        {/* 7. TEMPLATES & ASSETS */}
+        <Section n="07" title="templates & assets">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10 }}>listicle frame</div>
+              <div style={{ background:`${B.ocean}10`, borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
+                <img src="/assets/brand/extras/listicle-template.png" alt="listicle template" style={{ maxHeight:240, maxWidth:'100%', objectFit:'contain' }} onError={(e)=>{e.currentTarget.style.opacity=0.25;}} />
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>transparent notes frame for listicle videos. overlay it and type your list inside.</p>
+              <DlBtn ok={true} onClick={() => dlFile('extras/listicle-template.png','rgg-listicle-template.png')}>download png</DlBtn>
+            </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10 }}>end tag</div>
+              <div style={{ background:`${B.ocean}10`, borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
+                <video src="/assets/brand/extras/paul_ferrante-end-tag.mov" controls muted playsInline style={{ maxHeight:240, maxWidth:'100%', borderRadius:8 }} />
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>your paul_ferrante end-tag clip. preview here, or download to drop on the end of a video.</p>
+              <DlBtn ok={true} onClick={() => dlFile('extras/paul_ferrante-end-tag.mov','paul_ferrante-end-tag.mov')}>download video</DlBtn>
+            </div>
+          </div>
+        </Section>
+
         {/* 9. CHANNELS */}
-        <Section n="07" title="channels & contact">
+        <Section n="08" title="channels & contact">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14 }}>
             {[[TikTok,'tiktok','https://www.tiktok.com/@paul_ferrante'],[Insta,'instagram','https://www.instagram.com/paul_ferrante/'],[YouTube,'youtube','https://www.youtube.com/@paul_ferrante'],[Web,'website','https://paullferrantemedia.my.canva.site']].map(([G, name, url]) => (
               <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ ...surf, textDecoration:'none', color:B.ink, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
