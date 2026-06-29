@@ -3281,10 +3281,10 @@ function BrandGuidelinesTab() {
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10 }}>listicle frame</div>
               <div style={{ background:`${B.ocean}10`, borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
-                <img src="/assets/brand/extras/listicle-template.png" alt="listicle template" style={{ maxHeight:240, maxWidth:'100%', objectFit:'contain' }} onError={(e)=>{e.currentTarget.style.opacity=0.25;}} />
+                <img src="/assets/brand/extras/listicle-template-2.png" alt="listicle template" style={{ maxHeight:240, maxWidth:'100%', objectFit:'contain' }} onError={(e)=>{e.currentTarget.style.opacity=0.25;}} />
               </div>
               <p style={{ ...caption, margin:'10px 0 12px' }}>transparent notes frame for listicle videos. overlay it and type your list inside.</p>
-              <DlBtn ok={true} onClick={() => dlFile('extras/listicle-template.png','rgg-listicle-template.png')}>download png</DlBtn>
+              <DlBtn ok={true} onClick={() => dlFile('extras/listicle-template-2.png','rgg-listicle-template.png')}>download png</DlBtn>
             </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10 }}>end tag</div>
