@@ -3015,7 +3015,7 @@ function BrandGuidelinesTab() {
     }));
     let alive = true;
     Promise.all([...new Set(files)].map(p =>
-      fetch(`/assets/brand/${p}.png`, { method:'HEAD' }).then(r => [p, r.ok]).catch(() => [p, false])
+      fetch(`/assets/brand/${p}.png`, { method:'HEAD' }).then(r => [p, r.ok && (r.headers.get('content-type')||'').toLowerCase().includes('image')]).catch(() => [p, false])
     )).then(res => { if (alive) { const m = {}; res.forEach(([p, ok]) => m[p] = ok); setAvail(m); } });
     return () => { alive = false; };
   }, []);
@@ -3077,7 +3077,7 @@ function BrandGuidelinesTab() {
       <div style={{ ...surf, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', padding:16 }}>
         <div style={{ height:96, display:'flex', alignItems:'center', justifyContent:'center', width:'100%' }}>
           {selOk ? (
-            <img src={`/assets/brand/icons/${slug}-${sel}.png`} alt={lab} style={{ width:78, height:78, objectFit:'contain' }} />
+            <img src={`/assets/brand/icons/${slug}-${sel}.png`} alt={lab} style={{ width:78, height:78, objectFit:'contain' }} onError={() => setAvail(av => ({ ...av, [`icons/${slug}-${sel}`]: false }))} />
           ) : (
             <div style={{ width:78, height:78, borderRadius:10, border:`2px dashed ${B.ink}22`, display:'flex', alignItems:'center', justifyContent:'center', color:B.slate, fontSize:10, textAlign:'center', padding:6 }}>file not added</div>
           )}
