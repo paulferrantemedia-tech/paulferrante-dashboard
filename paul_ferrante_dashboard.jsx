@@ -2972,45 +2972,64 @@ function BrandGuidelinesTab() {
   const B = { sand:'#E1D9AE', ink:'#0A0A0A', sky:'#88EAF6', ocean:'#2A4A5E', slate:'#6E6E6E', white:'#FFFFFF' };
   const DISPLAY = "'Poppins', system-ui, -apple-system, sans-serif";
   const [copied, setCopied] = useState(null);
-  const [avail, setAvail]   = useState({});
+  const [avail, setAvail]   = useState({});      // filename -> bool
+  const [iconVar, setIconVar] = useState({});    // cardKey -> variant
+  const VARIANTS = ['transparent','black-on-white','white-on-black'];
 
-  const ICONS = [
-    ['travel-tips','travel tips'],
-    ['life-cheat-codes','follow for more life cheat codes'],
-    ['story-times','follow for more story times'],
-    ['adulting-strategies','adulting strategies'],
-    ['asia-sidequest','asia sidequest'],
+  const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
+  const PILLARS = [
+    ['travel','globe','practical travel content focused on destinations, hotels, flights, and tips that help people make confident decisions and take action.'],
+    ['lifestyle','home','day-to-day routines, habits, and real moments that feel natural, relatable, and human. the kind of content people actually see themselves in.'],
+    ['commentary','at-symbol','relatable humour, opinions, and cultural observations that spark conversation and drive shares and saves.'],
+    ['life hacks & recommendations','lightbulb','quick wins and simple ways to make everyday life easier. practical tips and recommendations i already share naturally, designed to help people save time, money, or effort.'],
+  ];
+  const LABELS = {
+    'bus':'public transport','at-symbol':'commentary (@)','four-arrows':'sidequest','speech-bubble':'story times',
+    'bookmark':'save','heart':'like','arrow-cursor':'default arrow','no-entry':'not allowed','i-beam':'text i-beam',
+    'thick-arrow':'pointer arrow','cash-stamp':'cash stamp (numberless)','hand-pointer':'hand pointer','curly-arrow':'curly arrow',
+    'circle-loop':'circle annotation','callout':'label callout','local-food':'local food','the-anxiety-list':'the anxiety list',
+    'dogs-badge':'dogs badge','skin-journey':'skin journey','dog':'dog','hourglass':'waiting / spinning',
+  };
+  const label = (slug, ctx) => (ctx && ctx[slug]) || LABELS[slug] || slug.replace(/-/g,' ');
+  const ICON_GROUPS = [
+    ['travel tips', ['airplane','suitcase','passport','globe','local-food','landmark','currency','bus']],
+    ['everyday hacks', ['coffee-cup','timer','calendar','lightbulb','book','checklist','phone','shopping-bag']],
+    ['series & recurring themes', ['asia-sidequest','four-arrows','cross-off','speech-bubble','dog','skin-journey']],
+    ['interaction & utility', [['bookmark','save'],['heart','like'],['share','share'],['download','download'],['globe','translations'],['subtitle','subtitle'],['stars','review'],['cash-stamp','cash stamp (numberless)']]],
+    ['cursor arrows', ['arrow-cursor','hand-pointer','hourglass','i-beam','no-entry']],
+    ['pointer annotations', ['thick-arrow','curly-arrow','circle-loop','callout']],
   ];
 
   useEffect(() => {
     const id = 'bg-poppins';
     if (!document.getElementById(id)) {
       const l = document.createElement('link'); l.id = id; l.rel = 'stylesheet';
-      l.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap';
+      l.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap';
       document.head.appendChild(l);
     }
+    const files = [];
+    LOGOS.forEach(([, f]) => files.push(`logo/${f}`));
+    ICON_GROUPS.forEach(([, items]) => items.forEach(it => {
+      const slug = Array.isArray(it) ? it[0] : it;
+      VARIANTS.forEach(v => files.push(`icons/${slug}-${v}`));
+    }));
     let alive = true;
-    Promise.all(ICONS.map(([f]) =>
-      fetch(`/assets/brand/icons/${f}.png`, { method:'HEAD' }).then(r => [f, r.ok]).catch(() => [f, false])
-    )).then(res => { if (alive) { const m = {}; res.forEach(([f, ok]) => m[f] = ok); setAvail(m); } });
+    Promise.all([...new Set(files)].map(p =>
+      fetch(`/assets/brand/${p}.png`, { method:'HEAD' }).then(r => [p, r.ok]).catch(() => [p, false])
+    )).then(res => { if (alive) { const m = {}; res.forEach(([p, ok]) => m[p] = ok); setAvail(m); } });
     return () => { alive = false; };
   }, []);
 
-  const copyHex = (hex) => {
-    try { navigator.clipboard.writeText(hex); } catch (e) {}
-    setCopied(hex); setTimeout(() => setCopied(c => (c === hex ? null : c)), 1400);
-  };
-  const downloadIcon = async (file) => {
+  const copyHex = (hex) => { try { navigator.clipboard.writeText(hex); } catch (e) {} setCopied(hex); setTimeout(() => setCopied(c => (c === hex ? null : c)), 1400); };
+  const dl = async (path, outName) => {
     try {
-      const r = await fetch(`/assets/brand/icons/${file}.png`);
-      if (!r.ok) { setAvail(a => ({ ...a, [file]: false })); return; }
+      const r = await fetch(`/assets/brand/${path}.png`); if (!r.ok) { setAvail(a => ({ ...a, [path]: false })); return; }
       const blob = await r.blob(); const u = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = u; a.download = `rgg-${file}.png`;
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
-    } catch (e) { setAvail(a => ({ ...a, [file]: false })); }
+      const a = document.createElement('a'); a.href = u; a.download = outName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
+    } catch (e) { setAvail(a => ({ ...a, [path]: false })); }
   };
 
-  // ── shared bits ──────────────────────────────────────────────
+  // shared bits
   const Section = ({ n, title, children }) => (
     <section style={{ marginBottom:64 }}>
       <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:20 }}>
@@ -3021,69 +3040,111 @@ function BrandGuidelinesTab() {
     </section>
   );
   const surf = { background:B.white, borderRadius:16, padding:24, border:`1px solid ${B.ink}11` };
-  const oceanSurf = { background:B.ocean, borderRadius:16, padding:24, color:B.white };
   const caption = { fontSize:13, color:B.slate, lineHeight:1.6 };
   const X = ({ s=22 }) => (<span style={{ color:'#C0392B', fontWeight:800, fontSize:s, lineHeight:1 }}>✗</span>);
   const Check = ({ s=22 }) => (<span style={{ color:B.ocean, fontWeight:800, fontSize:s, lineHeight:1 }}>✓</span>);
-
-  const COLORS = [
-    ['sand','#E1D9AE','default light background, the warm canvas. never clinical.'],
-    ['ink','#0A0A0A','primary dark, all text on sand, dominant in dark executions.'],
-    ['bright sky','#88EAF6','hero accent. scarcity only. ctas, logo marks, one element per layout max. never body text.'],
-    ['deep ocean','#2A4A5E','secondary accent, use on surfaces instead of bright sky. better contrast on sand.'],
-    ['slate','#6E6E6E','supporting copy, captions, metadata. never headlines.'],
-  ];
-  const PILLARS = [
-    ['travel tips','smart, practical travel know-how — booking, packing, getting around.','formats: "i wish someone told me this before [place]", quick tip lists, on-location demos.'],
-    ['life cheat codes','small hacks that make everyday life easier.','formats: "follow for more life cheat codes", one tip per video, before/after.'],
-    ['story times','honest, relatable personal stories.','formats: "follow for more story times", talk-to-camera, voiceover over b-roll.'],
-    ['adulting strategies','grounded takes on money, time, and the boring grown-up stuff.','formats: checklists, "how much this costs", step-by-step.'],
-  ];
-  const FONTS = [
-    ['headings','itc avant garde gothic pro bold','clean, playful, geometric.','headlines, on-screen titles.', false],
-    ['body / capcut text','broke','lowercase, rough.','captions and in-video text.', false],
-    ['subtitles / translations','poppins regular','clean, legible.','subtitles and translations.', true],
-    ['handwriting / annotation','skribblugh','marker, wobble.','hand-drawn notes and arrows.', false],
-  ];
-  const CHANNELS = [
-    ['tiktok (primary)','https://www.tiktok.com/@paul_ferrante'],
-    ['instagram','https://www.instagram.com/paul_ferrante/'],
-    ['youtube','https://www.youtube.com/@paul_ferrante'],
-    ['website','https://paullferrantemedia.my.canva.site'],
-  ];
-  const bar = (label, pct, val) => (
-    <div key={label} style={{ marginBottom:10 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:B.ink, marginBottom:4 }}>
-        <span>{label}</span><span style={{ color:B.slate }}>{val}</span>
-      </div>
-      <div style={{ height:8, background:`${B.ocean}22`, borderRadius:6, overflow:'hidden' }}>
-        <div style={{ width:`${pct}%`, height:'100%', background:B.ocean, borderRadius:6 }} />
-      </div>
+  const misuseTile = () => ({ position:'relative', background:B.white, border:`1px solid ${B.ink}14`, borderRadius:10, minHeight:60, display:'flex', alignItems:'center', justifyContent:'center', padding:8, overflow:'hidden', color:B.ink });
+  const Strike = () => (<span style={{ position:'absolute', left:'8%', right:'8%', top:'50%', height:2, background:'#C0392B', transform:'rotate(-12deg)' }} />);
+  const bar = (lab, pct, val) => (
+    <div key={lab} style={{ marginBottom:10 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:B.ink, marginBottom:4 }}><span>{lab}</span><span style={{ color:B.slate }}>{val}</span></div>
+      <div style={{ height:8, background:`${B.ocean}22`, borderRadius:6, overflow:'hidden' }}><div style={{ width:`${pct}%`, height:'100%', background:B.ocean, borderRadius:6 }} /></div>
     </div>
   );
 
-  const misuseTile = () => ({ position:'relative', background:B.white, border:`1px solid ${B.ink}14`, borderRadius:10, minHeight:60, display:'flex', alignItems:'center', justifyContent:'center', padding:8, overflow:'hidden', color:B.ink });
-  const Strike = () => (<span style={{ position:'absolute', left:'8%', right:'8%', top:'50%', height:2, background:'#C0392B', transform:'rotate(-12deg)' }} />);
+  // platform glyphs (monochrome, on-brand)
+  const TikTok = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M16.5 3c.3 2 1.6 3.4 3.5 3.6v2.4c-1.3.1-2.5-.3-3.5-1v6.5c0 3.2-2.4 5.5-5.4 5.5C8.4 20 6 17.8 6 14.9c0-3 2.5-5.3 5.7-5v2.6c-.4-.1-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.6 2.6 2.6 1.5 0 2.7-1.1 2.7-2.8V3h3.4z"/></svg>);
+  const Insta = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill={c} stroke="none"/></svg>);
+  const YouTube = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="2.5" y="6" width="19" height="12" rx="3.5"/><path d="M10.5 9.2v5.6l4.6-2.8z" fill={c} stroke="none"/></svg>);
+  const Web = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>);
+
+  // download button helper
+  const DlBtn = ({ ok, onClick, children }) => (
+    <button onClick={() => ok && onClick()} disabled={!ok}
+      style={{ width:'100%', border:'none', borderRadius:10, padding:'9px 12px', fontSize:12, fontWeight:700, fontFamily:'inherit',
+        cursor: ok ? 'pointer' : 'not-allowed', background: ok ? B.ocean : `${B.ink}12`, color: ok ? B.white : B.slate }}>
+      {children}
+    </button>
+  );
+
+  // ── icon card with variant picker ───────────────────────────
+  const IconCard = ({ slug, lab }) => {
+    const key = slug;
+    const sel = iconVar[key] || (avail[`icons/${slug}-transparent`] ? 'transparent' : (VARIANTS.find(v => avail[`icons/${slug}-${v}`]) || 'transparent'));
+    const selOk = avail[`icons/${slug}-${sel}`];
+    const anyOk = VARIANTS.some(v => avail[`icons/${slug}-${v}`]);
+    return (
+      <div style={{ ...surf, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', padding:16 }}>
+        <div style={{ height:96, display:'flex', alignItems:'center', justifyContent:'center', width:'100%' }}>
+          {selOk ? (
+            <img src={`/assets/brand/icons/${slug}-${sel}.png`} alt={lab} style={{ width:78, height:78, objectFit:'contain' }} />
+          ) : (
+            <div style={{ width:78, height:78, borderRadius:10, border:`2px dashed ${B.ink}22`, display:'flex', alignItems:'center', justifyContent:'center', color:B.slate, fontSize:10, textAlign:'center', padding:6 }}>file not added</div>
+          )}
+        </div>
+        <div style={{ fontSize:12.5, color:B.ink, fontWeight:600, margin:'8px 0 10px', minHeight:30 }}>{lab}</div>
+        <div style={{ display:'flex', gap:4, marginBottom:8, flexWrap:'wrap', justifyContent:'center' }}>
+          {VARIANTS.map(v => {
+            const vok = avail[`icons/${slug}-${v}`];
+            const active = v === sel;
+            return (
+              <button key={v} disabled={!vok} onClick={() => vok && setIconVar(s => ({ ...s, [key]: v }))}
+                title={v}
+                style={{ fontSize:9.5, fontWeight:700, fontFamily:'inherit', border:`1px solid ${active ? B.ocean : B.ink+'22'}`, borderRadius:6, padding:'4px 6px',
+                  cursor: vok ? 'pointer' : 'not-allowed', background: active ? B.ocean : 'transparent', color: !vok ? B.ink+'44' : (active ? B.white : B.ocean) }}>
+                {v === 'transparent' ? 'transp.' : v === 'black-on-white' ? 'b/w' : 'w/b'}
+              </button>
+            );
+          })}
+        </div>
+        <DlBtn ok={!!selOk} onClick={() => dl(`icons/${slug}-${sel}`, `rgg-${slug}-${sel}.png`)}>
+          {anyOk ? 'download' : 'file not added'}
+        </DlBtn>
+      </div>
+    );
+  };
+
+  const COLORS = [
+    ['sand','#E1D9AE','default light background.'],
+    ['ink','#0A0A0A','primary dark, all text on sand.'],
+    ['bright sky','#88EAF6','hero accent, scarcity only, never body text.'],
+    ['deep ocean','#2A4A5E','secondary accent, use on sand instead of bright sky.'],
+    ['slate','#6E6E6E','supporting copy, captions, metadata.'],
+  ];
 
   return (
     <div style={{ background:B.sand, color:B.ink, borderRadius:20, padding:'clamp(20px,4vw,56px)', fontFamily:"'Inter', system-ui, sans-serif", textTransform:'none' }}>
-      <div style={{ maxWidth:980, margin:'0 auto' }}>
+      <div style={{ maxWidth:1000, margin:'0 auto' }}>
 
-        {/* 1. COVER / WORDMARK */}
-        <div style={{ background:B.white, borderRadius:20, padding:'72px 24px', textAlign:'center', marginBottom:48, border:`1px solid ${B.ink}11` }}>
-          <div style={{ fontFamily:DISPLAY, fontSize:'clamp(40px,8vw,72px)', fontWeight:700, color:B.ink, letterSpacing:-1.5 }}>
-            rgg media<span style={{ color:B.sky }}>.</span>
+        {/* 1. COVER + STRUCTURE */}
+        <div style={{ background:B.white, borderRadius:20, padding:'56px 24px', textAlign:'center', marginBottom:48, border:`1px solid ${B.ink}11` }}>
+          <div style={{ fontFamily:DISPLAY, fontSize:'clamp(38px,7vw,64px)', fontWeight:800, color:B.ink, letterSpacing:-1.5 }}>rgg media<span style={{ color:B.sky }}>.</span></div>
+          <div style={{ ...caption, marginTop:12, letterSpacing:3, textTransform:'uppercase', fontSize:11 }}>brand guidelines · june 2026</div>
+          {/* structure */}
+          <div style={{ marginTop:40, display:'flex', flexDirection:'column', alignItems:'center' }}>
+            <div style={{ background:B.ink, color:B.white, padding:'10px 22px', borderRadius:12, fontWeight:700, fontFamily:DISPLAY }}>rgg media</div>
+            <div style={{ ...caption, fontSize:11 }}>the media company</div>
+            <div style={{ width:2, height:26, background:`${B.ink}33` }} />
+            <div style={{ display:'flex', gap:'clamp(20px,8vw,90px)', alignItems:'flex-start' }}>
+              {[['consulting services','agency / client work'],['paulferrante','the creator arm']].map(([t, s]) => (
+                <div key={t} style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
+                  <div style={{ width:2, height:18, background:`${B.ink}33` }} />
+                  <div style={{ background:`${B.ocean}14`, color:B.ocean, border:`1.5px solid ${B.ocean}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
+                  <div style={{ ...caption, fontSize:11, marginTop:6 }}>{s}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ ...caption, marginTop:14, letterSpacing:3, textTransform:'uppercase', fontSize:11 }}>brand guidelines · june 2026</div>
         </div>
 
         {/* 2. BRAND STORY */}
         <Section n="01" title="brand story & positioning">
           <div style={surf}>
-            <p style={{ fontSize:18, lineHeight:1.7, color:B.ink, margin:0 }}>
-              rgg media keeps things simple, fun, and grounded. quick, honest takes on everyday life,
-              smart travel tips, and moments that make you laugh because they are real. inspire adventure
-              without the fluff.
+            <p style={{ fontSize:17, lineHeight:1.75, color:B.ink, margin:'0 0 16px' }}>
+              rgg is a travel and lifestyle brand that keeps things simple, fun, and grounded. you get quick, honest takes on everyday life, smart travel tips, and moments that make you laugh because they're real. the style is clean and minimal so the content stays easy to watch, with a playful tone that doesn't take itself too seriously.
+            </p>
+            <p style={{ fontSize:17, lineHeight:1.75, color:B.ink, margin:0 }}>
+              rgg is for people who want inspiration without the fluff, practical ideas, relatable stories, and a sense of adventure you can actually see yourself in. it's content that feels approachable, useful, and a little bit cheeky, all wrapped in a relaxed, lowercase aesthetic.
             </p>
             <div style={{ marginTop:18, display:'flex', gap:8, flexWrap:'wrap' }}>
               {['approachable','useful','selective','strictly lowercase'].map(t => (
@@ -3093,239 +3154,137 @@ function BrandGuidelinesTab() {
           </div>
         </Section>
 
-        {/* 3. VOICE & TONE */}
-        <Section n="02" title="voice & tone">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))', gap:16 }}>
-            <div style={{ ...surf, borderTop:`4px solid ${B.ocean}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}><Check /><b style={{ color:B.ocean }}>on-brand</b></div>
-              <p style={{ fontSize:16, lineHeight:1.6, margin:'0 0 10px' }}>"i wish someone told me this sooner especially if you are planning a trip."</p>
-              <p style={{ fontSize:16, lineHeight:1.6, margin:0 }}>"how much this costs."</p>
-              <div style={{ ...caption, marginTop:12 }}>direct, lowercase.</div>
-            </div>
-            <div style={{ ...surf, borderTop:`4px solid #C0392B` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}><X /><b style={{ color:'#C0392B' }}>off-brand</b></div>
-              <p style={{ fontSize:16, lineHeight:1.6, margin:'0 0 10px', color:B.slate }}>"OMG check out these insane travel hacks that WILL change your life"</p>
-              <p style={{ fontSize:16, lineHeight:1.6, margin:0, color:B.slate }}>"What is the true cost? We break it down!"</p>
-              <div style={{ ...caption, marginTop:12 }}>hyped, capitalized.</div>
-            </div>
-          </div>
-        </Section>
-
-        {/* 4. CONTENT PILLARS */}
-        <Section n="03" title="content pillars">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
-            {PILLARS.map(([t, what, fmt]) => (
+        {/* 3. CONTENT PILLARS */}
+        <Section n="02" title="content pillars">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
+            {PILLARS.map(([t, slug, desc]) => (
               <div key={t} style={surf}>
-                <div style={{ fontFamily:DISPLAY, fontSize:18, fontWeight:700, color:B.ink, marginBottom:8 }}>{t}</div>
-                <p style={{ fontSize:14, lineHeight:1.6, margin:'0 0 10px', color:B.ink }}>{what}</p>
-                <p style={{ ...caption, margin:0 }}>{fmt}</p>
+                <img src={`/assets/brand/icons/${slug}-transparent.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', marginBottom:10 }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
+                <div style={{ fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ink, marginBottom:8 }}>{t}</div>
+                <p style={{ fontSize:13.5, lineHeight:1.6, margin:0, color:B.ink }}>{desc}</p>
               </div>
             ))}
           </div>
         </Section>
 
-        {/* 5. AUDIENCE SNAPSHOT */}
-        <Section n="04" title="audience snapshot">
-          <div style={{ ...oceanSurf, marginBottom:16 }}>
-            <div style={{ fontSize:12, letterSpacing:2, textTransform:'uppercase', opacity:0.8, marginBottom:6 }}>total reach · ~66.6k across platforms</div>
-            <div style={{ display:'flex', gap:24, flexWrap:'wrap', fontSize:15 }}>
-              <span>tiktok <b>~51.6k</b></span><span>instagram <b>~13.2k</b></span><span>youtube <b>~1.8k</b></span>
-            </div>
-            <div style={{ fontSize:12, opacity:0.7, marginTop:10 }}>june 2026 — snapshot, not live. the analytics tab is the live source.</div>
+        {/* 4. AUDIENCE */}
+        <Section n="03" title="audience">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14, marginBottom:16 }}>
+            {[[TikTok,'tiktok','~51.6k'],[Insta,'instagram','~13.2k'],[YouTube,'youtube','~1.8k']].map(([G, name, num]) => (
+              <div key={name} style={{ ...surf, textAlign:'center' }}>
+                <div style={{ display:'flex', justifyContent:'center', marginBottom:8 }}><G c={B.ocean} s={30} /></div>
+                <div style={{ fontFamily:DISPLAY, fontSize:26, fontWeight:800, color:B.ink }}>{num}</div>
+                <div style={{ ...caption, fontSize:12 }}>{name}</div>
+              </div>
+            ))}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
             <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:14, color:B.ink }}>top markets</div>
+              <div style={{ fontWeight:700, marginBottom:14 }}>top markets</div>
               {bar('united states',39,'39%')}{bar('australia',38,'38%')}{bar('canada',13,'13%')}{bar('united kingdom',10,'10%')}
             </div>
             <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:14, color:B.ink }}>age</div>
-              {bar('25-34',39,'39%')}{bar('35-44',29,'29%')}{bar('18-24',14,'14%')}{bar('45-54',12,'12%')}{bar('55+',6,'6%')}
-              <div style={{ ...caption, marginTop:8 }}>core audience 25-44.</div>
-            </div>
-            <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:14, color:B.ink }}>gender</div>
-              {bar('split',53,'53% / 47%')}
-              <div style={{ ...caption, marginTop:14 }}>who they are: people who want practical ideas and relatable stories — content that feels approachable and a little cheekily self-deprecating.</div>
+              <div style={{ fontWeight:700, marginBottom:14 }}>age & gender</div>
+              {bar('25-44 (core)',68,'core')}{bar('gender split',53,'53% / 47%')}
+              <div style={{ ...caption, marginTop:10 }}>snapshot june 2026 — the analytics tab is the live source.</div>
             </div>
           </div>
         </Section>
 
-        {/* 6. LOGO & WORDMARK USAGE */}
-        <Section n="05" title="logo & wordmark usage">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:16, marginBottom:16 }}>
-            <div style={{ ...surf, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:150 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}><Check /><b style={{ color:B.ocean }}>correct lockup</b></div>
-              <div style={{ fontFamily:DISPLAY, fontSize:38, fontWeight:700, color:B.ink, letterSpacing:-1 }}>rgg media<span style={{ color:B.sky }}>.</span></div>
+        {/* 5. LOGO & USAGE */}
+        <Section n="04" title="logo & usage">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:16, marginBottom:16 }}>
+            {LOGOS.map(([name, file]) => {
+              const ok = avail[`logo/${file}`] !== false;
+              return (
+                <div key={file} style={surf}>
+                  <div style={{ borderRadius:12, overflow:'hidden', marginBottom:12, border:`1px solid ${B.ink}11` }}>
+                    <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} onError={(e)=>{e.currentTarget.style.opacity=0.2;}} />
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:600, marginBottom:10, textAlign:'center' }}>{name}</div>
+                  <DlBtn ok={ok} onClick={() => dl(`logo/${file}`, `${file}.png`)}>{ok ? 'download' : 'file not added'}</DlBtn>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:16 }}>
+            <div style={surf}>
+              <div style={{ marginBottom:10, fontWeight:700, color:B.ocean }}>why everything is lowercase</div>
+              <p style={{ fontSize:14, lineHeight:1.65, margin:'0 0 12px' }}>rgg is a fun, casual, playful brand. the lowercase wordmark is part of that tone, so it's a rule, not a typo.</p>
+              <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9 }}>
+                <li>do not capitalize.</li>
+                <li>no gradients or heavy shadows.</li>
+                <li>do not crowd with other logos.</li>
+                <li>prioritize white space.</li>
+              </ul>
             </div>
             <div style={surf}>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}><X /><b style={{ color:'#C0392B' }}>misuse</b></div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:20, textTransform:'uppercase' }}>RGG MEDIA</span><Strike/></div>
-                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:20, background:'linear-gradient(90deg,#88EAF6,#2A4A5E)', WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent' }}>rgg media</span><Strike/></div>
-                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:20, textShadow:'3px 4px 5px rgba(0,0,0,0.5)' }}>rgg media</span><Strike/></div>
-                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:15 }}>rgg media ▢ ◆ ★</span><Strike/></div>
+                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:18, textTransform:'uppercase' }}>RGG MEDIA</span><Strike/></div>
+                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:18, background:'linear-gradient(90deg,#88EAF6,#2A4A5E)', WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent' }}>rgg media</span><Strike/></div>
+                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:18, textShadow:'3px 4px 5px rgba(0,0,0,0.5)' }}>rgg media</span><Strike/></div>
+                <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:14 }}>rgg media ▢ ◆ ★</span><Strike/></div>
               </div>
             </div>
           </div>
-          <div style={surf}>
-            <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9, color:B.ink }}>
-              <li>do not capitalize.</li>
-              <li>no gradients or heavy shadows.</li>
-              <li>do not crowd with other logos.</li>
-              <li>prioritize white space.</li>
-              <li>best on white or high-contrast ink.</li>
-            </ul>
-          </div>
         </Section>
 
-        {/* 7. COLOR PALETTE */}
-        <Section n="06" title="color palette · click any swatch to copy">
+        {/* 6. COLOR PALETTE */}
+        <Section n="05" title="color palette · click any swatch to copy">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:16 }}>
             {COLORS.map(([name, hex, role]) => (
               <div key={hex} onClick={() => copyHex(hex)} title="click to copy"
                 style={{ borderRadius:16, overflow:'hidden', border:`1px solid ${B.ink}14`, cursor:'pointer', background:B.white, position:'relative' }}>
-                <div style={{ height:96, background:hex, borderBottom:`1px solid ${B.ink}10` }} />
-                <div style={{ padding:'14px 16px' }}>
+                <div style={{ height:90, background:hex, borderBottom:`1px solid ${B.ink}10` }} />
+                <div style={{ padding:'12px 14px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <span style={{ fontWeight:700, color:B.ink, fontSize:15 }}>{name}</span>
-                    <span style={{ fontFamily:'monospace', fontSize:13, color:B.slate }}>{hex}</span>
+                    <span style={{ fontWeight:700, color:B.ink, fontSize:14 }}>{name}</span>
+                    <span style={{ fontFamily:'monospace', fontSize:12, color:B.slate }}>{hex}</span>
                   </div>
-                  <div style={{ ...caption, marginTop:8, fontSize:12 }}>{role}</div>
+                  <div style={{ ...caption, marginTop:6, fontSize:12 }}>{role}</div>
+                  <div style={{ marginTop:10, textAlign:'center', fontSize:11, fontWeight:700, color:B.white, background:B.ocean, borderRadius:8, padding:'6px' }}>copy hex</div>
                 </div>
-                {copied === hex && (
-                  <div style={{ position:'absolute', top:10, right:10, background:B.ocean, color:B.white, fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:20 }}>copied ✓</div>
-                )}
+                {copied === hex && (<div style={{ position:'absolute', top:10, right:10, background:B.ocean, color:B.white, fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:20 }}>copied ✓</div>)}
               </div>
             ))}
           </div>
-          {/* pairing rule do/don't */}
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
-            <div style={{ background:B.sand, borderRadius:16, padding:24, border:`2px dashed #C0392B`, position:'relative' }}>
-              <span style={{ fontFamily:DISPLAY, fontSize:22, fontWeight:700, color:B.sky }}>bright sky text on sand</span>
+            <div style={{ background:B.sand, borderRadius:16, padding:24, border:`2px dashed #C0392B` }}>
+              <span style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:700, color:B.sky }}>bright sky text on sand</span>
               <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}><X s={18}/><span style={caption}>contrast too low. never do this.</span></div>
             </div>
             <div style={{ background:B.sand, borderRadius:16, padding:24, border:`2px solid ${B.ocean}` }}>
-              <span style={{ fontFamily:DISPLAY, fontSize:22, fontWeight:700, color:B.ocean }}>deep ocean text on sand</span>
+              <span style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:700, color:B.ocean }}>deep ocean text on sand</span>
               <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}><Check s={18}/><span style={caption}>approved. use ocean for accents on sand.</span></div>
             </div>
           </div>
         </Section>
 
-        {/* 8. TYPOGRAPHY */}
-        <Section n="07" title="typography">
-          <div style={{ display:'grid', gap:16 }}>
-            {FONTS.map(([role, fam, desc, use, live]) => (
-              <div key={fam} style={surf}>
-                <div style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8, alignItems:'baseline' }}>
-                  <span style={{ fontWeight:700, color:B.ink, fontSize:16 }}>{fam}</span>
-                  <span style={{ ...caption }}>{role} · {use}</span>
-                </div>
-                {live ? (
-                  <div style={{ fontFamily:DISPLAY, fontSize:34, color:B.ink, marginTop:14, lineHeight:1.2 }}>the quick brown fox jumps</div>
-                ) : (
-                  <div style={{ marginTop:14, padding:'14px 16px', background:`${B.ocean}10`, borderRadius:10, ...caption }}>
-                    {desc} <span style={{ opacity:0.7 }}>(font file not loaded here — live sample not shown.)</span>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {/* caption format example */}
-          <div style={{ marginTop:16, background:B.ink, borderRadius:16, padding:'40px 24px', textAlign:'center' }}>
-            <div style={{ fontSize:11, letterSpacing:2, textTransform:'uppercase', color:B.slate, marginBottom:18 }}>auto caption (capcut) · lowercase · emphasis in bright sky only</div>
-            <div style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:'clamp(22px,4vw,32px)', color:B.white, lineHeight:1.35 }}>
-              i wish someone told me this <span style={{ color:B.sky }}>sooner</span>
-            </div>
-          </div>
-        </Section>
-
-        {/* 9. ICONOGRAPHY */}
-        <Section n="08" title="iconography · video tags">
-          <p style={{ ...caption, marginTop:-8, marginBottom:18 }}>hand-drawn double-stroke marker set. each downloads as an individual transparent png for overlaying in video.</p>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16 }}>
-            {ICONS.map(([file, label]) => {
-              const ok = avail[file] !== false; // true or undefined (still checking) -> enabled
-              return (
-                <div key={file} style={{ ...surf, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center' }}>
-                  <div style={{ height:120, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <img src={`/assets/brand/icons/${file}.png`} alt={label} style={{ width:96, height:96, objectFit:'contain' }}
-                      onError={(e) => { e.currentTarget.style.display='none'; }} />
-                  </div>
-                  <div style={{ fontSize:13, color:B.ink, fontWeight:600, marginBottom:12, minHeight:34 }}>{label}</div>
-                  <button onClick={() => ok && downloadIcon(file)} disabled={!ok}
-                    style={{ width:'100%', border:'none', borderRadius:10, padding:'10px 12px', fontSize:13, fontWeight:700, fontFamily:'inherit',
-                      cursor: ok ? 'pointer' : 'not-allowed', background: ok ? B.ocean : `${B.ink}14`, color: ok ? B.white : B.slate }}>
-                    {ok ? 'download png' : 'transparent file not yet added'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          {/* cash stamp live example */}
-          <div style={{ marginTop:24 }}>
-            <div style={{ ...caption, marginBottom:10 }}>cash stamp — reusable template, applied top-right whenever prices are mentioned:</div>
-            <div style={{ position:'relative', background:B.ink, borderRadius:16, height:200, overflow:'hidden' }}>
-              <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', color:`${B.white}44`, fontSize:13 }}>video frame</div>
-              <div style={{ position:'absolute', top:16, right:16, background:B.sand, color:B.ink, padding:'10px 16px', borderRadius:12, transform:'rotate(-4deg)', boxShadow:'0 4px 14px rgba(0,0,0,0.3)', textAlign:'center' }}>
-                <div style={{ fontSize:10, letterSpacing:1, textTransform:'uppercase', color:B.slate }}>the real cost</div>
-                <div style={{ fontFamily:DISPLAY, fontWeight:700, fontSize:24 }}>$1,250</div>
+        {/* 7. ICONOGRAPHY (incl. cash stamp) */}
+        <Section n="06" title="icons · video tags">
+          <p style={{ ...caption, marginTop:-8, marginBottom:18 }}>each icon downloads as an individual file for overlaying in video. pick a version: transparent, b/w (black on white), or w/b (white on black). the cash stamp lives here too, with no number baked in so you add the amount while editing.</p>
+          {ICON_GROUPS.map(([group, items]) => (
+            <div key={group} style={{ marginBottom:28 }}>
+              <div style={{ fontFamily:DISPLAY, fontSize:14, fontWeight:700, color:B.ocean, marginBottom:12 }}>{group}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:14 }}>
+                {items.map(it => { const slug = Array.isArray(it) ? it[0] : it; const lab = Array.isArray(it) ? it[1] : label(slug); return <IconCard key={group+slug} slug={slug} lab={lab} />; })}
               </div>
             </div>
-          </div>
+          ))}
         </Section>
 
-        {/* 10. DO'S & DON'TS */}
-        <Section n="09" title="do's & don'ts">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))', gap:16 }}>
-            <div style={{ ...surf, borderLeft:`4px solid ${B.ocean}` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}><Check/><b style={{ color:B.ocean }}>do</b></div>
-              <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9 }}>
-                <li>keep all public copy strictly lowercase.</li>
-                <li>use the hand-drawn icons for all video overlays.</li>
-                <li>apply bright sky once per layout max.</li>
-              </ul>
-            </div>
-            <div style={{ ...surf, borderLeft:`4px solid #C0392B` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}><X/><b style={{ color:'#C0392B' }}>don't</b></div>
-              <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9, color:B.slate }}>
-                <li>use bright sky text or buttons on sand.</li>
-                <li>capitalize anything.</li>
-              </ul>
-            </div>
-          </div>
-        </Section>
-
-        {/* 11. SERIES TAGGING */}
-        <Section n="10" title="series tagging">
-          <div style={surf}>
-            <div style={{ ...caption, marginBottom:10 }}>format for working title & initial caption:</div>
-            <div style={{ fontFamily:'monospace', fontSize:16, background:`${B.ocean}12`, color:B.ink, padding:'14px 18px', borderRadius:10, display:'inline-block' }}>
-              [series name] pt X: [topic]
-            </div>
-            <div style={{ marginTop:18 }}>
-              <span style={{ ...caption }}>active series:</span>
-              <div style={{ marginTop:8, display:'flex', gap:10, flexWrap:'wrap' }}>
-                <span style={{ background:B.ocean, color:B.white, padding:'8px 16px', borderRadius:24, fontWeight:600, fontSize:14 }}>asia sidequest</span>
-                <span style={{ ...caption, alignSelf:'center' }}>main travel arc — e.g. tokyo, seoul.</span>
-              </div>
-              <div style={{ ...caption, marginTop:14, fontFamily:'monospace', fontSize:13 }}>e.g. asia sidequest pt 3: the best ramen in tokyo</div>
-            </div>
-          </div>
-        </Section>
-
-        {/* 12. CHANNELS & CONTACT */}
-        <Section n="11" title="channels & contact">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:12 }}>
-            {CHANNELS.map(([label, url]) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer"
-                style={{ ...surf, textDecoration:'none', display:'flex', justifyContent:'space-between', alignItems:'center', color:B.ink }}>
-                <span style={{ fontWeight:600 }}>{label}</span>
-                <span style={{ color:B.ocean, fontSize:18 }}>→</span>
+        {/* 9. CHANNELS */}
+        <Section n="07" title="channels & contact">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14 }}>
+            {[[TikTok,'tiktok','https://www.tiktok.com/@paul_ferrante'],[Insta,'instagram','https://www.instagram.com/paul_ferrante/'],[YouTube,'youtube','https://www.youtube.com/@paul_ferrante'],[Web,'website','https://paullferrantemedia.my.canva.site']].map(([G, name, url]) => (
+              <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ ...surf, textDecoration:'none', color:B.ink, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <G c={B.ocean} s={32} />
+                <span style={{ fontWeight:600, fontSize:14 }}>{name}</span>
               </a>
             ))}
           </div>
-          <div style={{ ...caption, textAlign:'center', marginTop:40, opacity:0.7 }}>rgg media · paul ferrante · brand guidelines</div>
+          <div style={{ ...caption, textAlign:'center', marginTop:40, opacity:0.7 }}>rgg media · paulferrante · brand guidelines</div>
         </Section>
 
       </div>
