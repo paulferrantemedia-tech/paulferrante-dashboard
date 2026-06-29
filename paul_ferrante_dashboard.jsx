@@ -3140,6 +3140,7 @@ function BrandGuidelinesTab() {
         {/* 2. BRAND STORY */}
         <Section n="01" title="brand story & positioning">
           <div style={surf}>
+            <div style={{ fontFamily:DISPLAY, fontSize:22, fontWeight:800, color:B.ink, marginBottom:14, letterSpacing:-0.5 }}>paul_ferrante<span style={{ color:B.ocean }}>.rgg</span></div>
             <p style={{ fontSize:17, lineHeight:1.75, color:B.ink, margin:'0 0 16px' }}>
               rgg is a travel and lifestyle brand that keeps things simple, fun, and grounded. you get quick, honest takes on everyday life, smart travel tips, and moments that make you laugh because they're real. the style is clean and minimal so the content stays easy to watch, with a playful tone that doesn't take itself too seriously.
             </p>
@@ -3159,8 +3160,8 @@ function BrandGuidelinesTab() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
             {PILLARS.map(([t, slug, desc]) => (
               <div key={t} style={surf}>
-                <img src={`/assets/brand/icons/${slug}-bright-sky.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', marginBottom:10 }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
-                <div style={{ fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ink, marginBottom:8 }}>{t}</div>
+                <img src={`/assets/brand/icons/${slug}-bright-sky.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', display:'block', margin:'0 auto 10px' }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
+                <div style={{ fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ink, marginBottom:8, textAlign:'center' }}>{t}</div>
                 <p style={{ fontSize:13.5, lineHeight:1.6, margin:0, color:B.ink }}>{desc}</p>
               </div>
             ))}
