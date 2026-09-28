@@ -3987,6 +3987,13 @@ export default function App() {
   const [ttConnected, setTtConnected] = useState(false);
   const [flash,       setFlash]       = useState(null);
   const [tab,          setTab]          = useState('overview');
+  // Deep links: #pitch=<ids> opens the Discovery pitch view, #brand-share opens
+  // Brand Guidelines in read-only share mode. The tabs parse the hash themselves.
+  useEffect(() => {
+    const h = window.location.hash || '';
+    if (h.startsWith('#pitch=')) setTab('discovery');
+    else if (h.startsWith('#brand-share')) setTab('brand');
+  }, []);
   const [toast,        setToast]        = useState(null);
   const [dragId,       setDragId]       = useState(null);
   const [dragOver,     setDragOver]     = useState(null);
