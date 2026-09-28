@@ -1810,6 +1810,9 @@ const SEED_CASTINGS = [
 //   2. the network's official casting hub (verified, stable)
 //   3. a Google search for the show's casting application (always resolves)
 const CASTING_LINKS_CHECKED = '2026-06-22';
+// Human-readable "last updated" label for the casting board header.
+const CASTING_CHECKED_LABEL = new Date(CASTING_LINKS_CHECKED + 'T00:00:00')
+  .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 // Verified official network casting hubs (checked 2026-06-22). Matched by substring
 // of the show's network string, so "CBS / Paramount+" still maps to the CBS hub.
 const NETWORK_CASTING_HUBS = {
@@ -1835,15 +1838,13 @@ function resolveApply(show) {
   return { url: castingSearchUrl(show.showName), label: 'Find the application', source: 'search', status: 'fallback', checked: CASTING_LINKS_CHECKED };
 }
 function castingDaysUntil(d) { if (!d) return null; return Math.ceil((new Date(d) - CASTING_TODAY_REF) / 86400000); }
+// Absolute deadline dates only — the seed deadlines are frozen reference data,
+// so relative countdowns ("Closes in 2 days") go stale. Never invent new dates.
 function castingDeadlineLabel(d) {
   if (!d) return 'Annual cycle — TBA';
   const days = castingDaysUntil(d);
-  if (days < 0)  return 'Closed';
-  if (days === 0) return 'Closes today';
-  if (days === 1) return 'Closes tomorrow';
-  if (days <= 7)  return `Closes in ${days} days`;
-  if (days <= 30) return `Closes ${d}`;
-  return `Open until ${d}`;
+  if (days < 0) return `Closed ${d}`;
+  return `Deadline ${d}`;
 }
 function castingScoreColor(s) {
   if (s >= 8) return { bg:`${BLUE}33`, color:'#0E6A80', border:BLUE };
@@ -2426,7 +2427,6 @@ function RealityCastingTab() {
   const formatOptions = [...new Set(cards.filter(c => c.bucket !== 'no').map(c => c.formatType))];
   const open       = cards.filter(c => c.bucket !== 'no' && c.deadline);
   const inFlight   = cards.filter(c => ['applied','first-tape','callback','producer-interview'].includes(c.pipelineStatus));
-  const urgent     = open.filter(c => castingDaysUntil(c.deadline) <= 7 && castingDaysUntil(c.deadline) >= 0);
   const topScore   = open.length ? Math.max(...open.map(c => c.fitScore)) : 0;
   const topCard    = open.filter(c => c.fitScore === topScore).sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline))[0];
   const avg        = open.length ? Math.round(open.reduce((s,c) => s + c.fitScore, 0) / open.length * 10) / 10 : 0;
@@ -2461,7 +2461,7 @@ function RealityCastingTab() {
     <div>
       <div style={{ marginBottom:18 }}>
         <Label>reality tv casting</Label>
-        <div style={{ fontSize:24, fontWeight:700, color:TEXT, lineHeight:1.1, letterSpacing:'-0.5px' }}>What's open. What scores. What you should tape this week.</div>
+        <div style={{ fontSize:24, fontWeight:700, color:TEXT, lineHeight:1.1, letterSpacing:'-0.5px' }}>What's open. What scores. What you should tape next.</div>
       </div>
 
       {/* Stat tiles */}
@@ -2469,7 +2469,7 @@ function RealityCastingTab() {
         <div style={{ background:`linear-gradient(135deg, #B6F2F9 0%, ${BLUE} 100%)`, borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
           <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Highest open fit score</div>
           <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{topScore.toFixed(1)}</div>
-          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>this week</div>
+          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>tracked castings</div>
         </div>
         <Card>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Live applications</div>
@@ -2494,9 +2494,9 @@ function RealityCastingTab() {
         {topCard ? (
           <>
             <div style={{ fontSize:16, fontWeight:600, color:TEXT, lineHeight:1.4 }}>
-              Top of your queue this week: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}, {castingDeadlineLabel(topCard.deadline).toLowerCase()}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
+              Top of your queue: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}, {castingDeadlineLabel(topCard.deadline).toLowerCase()}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
             </div>
-            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} open castings tracked · {urgent.length} closing in the next 7 days.</div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} open castings tracked · casting data last updated {CASTING_CHECKED_LABEL}.</div>
           </>
         ) : (
           <div style={{ fontSize:14, color:TEXT }}>Nothing in the open queue scores above your floor — quiet week. Watchlist below has annual cycles to prep tapes for.</div>
