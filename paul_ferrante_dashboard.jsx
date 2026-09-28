@@ -76,7 +76,7 @@ const HOOK_PILLARS = {
   'Educational': 'Relatable/Actionable Life — how-to content earns saves and shares',
   'Destination': 'Educational Travel — destination content captures high-intent search traffic',
   'Listicle':    'Relatable/Actionable Life — curated lists earn shares and saves',
-  'Bold Claim':  'Personal Storytimes — conviction-led hooks build authority and debate',
+  'Bold Claim':  'Bold-Claim Hooks — conviction-led hooks build authority and debate',
   'Clickbait':   'Pet Experiments — emotional hooks drive high click-through on trending topics',
   'Standard':    'Consider testing a stronger hook format for this type of content',
 };
