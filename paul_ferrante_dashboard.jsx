@@ -2992,12 +2992,12 @@ function BrandGuidelinesTab() {
   };
   const label = (slug, ctx) => (ctx && ctx[slug]) || LABELS[slug] || slug.replace(/-/g,' ');
   const ICON_GROUPS = [
-    ['travel tips', ['airplane','suitcase','passport','globe','local-food','landmark','currency','bus']],
+    ['travel tips', ['airplane','suitcase','passport','globe','landmark','currency','bus']],
     ['everyday hacks', ['coffee-cup','timer','calendar','lightbulb','book','checklist','phone','shopping-bag']],
-    ['series & recurring themes', ['asia-sidequest','four-arrows','cross-off','speech-bubble','dog','skin-journey']],
+    ['series & recurring themes', ['asia-sidequest','four-arrows','cross-off','speech-bubble']],
     ['interaction & utility', [['bookmark','save'],['heart','like'],['share','share'],['download','download'],['globe','translations'],['subtitle','subtitle'],['stars','review'],['cash-stamp','cash stamp (numberless)']]],
-    ['cursor arrows', ['arrow-cursor','hand-pointer','hourglass','i-beam','no-entry']],
-    ['pointer annotations', ['thick-arrow','curly-arrow','circle-loop','callout']],
+    ['cursor arrows', ['arrow-cursor','hourglass','i-beam','no-entry']],
+    ['pointer annotations', ['thick-arrow']],
   ];
 
   useEffect(() => {
