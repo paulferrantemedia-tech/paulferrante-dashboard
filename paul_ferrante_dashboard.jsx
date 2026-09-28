@@ -3934,6 +3934,56 @@ export default function App() {
   const [ttAnalytics,        setTtAnalytics]        = useState(null);
   const [ttAnalyticsLoading, setTtAnalyticsLoading] = useState(false);
   const [ttAnalyticsError,   setTtAnalyticsError]   = useState(null);
+  // ── Child-7: section enhancements (pure insertions) ────────────
+  const [showAllYtVids, setShowAllYtVids]       = useState(false); // analytics: top videos show more
+  const [showAllIgPosts, setShowAllIgPosts]     = useState(false); // analytics: top posts show more
+  const [showAllTtVids, setShowAllTtVids]       = useState(false); // analytics: tiktok videos show more
+  const [ciHookBank, setCiHookBank]             = useState(() => load('pf_ci_hookbank', []));
+  const [ciHookBankOpen, setCiHookBankOpen]     = useState(false);
+  const [ciKeywords, setCiKeywords]             = useState(() => load('pf_ci_keywords', []));
+  const [ciKeywordInput, setCiKeywordInput]     = useState('');
+  const [ciRedditSub, setCiRedditSub]           = useState('all');
+  const [ciSwipe, setCiSwipe]                   = useState(() => load('pf_ci_swipe', []));
+  const [ciSwipeOpen, setCiSwipeOpen]           = useState(false);
+  // Plain helpers (no hooks): trending-videos client cache + relative time.
+  // Note: these close over App-scope consts declared below (fetchCI, ciVideos,
+  // setCiVideos); they are only *called* from event handlers / section renders,
+  // which run after the whole App body has executed, so no TDZ issue.
+  const ci7TimeAgo = (iso) => {
+    if (!iso) return '';
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const h = Math.floor(mins / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  };
+  const TRENDING_CACHE_KEY = 'pf_ci_videos_cache';
+  const TRENDING_CACHE_TTL = 6 * 60 * 60 * 1000; // ~6h
+  const readTrendingCache = () => {
+    const c = load(TRENDING_CACHE_KEY, null);
+    if (!c || !c.fetchedAt || !Array.isArray(c.data) || c.data.length === 0) return null;
+    if (Date.now() - new Date(c.fetchedAt).getTime() > TRENDING_CACHE_TTL) return null;
+    return c;
+  };
+  const refreshTrendingVideos = (forceLive) => {
+    // Instant cache path: fresh (<6h) cached results render immediately and are
+    // labelled as cached; forceLive=true (or a stale/missing cache) goes to the
+    // API, which keeps its shipped 25s client timeout inside fetchCI.
+    if (!forceLive) {
+      const c = readTrendingCache();
+      if (c) { setCiVideos({ data: c.data, loading: false, error: null, fetchedAt: c.fetchedAt, fromCache: true }); return; }
+    }
+    setCiVideos({ data: null, loading: false, error: null, fetchedAt: null });
+    fetchCI('videos');
+  };
+  const maybeCacheTrendingVideos = () => {
+    // Write-through cache: idempotent, guarded by fetchedAt, skips cache-sourced data.
+    if (ciVideos && ciVideos.data && ciVideos.data.length > 0 && ciVideos.fetchedAt && !ciVideos.fromCache) {
+      const c = load(TRENDING_CACHE_KEY, null);
+      if (!c || c.fetchedAt !== ciVideos.fetchedAt) save(TRENDING_CACHE_KEY, { data: ciVideos.data, fetchedAt: ciVideos.fetchedAt });
+    }
+  };
   const [ttConnected, setTtConnected] = useState(false);
   const [flash,       setFlash]       = useState(null);
   const [tab,          setTab]          = useState('overview');
@@ -8282,6 +8332,44 @@ function ExportTab({ data, year }) {
           const igPostsTop = (igAnalytics?.posts    || []).sort((a,b) => (b.reach||0)-(a.reach||0)).slice(0, 4);
           const ttVidsTop  = (ttAnalytics?.videos   || []).slice(0, 4);
 
+          // ── Persona: timestamp + live fields ──
+          // "as of" uses the newest live platform-data timestamp available in App
+          // state; the static deep-dive snapshot has no recorded date, so when no
+          // live data exists we label it as the static snapshot (never invented).
+          const personaAsOfTs = ytAnalytics?._cachedAt || null;
+          const personaAsOfLabel = personaAsOfTs
+            ? new Date(personaAsOfTs).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+            : 'audience deep-dive snapshot (static data)';
+          // Platform path regenerated from live follower counts (largest first)
+          const platformPath = [
+            { name:'TT', n: ttFollowers || 0 },
+            { name:'IG', n: igFollowers || 0 },
+            { name:'YT', n: ytSubs || 0 },
+          ].sort((a,b) => b.n - a.n).map(p => p.name).join(' → ');
+          const personaReach = `${fmtFull((ytSubs||0)+(igFollowers||0)+(ttFollowers||0))}+`;
+
+          // ── Trust-killer evidence: detectable patterns in his own video data ──
+          const libVids = [
+            ...(ytVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(v.title) })),
+            ...(igPostsTop || []).map(p => ({ title: p.caption || `(${p.mediaType})`, eng: p.engagementRate || 0, hook: detectHookType(p.caption || '') })),
+            ...(ttVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(v.title) })),
+          ];
+          const worstMatching = (pred) => {
+            const hits = libVids.filter(pred);
+            if (!hits.length) return null;
+            return hits.reduce((a, b) => (parseFloat(b.eng) || 0) < (parseFloat(a.eng) || 0) ? b : a);
+          };
+          // One entry per TRUST_KILLERS item; null = no metadata-level signal
+          // exists for that pattern, so no evidence is linked (never invented).
+          const TRUST_EVIDENCE = [
+            null, // cold-open pacing needs transcript data — not available
+            worstMatching(v => v.hook === 'Standard'), // generic hooks
+            worstMatching(v => v.hook !== 'Number' && /\b(tips?|hacks?|how to|advice|secrets?|mistakes?)\b/i.test(v.title || '')), // advice without evidence
+            null, // "brand brief" feel is qualitative — no metadata signal
+            worstMatching(v => v.hook === 'Listicle'), // list without a takeaway
+            null, // missing scroll loop needs retention data — not available
+          ];
+
           return (
             <div style={{ display:'flex', flexDirection:'column', gap:12, padding:isMobile?'0 12px 24px':'0 0 24px' }}>
 
@@ -8313,7 +8401,7 @@ function ExportTab({ data, year }) {
                   <div style={{ width:36, height:36, borderRadius:'50%', background:`linear-gradient(135deg, ${OCEAN}, #69C9D044)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>👤</div>
                   <div>
                     <Label style={{ margin:0 }}>Meet Your Audience</Label>
-                    <div style={{ fontSize:11, color:SLATE }}>Composite persona · Elder Millennial / Young Gen X</div>
+                    <div style={{ fontSize:11, color:SLATE }}>Composite persona · Elder Millennial / Young Gen X · generated from data as of {personaAsOfLabel}</div>
                   </div>
                 </div>
 
@@ -8334,7 +8422,8 @@ function ExportTab({ data, year }) {
                         { label:'Daily TikTok', val:'~40 min' },
                         { label:'Creator trust', val:'60% > ads' },
                         { label:'Content pref', val:'Fun 43% · Info 29%' },
-                        { label:'Platform path', val:'TT → IG → YT' },
+                        { label:'Platform path', val: platformPath },
+                        { label:'Combined reach', val: personaReach },
                         { label:'Spending mode', val:'Cost-conscious' },
                         { label:'Household', val:'Often has a pet' },
                       ].map(({ label, val }) => (
@@ -8388,7 +8477,7 @@ function ExportTab({ data, year }) {
               {/* ── Cross-platform combined demographics ── */}
               <Card>
                 <Label>Cross-Platform Combined Demographics</Label>
-                <div style={{ fontSize:11, color:SLATE, marginBottom:16 }}>Weighted average across YouTube · Instagram · TikTok</div>
+                <div style={{ fontSize:11, color:SLATE, marginBottom:16 }}>Combined, follower-weighted average across YouTube · Instagram · TikTok</div>
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:20 }}>
                   <div>
                     <div style={{ fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:10 }}>Age Breakdown</div>
@@ -8406,7 +8495,7 @@ function ExportTab({ data, year }) {
               </Card>
 
               {/* ── Per-platform demographics ── */}
-              <div style={{ fontSize:10, color:SLATE, fontWeight:700, textTransform:'uppercase', letterSpacing:'2px', padding:'4px 0 2px' }}>Platform Breakdowns</div>
+              <div style={{ fontSize:10, color:SLATE, fontWeight:700, textTransform:'uppercase', letterSpacing:'2px', padding:'4px 0 2px' }}>Platform Breakdowns <span style={{ fontWeight:400, letterSpacing:'0', textTransform:'none' }}>(per-platform splits, not weighted)</span></div>
 
               <PlatformDemoCard logo={YTLogo}  name="YouTube"   color='#FF0000' ageData={YT_AGE}  geoData={YT_GEO}  maleP={56} femaleP={44} followers={ytSubs||51000}    />
               <PlatformDemoCard logo={IGLogo}  name="Instagram" color='#E1306C' ageData={IG_AGE}  geoData={IG_GEO}  maleP={51} femaleP={49} followers={igFollowers||50100} note="token refresh needed" />
@@ -8574,14 +8663,24 @@ function ExportTab({ data, year }) {
               {/* ── What kills trust ── */}
               <Card>
                 <Label>🚫 What Kills Trust With This Audience</Label>
-                <div style={{ fontSize:11, color:SLATE, marginBottom:14 }}>Patterns that cause your 25–44 demographic to immediately scroll</div>
+                <div style={{ fontSize:11, color:SLATE, marginBottom:14 }}>Patterns that cause your 25–44 demographic to immediately scroll · evidence lines show your own lowest-engagement video matching each detectable pattern</div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                  {TRUST_KILLERS.map((item, i) => (
-                    <div key={i} style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'10px 14px', background:'#1a0a0a', borderRadius:10, borderLeft:'3px solid #f87171' }}>
-                      <div style={{ width:20, height:20, borderRadius:'50%', background:'#f8717133', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#f87171', flexShrink:0, marginTop:1 }}>{i+1}</div>
-                      <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.6 }}>{item}</div>
-                    </div>
-                  ))}
+                  {TRUST_KILLERS.map((item, i) => {
+                    const ev = TRUST_EVIDENCE[i];
+                    return (
+                      <div key={i} style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'10px 14px', background:'#1a0a0a', borderRadius:10, borderLeft:'3px solid #f87171' }}>
+                        <div style={{ width:20, height:20, borderRadius:'50%', background:'#f8717133', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#f87171', flexShrink:0, marginTop:1 }}>{i+1}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.6 }}>{item}</div>
+                          {ev && (
+                            <div style={{ fontSize:10, color:'#8A6A5E', marginTop:6, lineHeight:1.5, borderTop:'1px dashed #f8717144', paddingTop:6 }}>
+                              <span style={{ fontWeight:700, color:'#A32D2D' }}>your own example:</span> "{(ev.title||'').length > 70 ? (ev.title||'').slice(0,70)+'…' : (ev.title||'')} · {ev.hook} hook · {ev.eng || 0}% eng (lowest-engagement match in your loaded videos)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </Card>
 
@@ -8633,12 +8732,16 @@ function ExportTab({ data, year }) {
           if (bestHook) recs.push({
             pillar: HOOK_PILLARS[bestHook.hook],
             idea: `Double down on ${bestHook.hook.toLowerCase()} hooks — they average ${fmtViews(bestHook.avg)} views vs your ${fmtViews(agg.avgViews)} channel average.`,
+            n: bestHook.count,
+            trigger: `your ${bestHook.count} ${bestHook.hook.toLowerCase()} hook video${bestHook.count !== 1 ? 's' : ''} average${bestHook.count !== 1 ? '' : 's'} ${agg.avgViews > 0 ? Math.round((bestHook.avg / agg.avgViews - 1) * 100) + '% more views than' : 'more views than'} your channel average`,
           });
           if (agg.avgEngRate > 0) {
             const lowEngVids = vids.filter(v => v.engagementRate < agg.avgEngRate * 0.5 && v.viewCount > agg.avgViews);
             if (lowEngVids.length > 0) recs.push({
               pillar: 'Personal Storytimes',
               idea: 'Some high-view videos have low engagement — try ending with a direct question to viewers to boost comments.',
+              n: lowEngVids.length,
+              trigger: `${lowEngVids.length} high-view video${lowEngVids.length !== 1 ? 's' : ''} earning under half your average engagement rate`,
             });
           }
           if (hookStats.length > 1) {
@@ -8646,11 +8749,16 @@ function ExportTab({ data, year }) {
             if (worstHook.hook !== bestHook?.hook) recs.push({
               pillar: HOOK_PILLARS[worstHook.hook] || 'Content Strategy',
               idea: `"${worstHook.hook}" hooks underperform (avg ${fmtViews(worstHook.avg)} views). Try reframing those as ${bestHook?.hook?.toLowerCase() || 'question'} hooks instead.`,
+              n: worstHook.count,
+              trigger: `"${worstHook.hook}" is your lowest-averaging hook format across ${worstHook.count} video${worstHook.count !== 1 ? 's' : ''}`,
             });
           }
           if (recs.length < 3) recs.push({
             pillar: 'Pet Experiments',
             idea: 'Pet content consistently drives high engagement on YouTube — consider a series format to build returning viewers.',
+            n: null,
+            general: true,
+            trigger: 'general guidance — not triggered by your data',
           });
 
           return (
@@ -8708,6 +8816,46 @@ function ExportTab({ data, year }) {
                     </Card>
                   ))}
                 </div>
+
+                {/* ── Cross-platform snapshot ── */}
+                <Card>
+                  <Label>Cross-Platform Snapshot</Label>
+                  <div style={{ fontSize:11, color:SLATE, marginBottom:14 }}>One row, all three platforms · — means not connected yet</div>
+                  <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
+                    {[
+                      { logo: <YTLogo size={18}/>, name:'YouTube',   color:'#FF0000',
+                        followers: ytAnalytics ? fmtFull(ch.subscriberCount) : (ytSubs ? fmtFull(ytSubs) : '—'),
+                        eng: ytAnalytics ? `${agg.avgEngRate}%` : '—',
+                        views: ytAnalytics ? fmtViews(agg.avgViews) : '—', viewsLabel:'avg views/video' },
+                      { logo: <IGLogo size={18}/>, name:'Instagram', color:'#E1306C',
+                        followers: igAnalytics ? fmtFull(igAnalytics.profile.followersCount) : (igFollowers ? fmtFull(igFollowers) : '—'),
+                        eng: igAnalytics && igAnalytics.aggregates ? `${igAnalytics.aggregates.avgEngRate || 0}%` : '—',
+                        views: igAnalytics && igAnalytics.aggregates ? fmtViews(igAnalytics.aggregates.avgReach || 0) : '—', viewsLabel:'avg reach/post' },
+                      { logo: <TTLogo size={18}/>, name:'TikTok',    color:'#69C9D0',
+                        followers: ttAnalytics ? fmtFull(ttAnalytics.profile.followerCount) : (ttFollowers ? fmtFull(ttFollowers) : '—'),
+                        eng: ttAnalytics && ttAnalytics.aggregates ? `${ttAnalytics.aggregates.avgEngRate || 0}%` : '—',
+                        views: ttAnalytics && ttAnalytics.aggregates ? fmtViews(ttAnalytics.aggregates.avgViews || 0) : '—', viewsLabel:'avg views/video' },
+                    ].map(({ logo, name, color, followers, eng, views, viewsLabel }) => (
+                      <div key={name} style={{ background:`${OCEAN}18`, borderRadius:10, padding:'14px 16px', border:`1px solid ${OCEAN}44` }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+                          {logo}
+                          <div style={{ fontSize:12, fontWeight:800 }}>{name}</div>
+                          <Tag color={color}>{followers} followers</Tag>
+                        </div>
+                        <div style={{ display:'flex', gap:16 }}>
+                          <div>
+                            <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>eng rate</div>
+                            <div style={{ fontSize:16, fontWeight:900 }}>{eng}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>{viewsLabel}</div>
+                            <div style={{ fontSize:16, fontWeight:900 }}>{views}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
 
                 {/* ── Benchmark comparison ── */}
                 <Card>
@@ -8769,7 +8917,7 @@ function ExportTab({ data, year }) {
                   </div>
                   {isMobile ? (
                     <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                      {sortedVids.slice(0, 10).map((v, i) => {
+                      {sortedVids.slice(0, showAllYtVids ? 10 : 5).map((v, i) => {
                         const hook = detectHookType(v.title);
                         const aboveAvg = v.viewCount > agg.avgViews * 1.5;
                         return (
@@ -8796,7 +8944,7 @@ function ExportTab({ data, year }) {
                       <div style={{ display:'grid', gridTemplateColumns:'28px 1fr 90px 70px 70px 80px 100px', padding:'9px 16px', fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', background:`${OCEAN}55`, borderBottom:`1px solid ${OCEAN}66` }}>
                         {['#','Title','Views','Likes','Comments','Eng Rate','Hook'].map(h => <div key={h}>{h}</div>)}
                       </div>
-                      {sortedVids.slice(0, 15).map((v, i) => {
+                      {sortedVids.slice(0, showAllYtVids ? 15 : 5).map((v, i) => {
                         const hook = detectHookType(v.title);
                         const aboveAvg = v.viewCount > agg.avgViews * 1.5;
                         return (
@@ -8820,6 +8968,11 @@ function ExportTab({ data, year }) {
                         );
                       })}
                     </div>
+                  )}
+                  {sortedVids.length > 5 && (
+                    <button onClick={() => setShowAllYtVids(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:BLUE, padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                      {showAllYtVids ? 'show less' : `show more (${Math.min(sortedVids.length, isMobile ? 10 : 15) - 5} more)`}
+                    </button>
                   )}
                 </Card>
 
@@ -8859,6 +9012,9 @@ function ExportTab({ data, year }) {
                             <strong>{bestHook.hook}</strong> hooks average <strong>{fmtViews(bestHook.avg)}</strong> views
                             {agg.avgViews > 0 && ` — ${Math.round((bestHook.avg / agg.avgViews - 1) * 100)}% above your channel average`}.
                           </div>
+                          <div style={{ fontSize:10, color:'#5A7A99', marginTop:6, fontStyle:'italic', lineHeight:1.5 }}>
+                            why you're seeing this: {bestHook.hook} has the highest average views of any hook format in your {vids.length} analysed videos (based on n={bestHook.count})
+                          </div>
                         </div>
                       )}
                       {topVid && (
@@ -8884,11 +9040,22 @@ function ExportTab({ data, year }) {
                 {/* ── Recommendations ── */}
                 <Card>
                   <Label>Content Recommendations — based on your data</Label>
+                  <div style={{ fontSize:10, color:SLATE, marginBottom:12, fontStyle:'italic' }}>
+                    why you're seeing this: these fired from your hook-format averages across {vids.length} video{vids.length !== 1 ? 's' : ''}{bestHook ? ` · ${bestHook.hook} leads (n=${bestHook.count})` : ''}
+                  </div>
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
                     {recs.slice(0,3).map((r, i) => (
                       <div key={i} style={{ background:`${OCEAN}22`, borderRadius:10, padding:'16px', border:`1px solid ${BDR}` }}>
                         <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8, lineHeight:1.4 }}>{r.pillar.split('—')[0].trim()}</div>
                         <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6 }}>{r.idea}</div>
+                        <div style={{ fontSize:10, color:SLATE, marginTop:10, fontWeight:700 }}>
+                          {r.general ? 'general guidance, not from your video data' : `based on n=${r.n}`}
+                        </div>
+                        {r.trigger && (
+                          <div style={{ fontSize:10, color:'#5A7A99', marginTop:4, fontStyle:'italic', lineHeight:1.5 }}>
+                            why you're seeing this: {r.trigger}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -9001,7 +9168,7 @@ function ExportTab({ data, year }) {
                         </div>
                         {isMobile ? (
                           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                            {sortedPosts.slice(0,10).map((p,i) => {
+                            {sortedPosts.slice(0, showAllIgPosts ? 10 : 5).map((p,i) => {
                               const hook = detectHookType(p.caption || '');
                               const aboveAvg = reachAvailable ? p.reach > igAgg.avgReach * 1.3 : p.computedEngRate > avgEngRef * 1.3;
                               return (
@@ -9030,7 +9197,7 @@ function ExportTab({ data, year }) {
                             <div style={{ display:'grid', gridTemplateColumns:'28px 1fr 90px 70px 80px 80px 110px', padding:'9px 16px', fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', background:`${OCEAN}55`, borderBottom:`1px solid ${OCEAN}66` }}>
                               {['#','Post','Reach','Likes','Comments','Eng Rate','Hook'].map(h => <div key={h}>{h}</div>)}
                             </div>
-                            {sortedPosts.slice(0,15).map((p,i) => {
+                            {sortedPosts.slice(0, showAllIgPosts ? 15 : 5).map((p,i) => {
                               const hook = detectHookType(p.caption || '');
                               const aboveAvg = reachAvailable ? p.reach > igAgg.avgReach * 1.3 : p.computedEngRate > avgEngRef * 1.3;
                               return (
@@ -9063,6 +9230,11 @@ function ExportTab({ data, year }) {
                       </div>
                     );
                   })()}
+                  {sortedPosts.length > 5 && (
+                    <button onClick={() => setShowAllIgPosts(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#E1306C', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                      {showAllIgPosts ? 'show less' : `show more (${Math.min(sortedPosts.length, isMobile ? 10 : 15) - 5} more)`}
+                    </button>
+                  )}
                 </Card>
 
                 {/* ── TikTok section ── */}
@@ -9158,7 +9330,7 @@ function ExportTab({ data, year }) {
                         </div>
                         {isMobile ? (
                           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                            {ttVids.slice(0, 10).map((v, i) => {
+                            {ttVids.slice(0, showAllTtVids ? 10 : 5).map((v, i) => {
                               const hook = detectHookType(v.title);
                               const aboveAvg = v.viewCount > ttAgg.avgViews * 1.5;
                               return (
@@ -9185,7 +9357,7 @@ function ExportTab({ data, year }) {
                             <div style={{ display:'grid', gridTemplateColumns:'28px 1fr 90px 70px 80px 70px 80px 100px', padding:'9px 16px', fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', background:`${OCEAN}55`, borderBottom:`1px solid ${OCEAN}66` }}>
                               {['#','Title','Views','Likes','Comments','Shares','Eng Rate','Hook'].map(h => <div key={h}>{h}</div>)}
                             </div>
-                            {ttVids.slice(0, 15).map((v, i) => {
+                            {ttVids.slice(0, showAllTtVids ? 15 : 5).map((v, i) => {
                               const hook = detectHookType(v.title);
                               const aboveAvg = v.viewCount > ttAgg.avgViews * 1.5;
                               return (
@@ -9214,6 +9386,11 @@ function ExportTab({ data, year }) {
                       </div>
                     );
                   })()}
+                  {ttVids.length > 5 && (
+                    <button onClick={() => setShowAllTtVids(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#69C9D0', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                      {showAllTtVids ? 'show less' : `show more (${Math.min(ttVids.length, isMobile ? 10 : 15) - 5} more)`}
+                    </button>
+                  )}
                 </Card>
 
                 {/* ── API Setup Instructions ── */}
@@ -9306,7 +9483,7 @@ function ExportTab({ data, year }) {
             <div style={{ background:'#E8EDF4', borderRadius:8, height, marginBottom:10, animation:'ciPulse 1.5s ease-in-out infinite' }} />
           );
 
-          const SectionHeader = ({ title, fetchedAt, onRefresh, loading }) => (
+          const SectionHeader = ({ title, fetchedAt, onRefresh, loading, cachedNote }) => (
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
               <div>
                 <div style={{ fontSize:11, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600 }}>{title}</div>
@@ -9315,6 +9492,8 @@ function ExportTab({ data, year }) {
                     Last refreshed: {new Date(fetchedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}
                     {' · '}
                     {new Date(fetchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                    {' · updated '}{ci7TimeAgo(fetchedAt)}
+                    {cachedNote && <span style={{ color:'#0E6A80', fontWeight:700 }}> · {cachedNote}</span>}
                   </div>
                 )}
               </div>
@@ -9324,11 +9503,12 @@ function ExportTab({ data, year }) {
             </div>
           );
 
-          const CreatorCard = ({ creator, isFav, onToggle, onSave }) => {
+          const CreatorCard = ({ creator, isFav, onToggle, onSave, alerts = [] }) => {
             const initials = creator.avatar_initials || (creator.name || '??').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
             const avatarColor = creator.avatar_color || '#88EAF6';
+            const alertHit = alerts.length > 0;
             return (
-              <div style={{ background:'#FFFFFF', border:`1px solid ${isFav ? '#88EAF6' : '#CDD4E0'}`, borderRadius:8, padding:'12px 14px' }}>
+              <div style={{ background:'#FFFFFF', border:`1px solid ${alertHit ? '#F5A623' : isFav ? '#88EAF6' : '#CDD4E0'}`, borderRadius:8, padding:'12px 14px', ...(alertHit ? { boxShadow:'0 0 0 2px #F5A62333' } : {}) }}>
                 {/* Top row: avatar + name + star */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                   <div style={{ display:'flex', gap:10, alignItems:'center' }}>
@@ -9356,6 +9536,12 @@ function ExportTab({ data, year }) {
                 {creator.why_watch && (
                   <div style={{ fontSize:11, color:'#0E6A80', background:'#EEF9FD', borderRadius:6, padding:'6px 10px', marginBottom:8, lineHeight:1.4 }}>
                     🎯 {creator.why_watch}
+                  </div>
+                )}
+                {/* Keyword alert badge */}
+                {alerts.length > 0 && (
+                  <div style={{ fontSize:10, color:'#8A6A10', background:'#FFF3D0', borderRadius:6, padding:'5px 10px', marginBottom:8, fontWeight:700, lineHeight:1.4 }}>
+                    🔔 keyword alert: {alerts.join(', ')}
                   </div>
                 )}
                 {/* Content style */}
@@ -9394,6 +9580,50 @@ function ExportTab({ data, year }) {
           const starredCreators = ciFavorites;
           const discoveryCreators = (ciCreators.data || []).filter(c => !ciFavorites.some(f => f.handle === c.handle));
 
+          // ── Child-7: swipe file, hook bank, keyword alerts ──
+          const saveToSwipe = (item) => {
+            if (ciSwipe.some(s => (s.url && item.url && s.url === item.url) || s.title === item.title)) { saveIdeaToast('already in swipe file'); return; }
+            const updated = [{ ...item, savedAt: new Date().toISOString() }, ...ciSwipe];
+            setCiSwipe(updated); save('pf_ci_swipe', updated);
+            saveIdeaToast('📁 Saved to swipe file!');
+          };
+          const removeFromSwipe = (savedAt) => {
+            const updated = ciSwipe.filter(s => s.savedAt !== savedAt);
+            setCiSwipe(updated); save('pf_ci_swipe', updated);
+          };
+          const saveToHookBank = (v) => {
+            const entry = { hook: v.hook, hook_pattern: v.hook_pattern, title: v.title, creator: v.creator, platform: v.platform, url: v.platform_url, savedAt: new Date().toISOString() };
+            if (ciHookBank.some(h => h.title === entry.title && h.hook === entry.hook)) { saveIdeaToast('already in hook bank'); return; }
+            const updated = [entry, ...ciHookBank];
+            setCiHookBank(updated); save('pf_ci_hookbank', updated);
+            saveIdeaToast('🪝 Saved to hook bank!');
+          };
+          const removeFromHookBank = (savedAt) => {
+            const updated = ciHookBank.filter(h => h.savedAt !== savedAt);
+            setCiHookBank(updated); save('pf_ci_hookbank', updated);
+          };
+          const addKeyword = () => {
+            const kw = (ciKeywordInput || '').trim().toLowerCase();
+            if (!kw) return;
+            if (!ciKeywords.includes(kw)) {
+              const updated = [...ciKeywords, kw];
+              setCiKeywords(updated); save('pf_ci_keywords', updated);
+            }
+            setCiKeywordInput('');
+          };
+          const removeKeyword = (kw) => {
+            const updated = ciKeywords.filter(k => k !== kw);
+            setCiKeywords(updated); save('pf_ci_keywords', updated);
+          };
+          const creatorKeywordHits = (creator) => {
+            if (!ciKeywords.length) return [];
+            const hay = [creator.name, creator.handle, creator.why_watch, creator.content_style, ...((creator.top_videos || []).map(x => x.title))].filter(Boolean).join(' ').toLowerCase();
+            return ciKeywords.filter(kw => kw && hay.includes(kw));
+          };
+
+          // Write-through client cache for trending videos (idempotent per render)
+          maybeCacheTrendingVideos();
+
           return (
             <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
               <style>{`
@@ -9414,9 +9644,25 @@ function ExportTab({ data, year }) {
                 <SectionHeader title="Reddit Pulse" fetchedAt={ciReddit.fetchedAt} onRefresh={() => { setCiReddit({ data:null, loading:false, error:null, fetchedAt:null }); fetchCI('reddit'); }} loading={ciReddit.loading} />
                 {ciReddit.error && <div style={{ color:'#A32D2D', fontSize:12, padding:'12px 0' }}>Error: {ciReddit.error}</div>}
                 {ciReddit.loading && [1,2,3,4].map(i => <PulsingCard key={i} height={120} />)}
+                {!ciReddit.loading && ciReddit.data && ciReddit.data.length > 0 && (() => {
+                  const subs = [...new Set(ciReddit.data.map(x => x.subreddit).filter(Boolean))];
+                  if (subs.length < 2) return null;
+                  return (
+                    <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+                      <span style={{ fontSize:11, color:'#5A7A99' }}>subreddit:</span>
+                      <select value={ciRedditSub} onChange={e => setCiRedditSub(e.target.value)} style={{ fontSize:11, color:'#1A2744', border:'1px solid #CDD4E0', borderRadius:6, padding:'5px 8px', fontFamily:'inherit', background:'#FFFFFF' }}>
+                        <option value="all">all ({ciReddit.data.length})</option>
+                        {subs.map(s => <option key={s} value={s}>{s} ({ciReddit.data.filter(x => x.subreddit === s).length})</option>)}
+                      </select>
+                    </div>
+                  );
+                })()}
                 {!ciReddit.loading && ciReddit.data && ciReddit.data.length > 0 && (
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:12 }}>
-                    {ciReddit.data.map((item, i) => {
+                    {ciReddit.data.filter(i => ciRedditSub === 'all' || i.subreddit === ciRedditSub).length === 0 && (
+                      <div style={{ textAlign:'center', padding:'24px 0', color:'#5A7A99', fontSize:12, gridColumn:'1 / -1' }}>no posts in this subreddit for the current pull</div>
+                    )}
+                    {ciReddit.data.filter(i => ciRedditSub === 'all' || i.subreddit === ciRedditSub).map((item, i) => {
                       const [pillarLabel, pillarBg, pillarColor] = getPillarTag((item.post_title || '') + ' ' + (item.content_angle || ''));
                       return (
                         <div key={i} style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:8, padding:'14px 16px', transition:'background 0.15s' }}
@@ -9450,6 +9696,10 @@ function ExportTab({ data, year }) {
                               style={{ fontSize:10, color:'#1A7A40', background:'#E6F8EF', border:'1px solid #A8D5B5', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
                               💡 Save to ideas
                             </button>
+                            <button onClick={(e) => { e.stopPropagation(); saveToSwipe({ source:'Reddit', title: item.post_title || item.pain_point, angle: item.content_angle, url: item.url, subreddit: item.subreddit }); }}
+                              style={{ fontSize:10, color:'#0E6A80', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              📁 Swipe file
+                            </button>
                             {item.url && (
                               <a href={item.url} target="_blank" rel="noreferrer"
                                 style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'5px 4px' }}
@@ -9466,13 +9716,56 @@ function ExportTab({ data, year }) {
                 {!ciReddit.loading && (!ciReddit.data || ciReddit.data.length === 0) && !ciReddit.error && (
                   <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load this week's top Reddit posts</div>
                 )}
+                {ciSwipe.length > 0 && (
+                  <div style={{ marginTop:16, borderTop:'1px solid #CDD4E0', paddingTop:12 }}>
+                    <button onClick={() => setCiSwipeOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#1A2744', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
+                      {ciSwipeOpen ? '▾' : '▸'} swipe file ({ciSwipe.length})
+                    </button>
+                    {ciSwipeOpen && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
+                        {ciSwipe.map(s => (
+                          <div key={(s.savedAt || '') + (s.title || '')} style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:6, padding:'8px 12px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:'#1A2744', lineHeight:1.3 }}>{s.title}</div>
+                                {s.angle && <div style={{ fontSize:11, color:'#4A6080', fontStyle:'italic', marginTop:2, lineHeight:1.4 }}>{s.angle.slice(0,120)}{s.angle.length > 120 ? '…' : ''}</div>}
+                                <div style={{ fontSize:10, color:'#8A9BB0', marginTop:4 }}>{s.subreddit || s.source || 'reddit'} · saved {ci7TimeAgo(s.savedAt)}</div>
+                              </div>
+                              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                                {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
+                                <button onClick={() => removeFromSwipe(s.savedAt)} style={{ fontSize:10, color:'#A32D2D', background:'#FDEAEA', border:'1px solid #F5C6C6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✕</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card>
 
               {/* ── SECTION B: Trending Videos ── */}
               <Card>
-                <SectionHeader title="Trending Videos — Why It Works" fetchedAt={ciVideos.fetchedAt} onRefresh={() => { setCiVideos({ data:null, loading:false, error:null, fetchedAt:null }); fetchCI('videos'); }} loading={ciVideos.loading} />
+                <SectionHeader title="Trending Videos — Why It Works" fetchedAt={ciVideos.fetchedAt} onRefresh={() => refreshTrendingVideos(false)} loading={ciVideos.loading} cachedNote={ciVideos.fromCache ? 'served from cache' : null} />
                 {ciVideos.error && <div style={{ color:'#A32D2D', fontSize:12, padding:'12px 0' }}>Error: {ciVideos.error}</div>}
                 {ciVideos.loading && [1,2,3].map(i => <PulsingCard key={i} height={160} />)}
+                {!ciVideos.loading && ciVideos.fromCache && ciVideos.data && ciVideos.data.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12, background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:8, padding:'8px 12px' }}>
+                    <span style={{ fontSize:11, color:'#0E6A80' }}>showing cached results from {ci7TimeAgo(ciVideos.fetchedAt)} — refreshes automatically after 6h</span>
+                    <button onClick={() => refreshTrendingVideos(true)} style={{ fontSize:10, color:'#1A2744', background:'#FFFFFF', border:'1px solid #88EAF6', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>fetch live</button>
+                  </div>
+                )}
+                {!ciVideos.loading && (!ciVideos.data || ciVideos.data.length === 0) && !ciVideos.error && (() => {
+                  const c = readTrendingCache();
+                  if (!c) return <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load trending video formats</div>;
+                  return (
+                    <div style={{ textAlign:'center', padding:'24px 0', border:'1px dashed #CDD4E0', borderRadius:8 }}>
+                      <div style={{ fontSize:12, color:'#4A6080', marginBottom:10 }}>cached results from {ci7TimeAgo(c.fetchedAt)} are available</div>
+                      <button onClick={() => refreshTrendingVideos(false)} style={{ fontSize:11, color:'#1A2744', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>load cached results</button>
+                      <div style={{ fontSize:10, color:'#8A9BB0', marginTop:8 }}>or hit refresh for a live pull</div>
+                    </div>
+                  );
+                })()}
                 {!ciVideos.loading && ciVideos.data && ciVideos.data.length > 0 && (
                   <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                     {ciVideos.data.map((v, i) => (
@@ -9518,6 +9811,10 @@ function ExportTab({ data, year }) {
                               style={{ fontSize:10, color:'#1A7A40', background:'#E6F8EF', border:'1px solid #A8D5B5', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
                               💡 Save to ideas
                             </button>
+                            <button onClick={() => saveToHookBank(v)}
+                              style={{ fontSize:10, color:'#0E6A80', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              🪝 Save to hook bank
+                            </button>
                             {v.platform_url && (
                               <a href={v.platform_url} target="_blank" rel="noreferrer"
                                 style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'5px 4px' }}>
@@ -9541,8 +9838,34 @@ function ExportTab({ data, year }) {
                     ))}
                   </div>
                 )}
-                {!ciVideos.loading && (!ciVideos.data || ciVideos.data.length === 0) && !ciVideos.error && (
-                  <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load trending video formats</div>
+                {ciHookBank.length > 0 && (
+                  <div style={{ marginTop:16, borderTop:'1px solid #CDD4E0', paddingTop:12 }}>
+                    <button onClick={() => setCiHookBankOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#1A2744', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
+                      {ciHookBankOpen ? '▾' : '▸'} hook bank ({ciHookBank.length})
+                    </button>
+                    {ciHookBankOpen && (
+                      <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
+                        {ciHookBank.map(h => (
+                          <div key={(h.savedAt || '') + (h.title || '')} style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:6, padding:'8px 12px' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:3 }}>
+                                  {h.hook_pattern && <HookTag pattern={h.hook_pattern} />}
+                                  <span style={{ fontSize:10, color:'#8A9BB0' }}>{h.creator} · {h.platform}</span>
+                                </div>
+                                <div style={{ fontSize:12, color:'#0E6A80', lineHeight:1.4 }}>{h.hook}</div>
+                                <div style={{ fontSize:10, color:'#8A9BB0', marginTop:3 }}>saved {ci7TimeAgo(h.savedAt)}</div>
+                              </div>
+                              <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                                {h.url && <a href={h.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
+                                <button onClick={() => removeFromHookBank(h.savedAt)} style={{ fontSize:10, color:'#A32D2D', background:'#FDEAEA', border:'1px solid #F5C6C6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✕</button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </Card>
 
@@ -9550,13 +9873,33 @@ function ExportTab({ data, year }) {
               <Card>
                 <SectionHeader title="Creator Watch" fetchedAt={ciCreators.fetchedAt} onRefresh={() => { setCiCreators({ data:null, loading:false, error:null, fetchedAt:null }); fetchCI('creators'); }} loading={ciCreators.loading} />
 
+                {/* Keyword alerts */}
+                <div style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:8, padding:'12px 14px', marginBottom:16 }}>
+                  <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8 }}>🔔 keyword alerts</div>
+                  <div style={{ display:'flex', gap:8, marginBottom:8 }}>
+                    <input value={ciKeywordInput} onChange={e => setCiKeywordInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addKeyword(); }} placeholder="add a keyword, e.g. budget travel" style={{ flex:1, fontSize:11, color:'#1A2744', border:'1px solid #CDD4E0', borderRadius:6, padding:'7px 10px', fontFamily:'inherit' }} />
+                    <button onClick={addKeyword} style={{ fontSize:11, color:'#1A2744', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>add</button>
+                  </div>
+                  {ciKeywords.length > 0 ? (
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                      {ciKeywords.map(kw => (
+                        <span key={kw} style={{ fontSize:10, background:'#FFF3D0', color:'#8A6A10', borderRadius:20, padding:'3px 6px 3px 10px', fontWeight:700 }}>
+                          {kw} <button onClick={() => removeKeyword(kw)} style={{ background:'none', border:'none', color:'#8A6A10', cursor:'pointer', fontSize:10, fontWeight:700, padding:'0 2px' }}>✕</button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:11, color:'#8A9BB0' }}>no keywords yet — matching creators get highlighted below</div>
+                  )}
+                </div>
+
                 {/* Starred creators pinned at top */}
                 {starredCreators.length > 0 && (
                   <div style={{ marginBottom:20 }}>
                     <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, marginBottom:10 }}>⭐ Starred Creators</div>
                     <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr', gap:10 }}>
                       {starredCreators.map((creator, i) => (
-                        <CreatorCard key={i} creator={creator} isFav={true} onToggle={() => toggleFavorite(creator)} onSave={() => saveIdea({ source:'Creator', title: creator.name, angle: creator.why_watch || creator.content_style, url: creator.profile_url || `https://tiktok.com/${creator.handle}` })} />
+                        <CreatorCard key={i} creator={creator} isFav={true} alerts={creatorKeywordHits(creator)} onToggle={() => toggleFavorite(creator)} onSave={() => saveIdea({ source:'Creator', title: creator.name, angle: creator.why_watch || creator.content_style, url: creator.profile_url || `https://tiktok.com/${creator.handle}` })} />
                       ))}
                     </div>
                     <div style={{ height:1, background:'#CDD4E0', margin:'16px 0' }} />
@@ -9569,7 +9912,7 @@ function ExportTab({ data, year }) {
                 {!ciCreators.loading && discoveryCreators.length > 0 && (
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr', gap:10 }}>
                     {discoveryCreators.map((creator, i) => (
-                      <CreatorCard key={i} creator={creator} isFav={false} onToggle={() => toggleFavorite(creator)} onSave={() => saveIdea({ source:'Creator', title: creator.name, angle: creator.why_watch || creator.content_style, url: creator.profile_url || `https://tiktok.com/${creator.handle}` })} />
+                      <CreatorCard key={i} creator={creator} isFav={false} alerts={creatorKeywordHits(creator)} onToggle={() => toggleFavorite(creator)} onSave={() => saveIdea({ source:'Creator', title: creator.name, angle: creator.why_watch || creator.content_style, url: creator.profile_url || `https://tiktok.com/${creator.handle}` })} />
                     ))}
                   </div>
                 )}
