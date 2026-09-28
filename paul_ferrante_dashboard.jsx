@@ -4249,7 +4249,9 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   // never duplicated. Pipeline / Awaiting / Delivered / Not Paid never count.
   const totalRevenue  = paidSumForYear(storeDeals, year);
   const pipelineTotal = pipelineSum(storeDeals);
-  const flaggedCount  = data.expenses.filter((r) => (r.flags_computed || []).length > 0).length;
+  // "Needs review" matches the Inbox queue: anything not yet marked reviewed.
+  // (Previously this counted flagged expenses, which include reviewed rows.)
+  const flaggedCount  = data.expenses.filter((r) => String(r.reviewed).toLowerCase() !== 'true').length;
 
   // ── PHASE 4 guardrail: recompute the Paid total a SECOND, independent way
   // (straight off dashboardDeals, not via the projection) and assert it equals
