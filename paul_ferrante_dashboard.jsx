@@ -3365,6 +3365,9 @@ export default function App() {
   const [dragOver,     setDragOver]     = useState(null);
   const [commFilter,   setCommFilter]   = useState('all');
   const [mobileStage,  setMobileStage]  = useState('Pitching');
+  const [dealSearch,   setDealSearch]   = useState('');
+  const [dealPlatform, setDealPlatform] = useState('All');
+  const [dealStage,    setDealStage]    = useState('All');
   const [dealModal,    setDealModal]    = useState(null);
   const [followerEdit, setFollowerEdit] = useState(null);
   const [editCrmId,       setEditCrmId]       = useState(null);
@@ -3951,6 +3954,17 @@ export default function App() {
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s))).reduce((s, d) => s + dealAmount(d.v), 0);
   const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
+
+  // ── Deals board search/filter (view-only: never mutates `deals`) ──
+  const dealPlatforms = ['All', ...new Set(deals.map(d => d.p).filter(Boolean))];
+  const dealMatchesQuery = (d) => {
+    const q = dealSearch.trim().toLowerCase();
+    return (!q || (d.b || '').toLowerCase().includes(q)) && (dealPlatform === 'All' || d.p === dealPlatform);
+  };
+  // Desktop columns respect the stage dropdown too; mobile uses its own stage selector.
+  const dealsForColumn = (status) => deals.filter(d =>
+    d.s === status && dealMatchesQuery(d) && (dealStage === 'All' || d.s === dealStage));
+  const mobileDeals = deals.filter(d => d.s === mobileStage && dealMatchesQuery(d));
 
   // ── Milestones: live numbers, not stored ones ────────────────
   // Milestone `cur` and `pct` are derived from current state so they always
@@ -6054,6 +6068,23 @@ function ExportTab({ data, year }) {
               </button>
             </div>
 
+            {/* Search + filters (stage counts stay based on all deals) */}
+            <div style={{ display:'flex',gap:8,marginBottom:14,flexWrap:'wrap' }}>
+              <input value={dealSearch} onChange={e => setDealSearch(e.target.value)} placeholder="Search brand…"
+                style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 12px',fontSize:12,flex:'1 1 160px',fontFamily:'inherit',color:TEXT,outline:'none' }} />
+              <select value={dealPlatform} onChange={e => setDealPlatform(e.target.value)}
+                style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'inherit',color:TEXT,outline:'none',cursor:'pointer' }}>
+                {dealPlatforms.map(p => <option key={p} value={p}>{p === 'All' ? 'All platforms' : p}</option>)}
+              </select>
+              {!isMobile && (
+                <select value={dealStage} onChange={e => setDealStage(e.target.value)}
+                  style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 10px',fontSize:12,fontFamily:'inherit',color:TEXT,outline:'none',cursor:'pointer' }}>
+                  <option value="All">All stages</option>
+                  {STAGE_COLS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              )}
+            </div>
+
             {isMobile ? (
               /* Mobile: stage selector + card list */
               <div>
@@ -6068,7 +6099,7 @@ function ExportTab({ data, year }) {
                   ))}
                 </div>
                 <div style={{ display:'flex',flexDirection:'column',gap:10,marginTop:12 }}>
-                  {deals.filter(d=>d.s===mobileStage).sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
+                  {mobileDeals.sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
                     <div key={d.id} style={{ background:CARD,border:`1px solid ${BDR}`,borderLeft:`4px solid ${d.col}`,borderRadius:10,padding:16 }}>
                       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
                         <div style={{ fontSize:15,fontWeight:700 }}>{d.b}</div>
@@ -6082,8 +6113,8 @@ function ExportTab({ data, year }) {
                       </div>
                     </div>
                   ))}
-                  {deals.filter(d=>d.s===mobileStage).length === 0 && (
-                    <div style={{ padding:'30px',textAlign:'center',fontSize:13,color:'#94A3B8',borderRadius:10,border:`1px dashed ${BDR}` }}>No deals in this stage</div>
+                  {mobileDeals.length === 0 && (
+                    <div style={{ padding:'30px',textAlign:'center',fontSize:13,color:'#94A3B8',borderRadius:10,border:`1px dashed ${BDR}` }}>{(dealSearch || dealPlatform !== 'All') ? 'No deals match the current filters' : 'No deals in this stage'}</div>
                   )}
                 </div>
               </div>
@@ -6099,7 +6130,7 @@ function ExportTab({ data, year }) {
                     <div style={{ fontSize:10,color:STAGE_COLORS[status],fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:'1.5px',padding:'0 6px' }}>
                       {status} ({deals.filter(d=>d.s===status).length})
                     </div>
-                    {deals.filter(d=>d.s===status).sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
+                    {dealsForColumn(status).sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
                       <div key={d.id} draggable onDragStart={() => setDragId(d.id)} onDragEnd={() => { setDragId(null); setDragOver(null); }}
                         style={{ background:CARD,border:`1px solid ${BDR}`,borderTop:`3px solid ${d.col}`,borderRadius:10,padding:14,marginBottom:10,opacity:dragId===d.id?0.4:1,userSelect:'none',cursor:'grab' }}>
                         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4 }}>
@@ -6122,7 +6153,7 @@ function ExportTab({ data, year }) {
                         <div style={{ marginTop:8,fontSize:9,color:'#94A3B8',textAlign:'right' }}>drag to move</div>
                       </div>
                     ))}
-                    {deals.filter(d=>d.s===status).length === 0 && (
+                    {dealsForColumn(status).length === 0 && (
                       <div style={{ padding:'20px 10px',textAlign:'center',fontSize:11,color:'#94A3B8',borderRadius:8,border:`1px dashed #222` }}>drop here</div>
                     )}
                   </div>
