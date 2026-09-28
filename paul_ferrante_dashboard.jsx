@@ -390,6 +390,12 @@ function DealModal({ initial, onSave, onDelete, onClose, isMobile }) {
     return () => console.log('[deals-fix] DealModal UNMOUNTED');
   }, []);
   console.log('[deals-fix] DealModal render');
+  // Escape closes the modal (with cleanup on unmount).
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const upd = (k, v) => {
     console.log('[deals-fix] keystroke → field=%s value=%o', k, v);
     setForm(p => ({ ...p, [k]: v }));
