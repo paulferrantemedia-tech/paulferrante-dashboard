@@ -3921,6 +3921,18 @@ export default function App() {
   const EARNED_YEAR = 2026;
   const paidDeals2026    = paidDeals.filter(d => dealYear(d.d, new Date().getFullYear()) === EARNED_YEAR);
   const totalRevenue2026 = paidDeals2026.reduce((s, d) => s + dealAmount(d.v), 0);
+  // Monthly revenue chart buckets, derived from Paid deals' actual dates so
+  // e.g. Task Rabbit ($440, dated 2026-04-11) lands in April. Undated (TBC)
+  // deals are excluded — they have no month to land in.
+  const REVENUE_MONTHS = [ { y:2025, m:10 }, { y:2025, m:11 }, { y:2026, m:0 }, { y:2026, m:1 }, { y:2026, m:2 }, { y:2026, m:3 } ];
+  const MONTH_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const revenueByMonth = REVENUE_MONTHS.map(({ y, m }) => ({
+    m: MONTH_ABBR[m],
+    r: paidDeals.reduce((s, d) => {
+      const ym = dealYearMonth(d.d, new Date().getFullYear());
+      return (ym && ym.y === y && ym.m === m) ? s + dealAmount(d.v) : s;
+    }, 0),
+  }));
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s))).reduce((s, d) => s + dealAmount(d.v), 0);
   const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
@@ -4052,6 +4064,23 @@ function dealYear(monthStr, fallbackYear) {
   let m = t.match(/(20\d{2})/); if (m) return Number(m[1]);
   m = t.match(/\b(\d{2})\b/);   if (m) return 2000 + Number(m[1]);
   return fallbackYear;
+}
+
+// Month bucket for a deal date string → { y, m } (m = 0-based month index).
+// Handles ISO dates ('2026-04-11') and bare months ('Jan', 'Nov 25').
+// Returns null for TBC/unknown dates, which can't be placed in a month.
+function dealYearMonth(dstr, fallbackYear) {
+  const t = String(dstr == null ? '' : dstr).trim();
+  let m = t.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (m) return { y: Number(m[1]), m: Number(m[2]) - 1 };
+  m = t.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(\d{2,4})?/i);
+  if (m) {
+    const mi = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[1].slice(0, 3).toLowerCase());
+    let y = fallbackYear;
+    if (m[2]) y = m[2].length === 2 ? 2000 + Number(m[2]) : Number(m[2]);
+    return { y, m: mi };
+  }
+  return null;
 }
 
 // Project the dashboard's single source-of-truth deals (state `deals`, schema
@@ -6106,7 +6135,7 @@ function ExportTab({ data, year }) {
             <Card>
               <Label>monthly revenue (Nov 2025 – Apr 2026)</Label>
               <ResponsiveContainer width="100%" height={isMobile?160:220}>
-                <AreaChart data={revenue}>
+                <AreaChart data={revenueByMonth}>
                   <defs>
                     <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={BLUE} stopOpacity={0.28} />
