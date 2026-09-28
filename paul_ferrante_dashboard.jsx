@@ -3916,6 +3916,11 @@ export default function App() {
   // ── Derived ───────────────────────────────────────────────────
   const paidDeals     = deals.filter(d => d.s === 'Paid');
   const totalRevenue  = paidDeals.reduce((s, d) => s + (d.v || 0), 0);
+  // "Total Earned (2026)" counts only Paid deals from 2026. Bare-month / TBC
+  // dates fall back to the current year, matching paidSumForYear in Books.
+  const EARNED_YEAR = 2026;
+  const paidDeals2026    = paidDeals.filter(d => dealYear(d.d, new Date().getFullYear()) === EARNED_YEAR);
+  const totalRevenue2026 = paidDeals2026.reduce((s, d) => s + dealAmount(d.v), 0);
   const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s))).reduce((s, d) => s + dealAmount(d.v), 0);
   const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
@@ -6086,9 +6091,9 @@ function ExportTab({ data, year }) {
           <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:gutter }}>
               {[
-                { lbl:'Total Earned (2026)',  val:usd(totalRevenue),              color:BLUE,      sub:`${paidDeals.length} paid deals` },
+                { lbl:'Total Earned (2026)',  val:usd(totalRevenue2026),           color:BLUE,      sub:`${paidDeals2026.length} paid deals` },
                 { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${deals.filter(d=>d.s==='Pitching').length} pitches` },
-                { lbl:'Avg Deal Value',       val:usd(totalRevenue/Math.max(paidDeals.length,1)), color:'#a78bfa', sub:'paid deals only' },
+                { lbl:'Avg Deal Value',       val:usd(totalRevenue2026/Math.max(paidDeals2026.length,1)), color:'#a78bfa', sub:'paid deals only' },
                 { lbl:'Best Month',           val:'$2,600',                       color:'#4ade80', sub:'November 2025' },
               ].map(({ lbl, val, color, sub }) => (
                 <Card key={lbl} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
