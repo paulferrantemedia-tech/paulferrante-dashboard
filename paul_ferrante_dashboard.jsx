@@ -6105,8 +6105,8 @@ function ExportTab({ data, year }) {
                         <div style={{ fontSize:d.v?18:12,fontWeight:800,color:d.s==='Paid'?'#4ade80':d.v?BLUE:'#888',marginBottom:6 }}>{d.v ? usd(d.v) : 'gifted'}</div>
                         {d.d && d.d!=='TBC' && <div style={{ fontSize:11,color:'#8A6A10',marginBottom:4 }}>{d.d}</div>}
                         {d.del && <div style={{ fontSize:10,color:'#4A6080' }}>{d.del}</div>}
-                        {d.nextStep && <div style={{ fontSize:10,color:BLUE,marginTop:6,borderTop:`1px solid ${OCEAN}66`,paddingTop:6 }}>→ {d.nextStep}</div>}
-                        {d.remindDate && <div style={{ fontSize:9,color:YELL,marginTop:3 }}>🔔 {d.remindDate}</div>}
+                        {canonStage(d.s) !== 'Paid' && d.nextStep && <div style={{ fontSize:10,color:BLUE,marginTop:6,borderTop:`1px solid ${OCEAN}66`,paddingTop:6 }}>→ {d.nextStep}</div>}
+                        {canonStage(d.s) !== 'Paid' && d.remindDate && <div style={{ fontSize:9,color:YELL,marginTop:3 }}>🔔 {d.remindDate}</div>}
                         {(d.videoLink || d.invoiceUrl) && (
                           <div style={{ display:'flex',gap:8,marginTop:6,borderTop:`1px solid ${OCEAN}66`,paddingTop:6 }}>
                             {d.videoLink && <a href={d.videoLink} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ fontSize:10,color:'#88EAF6',textDecoration:'none',fontWeight:600 }}>📹 Video</a>}
