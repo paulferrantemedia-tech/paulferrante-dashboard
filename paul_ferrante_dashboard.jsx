@@ -6444,7 +6444,7 @@ function ExportTab({ data, year }) {
           const YT_AGE      = [{ label:'25–34', pct:36 },{ label:'35–44', pct:28 },{ label:'18–24', pct:18 },{ label:'45–54', pct:13 },{ label:'55+', pct:5 }];
           const YT_GEO      = [{ label:'United States', pct:44, flag:'🇺🇸' },{ label:'Australia', pct:28, flag:'🇦🇺' },{ label:'Canada', pct:14, flag:'🇨🇦' },{ label:'United Kingdom', pct:14, flag:'🇬🇧' }];
           const COMBINED_AGE= [{ label:'25–34', pct:39 },{ label:'35–44', pct:29 },{ label:'18–24', pct:14 },{ label:'45–54', pct:12 },{ label:'55+', pct:6 }];
-          const COMBINED_GEO= [{ label:'Australia', pct:38, flag:'🇦🇺' },{ label:'United States', pct:39, flag:'🇺🇸' },{ label:'Canada', pct:13, flag:'🇨🇦' },{ label:'United Kingdom', pct:10, flag:'🇬🇧' }];
+          const COMBINED_GEO= [{ label:'United States', pct:39, flag:'🇺🇸' },{ label:'Australia', pct:38, flag:'🇦🇺' },{ label:'Canada', pct:13, flag:'🇨🇦' },{ label:'United Kingdom', pct:10, flag:'🇬🇧' }];
 
           const SHOWCASE_CREATORS = [
             { name:'Jordan Worobe',     handle:'@jordanworobe',     platform:'TikTok/YT',  niche:'Budget Travel',         why:'Deadpan cost-breakdown style mirrors your format exactly. AU/US audience overlap.',            url:'https://www.tiktok.com/@jordanworobe' },
@@ -6560,7 +6560,7 @@ function ExportTab({ data, year }) {
                   {[
                     { label:'Combined Reach', val:`${fmtFull((ytSubs||0)+(igFollowers||0)+(ttFollowers||0))}+` },
                     { label:'Core Age', val:'25–44' },
-                    { label:'Top Market', val:'AU + US' },
+                    { label:'Top Market', val:'US + AU' },
                     { label:'Trust Signal', val:'60% creator > ad' },
                   ].map(({ label, val }) => (
                     <div key={label} style={{ background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:8, padding:'10px 14px', textAlign:'center', minWidth:100 }}>
