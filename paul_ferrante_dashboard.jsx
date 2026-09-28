@@ -1911,6 +1911,14 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
   const [editKey, setEditKey] = useState(null);
   const [editBuf, setEditBuf] = useState({});
 
+  // pagination + similarity + bulk actions (perf: the full list is 10k+ DOM nodes)
+  const [page, setPage] = useState(1);
+  const [similarTo, setSimilarTo] = useState(null);     // post key anchoring "find like this"
+  const [selected, setSelected] = useState(new Set());  // post keys, bulk actions
+  const [tags, setTags] = useState(() => load('disco-tags', {})); // post key -> [user tags], localStorage
+  const [tagInput, setTagInput] = useState('');
+  const [pitchView, setPitchView] = useState(null);     // null | [post keys] from #pitch= hash
+
   const [search, setSearch] = useState('');
   const [fPlatform, setFPlatform] = useState(new Set());
   const [fBranded, setFBranded] = useState('all');    // all | branded | organic | review
@@ -1927,6 +1935,15 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
     } catch { setPosts([]); }
   }
   useEffect(() => { loadCatalog(); }, []);
+
+  // Shareable pitch selection: #pitch=id1,id2 → read-only pitch view (hash only, no backend)
+  useEffect(() => {
+    const m = (window.location.hash || '').match(/^#pitch=(.+)$/);
+    if (m) {
+      const ids = m[1].split(',').map(decodeURIComponent).filter(Boolean);
+      if (ids.length) setPitchView(ids);
+    }
+  }, []);
 
   // CRM brand index for client-side reconciliation
   const crmBrands = useMemo(() => (crm || []).map(c => ({
@@ -1996,6 +2013,86 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
     }).sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [enriched, search, fPlatform, fBranded, fBrand, fCategory, fVisual]);
 
+  // ── "find posts like this one": rank the filtered pool by metadata similarity ──
+  // Uses only fields that exist on catalog posts: brand, brand categories (niche),
+  // visual tags, hashtags, platform, caption keywords. No invented signals.
+  function simScore(a, b) {
+    let s = 0;
+    if (a.brand && a.brand !== '(unknown brand)' && a.brand === b.brand) s += 3;
+    const cb = new Set(b.categories || []);
+    (a.categories || []).forEach(c => { if (cb.has(c)) s += 2; });
+    const vb = new Set(b.visualTags || []);
+    (a.visualTags || []).forEach(v => { if (vb.has(v)) s += 1; });
+    const hb = new Set((b.hashtags || []).map(h => String(h).toLowerCase()));
+    (a.hashtags || []).forEach(h => { if (hb.has(String(h).toLowerCase())) s += 1; });
+    if (a.platform && a.platform === b.platform) s += 0.5;
+    const words = t => new Set((t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 4));
+    const wb = words(b.text), wa = words(a.text);
+    let shared = 0;
+    wa.forEach(w => { if (wb.has(w)) shared++; });
+    s += Math.min(shared, 6) * 0.25;
+    return s;
+  }
+
+  const ranked = useMemo(() => {
+    if (!similarTo) return results;
+    const anchor = enriched.find(p => p.key === similarTo);
+    if (!anchor) return results;
+    return results
+      .filter(p => p.key !== anchor.key)
+      .map(p => ({ p, s: simScore(p, anchor) }))
+      .filter(x => x.s >= 1)
+      .sort((x, y) => (y.s - x.s) || (x.p.date < y.p.date ? 1 : -1))
+      .map(x => x.p);
+  }, [results, enriched, similarTo]);
+  const similarAnchor = similarTo ? enriched.find(p => p.key === similarTo) : null;
+
+  // ── pagination: 50/page keeps the grid near ~350 nodes instead of 10k+ ──
+  const PAGE_SIZE = 50;
+  const pageCount = Math.max(1, Math.ceil(ranked.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = ranked.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // reset to first page whenever the result set definition changes
+  useEffect(() => { setPage(1); }, [search, fPlatform, fBranded, fBrand, fCategory, fVisual, similarTo]);
+
+  // ── bulk selection + local tagging (persisted in localStorage) ──
+  function toggleSelect(key) {
+    setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+  function applyTag() {
+    const t = tagInput.trim().toLowerCase();
+    if (!t || !selected.size) return;
+    setTags(prev => {
+      const n = { ...prev };
+      [...selected].forEach(k => { const cur = n[k] || []; if (!cur.includes(t)) n[k] = [...cur, t]; });
+      save('disco-tags', n);
+      return n;
+    });
+    setTagInput('');
+    showToast && showToast(`Tagged ${selected.size} post${selected.size === 1 ? '' : 's'}: ${t}`);
+  }
+  function removeTag(key, t) {
+    setTags(prev => {
+      const n = { ...prev };
+      n[key] = (n[key] || []).filter(x => x !== t);
+      if (!n[key].length) delete n[key];
+      save('disco-tags', n);
+      return n;
+    });
+  }
+
+  // ── shareable pitch selection: encode selected ids in the URL hash ──
+  function copyPitchLink() {
+    if (!selected.size) { showToast && showToast('Select posts first'); return; }
+    const url = `${window.location.origin}${window.location.pathname}#pitch=${[...selected].map(encodeURIComponent).join(',')}`;
+    copyLink(url);
+  }
+  function exitPitchView() {
+    setPitchView(null);
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (_) {}
+  }
+
   function toggleSet(setter, set, val) {
     const n = new Set(set); n.has(val) ? n.delete(val) : n.add(val); setter(n);
   }
@@ -2061,6 +2158,31 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
   // ── Loading / empty states ──
   if (posts === null) {
     return <div style={{ padding: 40, color: '#4A6080', fontSize: 14 }}>Loading catalog…</div>;
+  }
+
+  // Read-only pitch view from a #pitch= hash (no backend, hash only)
+  if (pitchView) {
+    const pitchPosts = pitchView.map(k => enriched.find(p => p.key === k)).filter(Boolean);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1000, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>pitch selection</div>
+            <div style={{ fontSize: 12, color: '#4A6080', marginTop: 2 }}>
+              {pitchPosts.length} of {pitchView.length} posts{pitchPosts.length < pitchView.length ? ' found. build the catalog on the discovery tab to see the rest' : ''}
+            </div>
+          </div>
+          <button onClick={exitPitchView}
+            style={{ background: BLUE, color: TEXT, border: 'none', borderRadius: 10, padding: '10px 16px', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>back to discovery</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+          {pitchPosts.map(p => <DiscoCard key={p.key} p={p} CHIP={CHIP} readonly userTags={tags[p.key]} />)}
+        </div>
+        {pitchPosts.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8', fontSize: 13 }}>no matching posts. the catalog may not be built on this device.</div>
+        )}
+      </div>
+    );
   }
 
   const hasCatalog = posts.length > 0;
@@ -2144,16 +2266,41 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
               <div style={{ fontSize: 12, color: '#4A6080', fontWeight: 600 }}>{results.length} of {posts.length} posts</div>
-              {(fPlatform.size || fBrand.size || fCategory.size || fVisual.size || fBranded !== 'all' || search) ? (
-                <button onClick={() => { setSearch(''); setFPlatform(new Set()); setFBranded('all'); setFBrand(new Set()); setFCategory(new Set()); setFVisual(new Set()); }}
+              {(fPlatform.size || fBrand.size || fCategory.size || fVisual.size || fBranded !== 'all' || search || similarTo) ? (
+                <button onClick={() => { setSearch(''); setFPlatform(new Set()); setFBranded('all'); setFBrand(new Set()); setFCategory(new Set()); setFVisual(new Set()); setSimilarTo(null); }}
                   style={{ background: 'none', border: 'none', color: '#0E6A80', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
               ) : null}
             </div>
           </Card>
 
+          {/* Similarity banner */}
+          {similarAnchor && (
+            <div style={{ background: `${BLUE}22`, border: `1px solid ${BLUE}55`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: TEXT, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <span>
+                showing posts like {similarAnchor.date ? new Date(similarAnchor.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'the selected post'}
+                {similarAnchor.brand && similarAnchor.brand !== '(unknown brand)' ? ` · ${similarAnchor.brand}` : ''}
+                {' '}· ranked by shared brand, categories, visual tags, hashtags
+              </span>
+              <button onClick={() => setSimilarTo(null)}
+                style={{ background: '#fff', border: `1px solid ${BDR}`, borderRadius: 7, padding: '6px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: TEXT, whiteSpace: 'nowrap' }}>clear</button>
+            </div>
+          )}
+
+          {/* Bulk actions bar */}
+          {selected.size > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#fff', border: `1px solid ${BDR}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>{selected.size} selected</span>
+              <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applyTag()} placeholder="tag name…"
+                style={{ background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, fontFamily: 'inherit', outline: 'none', width: 140 }} />
+              <button onClick={applyTag} style={{ background: BLUE, color: TEXT, border: 'none', borderRadius: 7, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>apply tag</button>
+              <button onClick={copyPitchLink} style={{ background: '#F7F9FC', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>copy pitch link</button>
+              <button onClick={() => setSelected(new Set())} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>clear</button>
+            </div>
+          )}
+
           {/* Results grid */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            {results.map(p => (
+            {paged.map(p => (
               <DiscoCard key={p.key} p={p} CHIP={CHIP}
                 editing={editKey === p.key}
                 onEdit={() => { setEditKey(p.key); setEditBuf({ branded: p.effBranded, brand: p.brand === '(unknown brand)' ? '' : (p.brand || ''), visualTags: [...(p.visualTags || [])] }); }}
@@ -2162,9 +2309,22 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
                 onSave={() => { saveOverride(p.key, { branded: editBuf.branded, brand: editBuf.brand || null, visualTags: editBuf.visualTags }); setEditKey(null); }}
                 onClearOverride={() => { saveOverride(p.key, null); setEditKey(null); }}
                 onCopy={() => copyLink(p.url)}
-                crmBrandNames={crmBrands.map(b => b.name)} />
+                crmBrandNames={crmBrands.map(b => b.name)}
+                checked={selected.has(p.key)} onToggleSelect={() => toggleSelect(p.key)}
+                userTags={tags[p.key]} onRemoveTag={(t) => removeTag(p.key, t)}
+                onFindSimilar={() => setSimilarTo(similarTo === p.key ? null : p.key)} similarActive={similarTo === p.key} />
             ))}
           </div>
+          {/* Pagination */}
+          {pageCount > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 14 }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}
+                style={{ background: safePage <= 1 ? '#F1F5F9' : '#fff', color: safePage <= 1 ? '#94A3B8' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage <= 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>← prev</button>
+              <span style={{ fontSize: 12, color: '#4A6080', fontWeight: 600 }}>page {safePage} of {pageCount} · {ranked.length} posts</span>
+              <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount}
+                style={{ background: safePage >= pageCount ? '#F1F5F9' : '#fff', color: safePage >= pageCount ? '#94A3B8' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage >= pageCount ? 'default' : 'pointer', fontFamily: 'inherit' }}>next →</button>
+            </div>
+          )}
           {results.length === 0 && (
             <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8', fontSize: 13 }}>No posts match these filters.</div>
           )}
@@ -2183,7 +2343,7 @@ function FilterRow({ label, children }) {
   );
 }
 
-function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, onSave, onClearOverride, onCopy, crmBrandNames }) {
+function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, onSave, onClearOverride, onCopy, crmBrandNames, readonly, checked, onToggleSelect, userTags, onRemoveTag, onFindSimilar, similarActive }) {
   const date = p.date ? new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const snippet = (p.text || '').replace(/\s+/g, ' ').slice(0, 110);
   return (
@@ -2201,6 +2361,12 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
           {p.brand && p.brand !== '(unknown brand)' ? <span style={{ ...CHIP, background: '#0E6A8018', color: '#0E6A80' }}>{p.brand}</span> : null}
           {(p.categories || []).map(c => <span key={c} style={{ ...CHIP, background: '#E1D9AE55', color: '#6B5E1A' }}>{c}</span>)}
           {(p.visualTags || []).map(v => <span key={v} style={{ ...CHIP, background: '#88EAF633', color: '#0E6A80' }}>{DISCO_VISUAL_LABEL[v] || v}</span>)}
+          {(userTags || []).map(t => (
+            <span key={t} style={{ ...CHIP, background: '#EDE9FE', color: '#6D28D9' }}>{t}{readonly ? null : (
+              <button onClick={() => onRemoveTag(t)} title="remove tag"
+                style={{ background: 'none', border: 'none', color: '#6D28D9', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '0 0 0 4px', fontFamily: 'inherit' }}>×</button>
+            )}</span>
+          ))}
           {p.overridden ? <span style={{ ...CHIP, background: '#F1F5F9', color: '#64748B' }}>✎ edited</span> : null}
         </div>
 
@@ -2226,10 +2392,18 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
               <button onClick={onCancel} style={{ background: '#fff', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
             </div>
           </div>
-        ) : (
+        ) : readonly ? (
           <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
             <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#F7F9FC', color: '#0E6A80', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
+            <button onClick={onToggleSelect} title="select for bulk actions"
+              style={{ background: checked ? `${BLUE}33` : '#F7F9FC', color: checked ? TEXT : '#64748B', border: `1px solid ${checked ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>{checked ? '☑' : '☐'}</button>
+            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#F7F9FC', color: '#0E6A80', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
             <button onClick={onCopy} style={{ flex: 1, background: '#F7F9FC', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Copy link</button>
+            <button onClick={onFindSimilar} title="find posts like this one"
+              style={{ background: similarActive ? `${BLUE}33` : '#F7F9FC', color: similarActive ? TEXT : '#64748B', border: `1px solid ${similarActive ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>∼</button>
             <button onClick={onEdit} title="Edit tags" style={{ background: '#F7F9FC', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✎</button>
           </div>
         )}
@@ -3033,6 +3207,8 @@ function BrandGuidelinesTab() {
   const [copied, setCopied] = useState(null);
   const [avail, setAvail]   = useState({});      // filename -> bool
   const [iconVar, setIconVar] = useState({});    // cardKey -> variant
+  const [iconQ, setIconQ] = useState('');        // icon library search
+  const [shareMode, setShareMode] = useState(false); // client-facing read-only view
   const VARIANTS = ['bright-sky','sand','ink'];
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
@@ -3079,6 +3255,9 @@ function BrandGuidelinesTab() {
     return () => { alive = false; };
   }, []);
 
+  // client-facing read-only view: #brand-share hash (hash only, no backend)
+  useEffect(() => { if ((window.location.hash || '') === '#brand-share') setShareMode(true); }, []);
+
   const copyHex = (hex) => { try { navigator.clipboard.writeText(hex); } catch (e) {} setCopied(hex); setTimeout(() => setCopied(c => (c === hex ? null : c)), 1400); };
   const dlFile = async (rel, outName) => {
     try {
@@ -3087,6 +3266,47 @@ function BrandGuidelinesTab() {
       const a = document.createElement('a'); a.href = u; a.download = outName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
     } catch (e) { setAvail(a => ({ ...a, [path]: false })); }
   };
+
+  // one-click copy: platform glyphs are real inline SVGs, so copy actual markup.
+  // the icon library is PNG files (no SVG markup exists), so copy the real image bytes.
+  const GLYPH_SVG = {
+    tiktok: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#0A0A0A"><path d="M16.5 3c.3 2 1.6 3.4 3.5 3.6v2.4c-1.3.1-2.5-.3-3.5-1v6.5c0 3.2-2.4 5.5-5.4 5.5C8.4 20 6 17.8 6 14.9c0-3 2.5-5.3 5.7-5v2.6c-.4-.1-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.6 2.6 2.6 1.5 0 2.7-1.1 2.7-2.8V3h3.4z"/></svg>',
+    instagram: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#0A0A0A" stroke="none"/></svg>',
+    youtube: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2"><rect x="2.5" y="6" width="19" height="12" rx="3.5"/><path d="M10.5 9.2v5.6l4.6-2.8z" fill="#0A0A0A" stroke="none"/></svg>',
+    website: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>',
+  };
+  const flashCopied = (id) => { setCopied(id); setTimeout(() => setCopied(c => (c === id ? null : c)), 1400); };
+  const copySvg = (name) => { try { navigator.clipboard.writeText(GLYPH_SVG[name]); } catch (e) {} flashCopied('svg:' + name); };
+  const copyPng = async (rel) => {
+    try {
+      const r = await fetch(`/assets/brand/${rel}`); if (!r.ok) return;
+      const blob = await r.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+      flashCopied('png:' + rel);
+    } catch (e) {}
+  };
+
+  // shareable read-only link for brands (hash only, no backend)
+  const copyShareLink = () => {
+    const url = `${window.location.origin}${window.location.pathname}#brand-share`;
+    try { navigator.clipboard.writeText(url); } catch (e) {}
+    flashCopied('share');
+  };
+  const exitShareMode = () => {
+    setShareMode(false);
+    try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (_) {}
+  };
+
+  // icon library search: filter groups/items by slug, label, or group name
+  const iconQuery = iconQ.trim().toLowerCase();
+  const shownIconGroups = iconQuery
+    ? ICON_GROUPS.map(([g, items]) => [g, items.filter(it => {
+        const slug = Array.isArray(it) ? it[0] : it;
+        const lab = Array.isArray(it) ? it[1] : label(slug);
+        return slug.includes(iconQuery) || lab.toLowerCase().includes(iconQuery) || g.toLowerCase().includes(iconQuery);
+      })]).filter(([, items]) => items.length)
+    : ICON_GROUPS;
+  const shownIconCount = shownIconGroups.reduce((n, [, items]) => n + items.length, 0);
 
   // shared bits
   const Section = ({ n, title, children }) => (
@@ -3127,7 +3347,7 @@ function BrandGuidelinesTab() {
   );
 
   // ── icon card with variant picker ───────────────────────────
-  const IconCard = ({ slug, lab }) => {
+  const IconCard = ({ slug, lab, ro }) => {
     const key = slug;
     const sel = iconVar[key] || (avail[`icons/${slug}-bright-sky`] ? 'bright-sky' : (VARIANTS.find(v => avail[`icons/${slug}-${v}`]) || 'bright-sky'));
     const selOk = avail[`icons/${slug}-${sel}`];
@@ -3142,7 +3362,7 @@ function BrandGuidelinesTab() {
           )}
         </div>
         <div style={{ fontSize:12.5, color:B.ink, fontWeight:600, margin:'8px 0 10px', minHeight:30 }}>{lab}</div>
-        <div style={{ display:'flex', gap:4, marginBottom:8, flexWrap:'wrap', justifyContent:'center' }}>
+        {ro ? null : (<div style={{ display:'flex', gap:4, marginBottom:8, flexWrap:'wrap', justifyContent:'center' }}>
           {VARIANTS.map(v => {
             const vok = avail[`icons/${slug}-${v}`];
             const active = v === sel;
@@ -3155,10 +3375,15 @@ function BrandGuidelinesTab() {
               </button>
             );
           })}
-        </div>
+        </div>)}
         <DlBtn ok={!!selOk} onClick={() => dlFile(`icons/${slug}-${sel}.png`, `rgg-${slug}-${sel}.png`)}>
           {anyOk ? 'download' : 'file not added'}
         </DlBtn>
+        <button onClick={() => copyPng(`icons/${slug}-${sel}.png`)} disabled={!selOk}
+          style={{ width:'100%', marginTop:6, border:`1px solid ${B.ink}22`, borderRadius:10, padding:'8px 12px', fontSize:12, fontWeight:700, fontFamily:'inherit',
+            cursor: selOk ? 'pointer' : 'not-allowed', background:'transparent', color: selOk ? B.ocean : B.slate }}>
+          {copied === 'png:icons/' + slug + '-' + sel + '.png' ? 'copied ✓' : 'copy png'}
+        </button>
       </div>
     );
   };
@@ -3174,6 +3399,28 @@ function BrandGuidelinesTab() {
   return (
     <div style={{ background:B.sand, color:B.ink, borderRadius:20, padding:'clamp(20px,4vw,56px)', fontFamily:"'Inter', system-ui, sans-serif", textTransform:'none' }}>
       <div style={{ maxWidth:1000, margin:'0 auto' }}>
+
+        {!shareMode ? (
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
+            <button onClick={() => setShareMode(true)}
+              style={{ background:B.ocean, color:B.white, border:'none', borderRadius:10, padding:'10px 18px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>share with brand</button>
+          </div>
+        ) : (
+          <div style={{ background:B.white, borderRadius:14, padding:'14px 18px', marginBottom:24, border:`1px solid ${B.ink}14`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+            <div>
+              <div style={{ fontWeight:800, fontSize:14, fontFamily:DISPLAY }}>read-only brand view</div>
+              <div style={{ ...caption, fontSize:12 }}>share this link with the brand. no editing controls are shown.</div>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={copyShareLink}
+                style={{ background:B.ocean, color:B.white, border:'none', borderRadius:10, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                {copied === 'share' ? 'copied ✓' : 'copy share link'}
+              </button>
+              <button onClick={exitShareMode}
+                style={{ background:'transparent', color:B.ocean, border:`1px solid ${B.ocean}`, borderRadius:10, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>exit</button>
+            </div>
+          </div>
+        )}
 
         {/* 1. COVER + STRUCTURE */}
         <div style={{ background:B.white, borderRadius:20, padding:'56px 24px', textAlign:'center', marginBottom:48, border:`1px solid ${B.ink}11` }}>
@@ -3324,14 +3571,24 @@ function BrandGuidelinesTab() {
         {/* 7. ICONOGRAPHY (incl. cash stamp) */}
         <Section n="06" title="icons · video tags">
           <p style={{ ...caption, marginTop:-8, marginBottom:18 }}>each icon downloads as an individual file for overlaying in video. pick a version: transparent, b/w (black on white), or w/b (white on black). the cash stamp lives here too, with no number baked in so you add the amount while editing.</p>
-          {ICON_GROUPS.map(([group, items]) => (
+          {!shareMode && (
+            <input value={iconQ} onChange={e => setIconQ(e.target.value)} placeholder="search icons…"
+              style={{ width:'100%', maxWidth:420, background:B.white, border:`1px solid ${B.ink}22`, borderRadius:10, padding:'10px 14px', fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:16, display:'block' }} />
+          )}
+          {iconQuery && (
+            <div style={{ ...caption, marginBottom:12 }}>{shownIconCount} icon{shownIconCount === 1 ? '' : 's'} match{shownIconCount === 1 ? 'es' : ''} "{iconQ.trim()}"</div>
+          )}
+          {shownIconGroups.map(([group, items]) => (
             <div key={group} style={{ marginBottom:28 }}>
               <div style={{ fontFamily:DISPLAY, fontSize:14, fontWeight:700, color:B.ocean, marginBottom:12 }}>{group}</div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:14 }}>
-                {items.map(it => { const slug = Array.isArray(it) ? it[0] : it; const lab = Array.isArray(it) ? it[1] : label(slug); return <IconCard key={group+slug} slug={slug} lab={lab} />; })}
+                {items.map(it => { const slug = Array.isArray(it) ? it[0] : it; const lab = Array.isArray(it) ? it[1] : label(slug); return <IconCard key={group+slug} slug={slug} lab={lab} ro={shareMode} />; })}
               </div>
             </div>
           ))}
+          {iconQuery && shownIconGroups.length === 0 && (
+            <div style={{ ...caption, padding:'20px 0' }}>no icons match that search.</div>
+          )}
         </Section>
 
         {/* 7. TEMPLATES & ASSETS */}
@@ -3360,10 +3617,16 @@ function BrandGuidelinesTab() {
         <Section n="08" title="channels & contact">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14 }}>
             {[[TikTok,'tiktok','https://www.tiktok.com/@paul_ferrante'],[Insta,'instagram','https://www.instagram.com/paul_ferrante/'],[YouTube,'youtube','https://www.youtube.com/@paul_ferrante'],[Web,'website','https://paullferrantemedia.my.canva.site']].map(([G, name, url]) => (
-              <a key={url} href={url} target="_blank" rel="noopener noreferrer" style={{ ...surf, textDecoration:'none', color:B.ink, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <G c={B.ocean} s={32} />
-                <span style={{ fontWeight:600, fontSize:14 }}>{name}</span>
-              </a>
+              <div key={url} style={{ ...surf, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                <a href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none', color:B.ink, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                  <G c={B.ocean} s={32} />
+                  <span style={{ fontWeight:600, fontSize:14 }}>{name}</span>
+                </a>
+                <button onClick={() => copySvg(name)}
+                  style={{ border:`1px solid ${B.ink}22`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:700, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:B.ocean }}>
+                  {copied === 'svg:' + name ? 'copied ✓' : 'copy svg'}
+                </button>
+              </div>
             ))}
           </div>
           <div style={{ ...caption, textAlign:'center', marginTop:40, opacity:0.7 }}>rgg media · paulferrante · brand guidelines</div>
