@@ -4754,6 +4754,136 @@ function priorityScore(flags) {
   return best;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Books enhancements (child-3): tax-category tagging, review-history log,
+// local receipt-photo attachments. All persist via the load()/save()
+// localStorage helpers — no sheet schema changes required.
+// ─────────────────────────────────────────────────────────────────────────────
+const TAX_CATEGORIES = ['travel','meals','equipment','software','home office','professional services','other'];
+// Best-guess tax category from the expense's existing category so Paul only
+// overrides the odd ones out.
+function suggestTaxCategory(category) {
+  const c = String(category || '').toLowerCase();
+  if (/travel/.test(c)) return 'travel';
+  if (/meal|entertain|dining/.test(c)) return 'meals';
+  if (/equipment|hardware|camera|gear/.test(c)) return 'equipment';
+  if (/software|subscription|saas/.test(c)) return 'software';
+  if (/home office/.test(c)) return 'home office';
+  if (/professional|legal|accounting|consult/.test(c)) return 'professional services';
+  return 'other';
+}
+// tax_category lives in localStorage keyed by expense_id. The Expenses sheet
+// has no tax_category column (the API's objectToRow would silently drop an
+// unknown field), so this map is the source of truth until a column is added.
+// The value is ALSO included in update-expense patches so a future sheet
+// column starts persisting without a client change.
+const TAX_CAT_KEY = 'books_tax_category_v1';
+function taxCatMap() { const m = load(TAX_CAT_KEY, {}); return (m && typeof m === 'object') ? m : {}; }
+function persistTaxCategory(expenseId, value) {
+  if (!expenseId) return;
+  const m = taxCatMap();
+  m[expenseId] = TAX_CATEGORIES.includes(value) ? value : 'other';
+  save(TAX_CAT_KEY, m);
+}
+function getTaxCategory(row) {
+  if (!row) return 'other';
+  const v = taxCatMap()[row.expense_id] || row.tax_category || '';
+  return TAX_CATEGORIES.includes(v) ? v : 'other';
+}
+
+// ── "Recently reviewed" audit history — one line per reviewed item. ──
+const REVIEW_LOG_KEY = 'books_review_log_v1';
+const REVIEW_LOG_MAX = 100;
+function getReviewLog() { const l = load(REVIEW_LOG_KEY, []); return Array.isArray(l) ? l : []; }
+function appendReviewLog(row) {
+  const log = getReviewLog();
+  log.unshift({
+    ts: new Date().toISOString(),
+    expense_id: row.expense_id || '',
+    vendor: row.vendor || '(no vendor)',
+    amount: row.amount || '',
+    date: row.date || '',
+  });
+  save(REVIEW_LOG_KEY, log.slice(0, REVIEW_LOG_MAX));
+}
+function fmtReviewTs(ts) {
+  try {
+    return new Date(ts).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+  } catch (_) { return ts || ''; }
+}
+
+// ── Local receipt photos — attached on the expense row, stored as downscaled
+// JPEG data URLs in localStorage (the sheet's receipt_url only covers Drive
+// scans). Every skip path calls back with a human-readable reason so a photo
+// that can't be stored never fails silently.
+// ─────────────────────────────────────────────────────────────────────────────
+const RCPT_PHOTO_KEY = 'books_receipt_photos_v1';
+const RCPT_MAX_DIM = 800;        // longest side after downscale
+const RCPT_MAX_KB = 700;         // hard cap on the stored image
+function getReceiptPhotos() { const m = load(RCPT_PHOTO_KEY, {}); return (m && typeof m === 'object') ? m : {}; }
+function getReceiptPhoto(expenseId) { return (expenseId && getReceiptPhotos()[expenseId]) || null; }
+function removeReceiptPhoto(expenseId) {
+  if (!expenseId) return;
+  const m = getReceiptPhotos(); delete m[expenseId]; save(RCPT_PHOTO_KEY, m);
+}
+// cb(errMsg | null)
+function attachReceiptPhoto(expenseId, file, cb) {
+  if (!expenseId) { cb('No expense to attach to.'); return; }
+  if (!file) { cb('No file selected.'); return; }
+  if (!/^image\//.test(file.type || '')) { cb('That file is not an image. Receipt photos must be image files.'); return; }
+  const objUrl = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    URL.revokeObjectURL(objUrl);
+    try {
+      const scale = Math.min(1, RCPT_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+      const kb = Math.round(dataUrl.length * 0.75 / 1024);
+      if (kb > RCPT_MAX_KB) { cb('Image is ' + kb + 'kb even after shrinking. Try a smaller photo.'); return; }
+      try {
+        const m = getReceiptPhotos(); m[expenseId] = dataUrl; save(RCPT_PHOTO_KEY, m);
+      } catch (e) { cb('Browser storage is full. The photo could not be saved.'); return; }
+      cb(null);
+    } catch (e) { cb('Could not process that image (' + e.message + ').'); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(objUrl); cb('Could not read that image file.'); };
+  img.src = objUrl;
+}
+
+// CSV cell quoting shared by the client-side tax export. \r\n line endings and
+// a BOM are added at write time so Excel opens the file cleanly.
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// Recently-reviewed history list (shared by the Inbox tab's two render paths).
+function RecentReviewLog() {
+  const log = getReviewLog().slice(0, 8);
+  if (log.length === 0) return null;
+  return (
+    <div style={{ marginTop:16, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:10, padding:'12px 14px' }}>
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:8 }}>Recently reviewed</div>
+      {log.map((e, i) => (
+        <div key={(e.expense_id || '') + '_' + i}
+          style={{ display:'flex', justifyContent:'space-between', gap:10, fontSize:12, color:BOOKS.ink, padding:'5px 0', borderTop: i ? `1px solid ${BOOKS.border}` : 'none' }}>
+          <span style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            {e.vendor}{e.date ? <span style={{ color:BOOKS.muted, fontWeight:400 }}> · {e.date}</span> : null}
+          </span>
+          <span style={{ color:BOOKS.muted, whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>
+            {e.amount !== '' && e.amount != null ? '$' + Number(e.amount).toFixed(2) + ' · ' : ''}{fmtReviewTs(e.ts)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Probable-duplicate review card: shows the incoming receipt next to the booked
 // entry it matched, with Skip (default) / Add anyway. Only "Add anyway" books it.
 function DupCard({ dup, reload, showToast }) {
@@ -4874,6 +5004,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
           method: 'POST',
           body: { expense_id: r.expense_id, patch: { reviewed: 'TRUE' }, confirm_vendor_category: true },
         });
+        appendReviewLog(r);
       } catch (e) { /* keep going */ }
     }
     showToast && showToast(`Confirmed ${targets.length}`);
@@ -4889,6 +5020,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
           <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
           <div style={{ fontSize:12, color:BOOKS.muted, marginTop:6 }}>If receipts are sitting in your Drive folder, use “Pull in receipt backlog” above.</div>
         </div>
+        <RecentReviewLog />
       </div>
     );
   }
@@ -4914,6 +5046,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
           <InboxCard key={row.expense_id} row={row} deals={data.deals} reload={reload} isMobile={isMobile} showToast={showToast} />
         ))}
       </div>
+      <RecentReviewLog />
     </div>
   );
 }
@@ -4929,6 +5062,7 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
       vendor: row.vendor || '', date: row.date || '', amount: row.amount || '',
       category: row.category || 'Other', business_purpose: row.business_purpose || '',
       linked_deal_id: row.linked_deal_id || '',
+      tax_category: taxCatMap()[row.expense_id] || row.tax_category || suggestTaxCategory(row.category),
     };
   });
   // Wrap setEdit so every keystroke is persisted to sessionStorage
@@ -4939,6 +5073,24 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
   }
   const [saving, setSaving] = useState(false);
   const flags = row.flags_computed || [];
+
+  // ── Local receipt photo (child-3): attached on the row, stored as a
+  // downscaled data URL in localStorage. Shown when no Drive receipt_url exists.
+  const [photo, setPhoto] = useState(function () { return getReceiptPhoto(row.expense_id); });
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState('');
+  const onPhotoPick = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    setPhotoBusy(true); setPhotoErr('');
+    attachReceiptPhoto(row.expense_id, f, (msg) => {
+      setPhotoBusy(false);
+      if (msg) { setPhotoErr(msg); return; }
+      setPhoto(getReceiptPhoto(row.expense_id));
+    });
+  };
+  const onPhotoRemove = () => { removeReceiptPhoto(row.expense_id); setPhoto(null); };
 
   // ── Business-purpose template fill (writes through the per-card draft path) ──
   const bpRef = useRef(null);
@@ -4994,6 +5146,10 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
       });
       // Clear the saved draft once it's been committed to the Sheet
       try { if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(_draftKey); } catch (_) {}
+      // Persist the tax tag locally (the sheet has no column for it) and log
+      // this review for the "Recently reviewed" history.
+      persistTaxCategory(row.expense_id, edit.tax_category || getTaxCategory(row));
+      appendReviewLog({ ...row, ...edit });
       showToast && showToast('Confirmed');
       reload();
     } catch (e) {
@@ -5076,9 +5232,20 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
               </div>
             )}
           </a>
+        ) : photo ? (
+          <div style={{ position:'relative', height: isMobile?80:110, borderRadius:8, overflow:'hidden', border:'1px solid #16A34A' }} title="Receipt photo attached locally">
+            <img src={photo} alt="receipt photo" style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+            <button onClick={onPhotoRemove} title="Remove photo"
+              style={{ position:'absolute', top:4, right:4, background:'rgba(0,0,0,0.65)', color:'#FFFFFF', border:'none', borderRadius:6, width:22, height:22, fontSize:13, lineHeight:1, cursor:'pointer' }}>×</button>
+          </div>
         ) : (
-          <div style={{ height: isMobile?80:110, background:BOOKS.surface, border:`1px dashed ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', lineHeight: (isMobile?80:110) + 'px' }}>
-            No receipt
+          <div style={{ height: isMobile?80:110, background:BOOKS.surface, border:`1px dashed ${BOOKS.border}`, borderRadius:8, color:BOOKS.muted, fontSize:11, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:5, padding:'0 6px' }}>
+            <span>No receipt</span>
+            <label style={{ cursor:'pointer', color:SLATE, fontWeight:700, textDecoration:'underline', fontSize:10 }}>
+              {photoBusy ? 'processing…' : '+ attach photo'}
+              <input type="file" accept="image/*" onChange={onPhotoPick} disabled={photoBusy} style={{ display:'none' }} />
+            </label>
+            {photoErr && <span style={{ color:'#DC2626', fontSize:9, lineHeight:1.3 }}>{photoErr}</span>}
           </div>
         )}
       </div>
@@ -5100,8 +5267,19 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
           <Field label="Date"><input type="date" style={inputStyle} value={edit.date} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
           <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
           <Field label="Category">
-            <select style={inputStyle} value={edit.category} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+            <select style={inputStyle} value={edit.category} onChange={(e) => {
+              const c = e.target.value;
+              const prevSug = suggestTaxCategory(edit.category);
+              // Re-suggest the tax tag only if the user hasn't overridden it
+              setEdit({ ...edit, category: c, tax_category: (!edit.tax_category || edit.tax_category === prevSug) ? suggestTaxCategory(c) : edit.tax_category });
+            }}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Tax category">
+            <select style={inputStyle} value={edit.tax_category || getTaxCategory(row)}
+              onChange={(e) => setEdit({ ...edit, tax_category: e.target.value })}>
+              {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
         </div>
@@ -5302,6 +5480,46 @@ function linkedDealLabel(dealId, deals) {
   return d ? <span style={{ color:SLATE, fontWeight:600 }}>{d.brand}</span> : <span style={{ color:'#94A3B8' }}>{dealId.slice(0, 8)}</span>;
 }
 
+// Receipt photo attachment (child-3): thumbnail + attach/remove, stored as a
+// downscaled data URL in localStorage keyed by expense_id.
+function ReceiptPhotoField({ expenseId }) {
+  const [photo, setPhoto] = useState(function () { return getReceiptPhoto(expenseId); });
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const pick = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    setBusy(true); setErr('');
+    attachReceiptPhoto(expenseId, f, (msg) => {
+      setBusy(false);
+      if (msg) { setErr(msg); return; }
+      setPhoto(getReceiptPhoto(expenseId));
+    });
+  };
+  return (
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:6 }}>Receipt photo</div>
+      {photo ? (
+        <div style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
+          <img src={photo} alt="receipt photo" style={{ width:140, borderRadius:8, border:`1px solid ${BOOKS.border}`, display:'block' }} />
+          <button onClick={() => { removeReceiptPhoto(expenseId); setPhoto(null); }}
+            style={{ background:'none', color:'#DC2626', border:'1px solid #DC262644', borderRadius:8, padding:'7px 12px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+            Remove photo
+          </button>
+        </div>
+      ) : (
+        <label style={{ display:'block', border:`1px dashed ${BOOKS.border}`, borderRadius:8, padding:'14px', textAlign:'center', fontSize:12, color:SLATE, fontWeight:600, cursor: busy ? 'wait' : 'pointer', background:BOOKS.surface }}>
+          {busy ? 'processing…' : '+ attach receipt photo'}
+          <input type="file" accept="image/*" onChange={pick} disabled={busy} style={{ display:'none' }} />
+        </label>
+      )}
+      {err && <div style={{ fontSize:11, color:'#DC2626', marginTop:6 }}>{err}</div>}
+      {!photo && !err && <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>Stored in this browser only, shrunk to fit. Shows up in the tax CSV as receipt attached.</div>}
+    </div>
+  );
+}
+
 function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   const [edit, setEdit] = useState({ ...row });
   const [saving, setSaving] = useState(false);
@@ -5310,9 +5528,15 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
     setSaving(true);
     try {
       const patch = {};
-      ['date','vendor','amount','currency','category','business_purpose','payment_method',
+      ['date','vendor','amount','currency','category','tax_category','business_purpose','payment_method',
        'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
       await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
+      // Tax tag is stored locally (the sheet has no column for it); log a
+      // review only on the transition from unreviewed to reviewed.
+      persistTaxCategory(row.expense_id, edit.tax_category || getTaxCategory(row));
+      if (String(edit.reviewed).toLowerCase() === 'true' && String(row.reviewed).toLowerCase() !== 'true') {
+        appendReviewLog({ ...row, ...edit });
+      }
       showToast && showToast('Saved');
       reload(); onClose();
     } catch (e) { alert('Save failed: ' + e.message); }
@@ -5341,6 +5565,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
           </div>
         )}
 
+        <ReceiptPhotoField expenseId={row.expense_id} />
+
         <div style={{ display:'grid', gap:12 }}>
           <Field label="Date"><input type="date" style={inputStyle} value={edit.date || ''} onChange={(e) => setEdit({ ...edit, date: e.target.value })} /></Field>
           <Field label="Vendor"><input style={inputStyle} value={edit.vendor || ''} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
@@ -5349,9 +5575,20 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
             <Field label="Currency"><input style={inputStyle} value={edit.currency || ''} onChange={(e) => setEdit({ ...edit, currency: e.target.value })} /></Field>
           </div>
           <Field label="Category">
-            <select style={inputStyle} value={edit.category || ''} onChange={(e) => setEdit({ ...edit, category: e.target.value })}>
+            <select style={inputStyle} value={edit.category || ''} onChange={(e) => {
+              const c = e.target.value;
+              const prevSug = suggestTaxCategory(edit.category);
+              // Re-suggest the tax tag only if the user hasn't overridden it
+              setEdit({ ...edit, category: c, tax_category: (!edit.tax_category || edit.tax_category === prevSug) ? suggestTaxCategory(c) : edit.tax_category });
+            }}>
               <option value="">— pick —</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Tax category">
+            <select style={inputStyle} value={edit.tax_category || getTaxCategory(row)}
+              onChange={(e) => setEdit({ ...edit, tax_category: e.target.value })}>
+              {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
           <Field label="Business purpose">
@@ -5406,7 +5643,7 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
     date: new Date().toISOString().slice(0, 10),
     vendor: '', amount: '', currency: 'USD', category: 'Other',
     business_purpose: '', payment_method: '', linked_deal_id: '', notes: '',
-    entered_by: 'paul',
+    entered_by: 'paul', tax_category: 'other',
   });
   const [saving, setSaving] = useState(false);
 
@@ -5414,7 +5651,13 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
     if (!form.vendor || !form.amount || !form.date) { alert('Vendor, amount, and date are required.'); return; }
     setSaving(true);
     try {
-      await booksApi('manual-expense', { method:'POST', body: form });
+      const j = await booksApi('manual-expense', { method:'POST', body: form });
+      // Manual entries land reviewed=TRUE, so they join the review history.
+      // The tax tag is stored locally keyed by the new expense_id.
+      if (j && j.expense_id) {
+        persistTaxCategory(j.expense_id, form.tax_category);
+        appendReviewLog({ expense_id: j.expense_id, vendor: form.vendor, amount: form.amount, date: form.date });
+      }
       showToast && showToast('Added');
       reload(); onClose();
     } catch (e) { alert('Save failed: ' + e.message); }
@@ -5434,8 +5677,17 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
             <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
           </div>
           <Field label="Category">
-            <select style={inputStyle} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <select style={inputStyle} value={form.category} onChange={(e) => {
+              const c = e.target.value;
+              const prevSug = suggestTaxCategory(form.category);
+              setForm({ ...form, category: c, tax_category: (!form.tax_category || form.tax_category === prevSug) ? suggestTaxCategory(c) : form.tax_category });
+            }}>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
+          <Field label="Tax category">
+            <select style={inputStyle} value={form.tax_category || 'other'} onChange={(e) => setForm({ ...form, tax_category: e.target.value })}>
+              {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </Field>
           <Field label="Business purpose">
@@ -5987,6 +6239,58 @@ function ExportTab({ data, year }) {
     setBusy(null);
   };
 
+  // Tax-ready CSV (child-3): built entirely in the browser from the same data
+  // the tabs render — income rows from Paid deals + expense rows with tax
+  // categories and receipt flags. No new dependencies (CSV only). A BOM and
+  // \r\n line endings make it open cleanly in Excel and Sheets.
+  const downloadTaxCsv = () => {
+    setBusy('tax');
+    try {
+      const rows = [];
+      (data.expenses || []).filter((r) => withinYear(r, year)).forEach((r) => {
+        const hasReceipt = Boolean(r.receipt_url || getReceiptPhoto(r.expense_id));
+        rows.push({
+          type: 'expense',
+          date: r.date || '',
+          vendor: r.vendor || '',
+          category: r.category || '',
+          tax_category: getTaxCategory(r),
+          amount_usd: toUSD(r.amount, r.currency).toFixed(2),
+          amount_original: r.amount || '',
+          currency: r.currency || 'USD',
+          notes: [r.business_purpose, r.notes].filter(Boolean).join(' | '),
+          receipt_attached: hasReceipt ? 'yes' : 'no',
+        });
+      });
+      (data.deals || [])
+        .filter((d) => canonStage(d.status) === 'Paid' && dealYear(d.paid_date || d.month, year) === year)
+        .forEach((d) => {
+          rows.push({
+            type: 'income',
+            date: d.paid_date || '',
+            vendor: d.brand || '',
+            category: 'brand income',
+            tax_category: 'n/a',
+            amount_usd: dealAmount(d.deal_value).toFixed(2),
+            amount_original: d.deal_value || '',
+            currency: 'USD',
+            notes: [d.platform, d.month].filter(Boolean).join(' · '),
+            receipt_attached: d.invoice_url ? 'yes' : 'n/a',
+          });
+        });
+      rows.sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.type === b.type ? 0 : a.type === 'expense' ? -1 : 1));
+      const head = ['type','date','vendor','category','tax_category','amount_usd','amount_original','currency','notes','receipt_attached'];
+      const lines = [head.join(',')];
+      rows.forEach((r) => lines.push(head.map((h) => csvCell(r[h])).join(',')));
+      const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `RGG_Media_TaxExport_${year}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { alert('Export failed: ' + e.message); }
+    setBusy(null);
+  };
+
   const printBinder = () => {
     const expenses = [...data.expenses]
       .filter((r) => withinYear(r, year))
@@ -6071,6 +6375,16 @@ function ExportTab({ data, year }) {
         <button onClick={printBinder}
           style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
           Generate audit binder
+        </button>
+      </div>
+      <div style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:12, padding:20 }}>
+        <div style={{ fontSize:14, fontWeight:800, color:BOOKS.ink, marginBottom:6 }}>Tax-ready CSV</div>
+        <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:14 }}>
+          Income + expenses with tax categories and receipt flags, built in your browser. Opens cleanly in Excel or Sheets.
+        </div>
+        <button onClick={downloadTaxCsv} disabled={busy === 'tax'}
+          style={{ background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px 16px', fontSize:13, fontWeight:700, cursor: busy?'wait':'pointer', fontFamily:'inherit', opacity: busy === 'tax' ? 0.6 : 1 }}>
+          {busy === 'tax' ? 'Generating…' : 'Download tax CSV'}
         </button>
       </div>
     </div>
