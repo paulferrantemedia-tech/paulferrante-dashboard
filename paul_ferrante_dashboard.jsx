@@ -3541,11 +3541,16 @@ export default function App() {
     const endpoints = { reddit: '/api/reddit-pulse', videos: '/api/trending-videos', creators: '/api/creator-watch' };
     const setter = setters[section];
     setter(p => ({ ...p, loading: true, error: null }));
+    // Client-side timeout: loading must always resolve into data or an
+    // actionable error, never spin forever if the API hangs.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
     try {
       // Fresh seed every call — backend uses it to rotate sources/windows/prompts.
       // The &t= is a hard cache-buster so any intermediate cache is bypassed.
       const seed = Date.now();
-      const r = await fetch(`${endpoints[section]}?seed=${seed}&t=${seed}`, { cache: 'no-store' });
+      const r = await fetch(`${endpoints[section]}?seed=${seed}&t=${seed}`, { cache: 'no-store', signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       // Defensive: drop any null/non-object entries before storing — previously crashed Content Intel
@@ -3557,7 +3562,11 @@ export default function App() {
       }
       setter({ data: results, loading: false, error: null, fetchedAt: d.fetchedAt });
     } catch (e) {
-      setter(p => ({ ...p, loading: false, error: e.message }));
+      clearTimeout(timeoutId);
+      const msg = e && e.name === 'AbortError'
+        ? 'Request timed out — please try again.'
+        : (e && e.message) || 'Request failed — please try again.';
+      setter(p => ({ ...p, loading: false, error: msg }));
     }
   };
 

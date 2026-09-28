@@ -125,12 +125,17 @@ export default async function handler(req, res) {
   ];
   const focus = focusAreas[Math.abs(seed) % focusAreas.length];
 
-  // Try Anthropic if key is available (for fresher, more personalised data)
+  // Try Anthropic if key is available (for fresher, more personalised data).
+  // Bounded by a timeout: if Anthropic hangs, abort and fall through to the
+  // curated fallback so the panel never spins forever.
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (apiKey) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
     try {
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
+        signal: ctrl.signal,
         headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
@@ -149,11 +154,13 @@ export default async function handler(req, res) {
         if (m) {
           const results = JSON.parse(m[0]);
           if (results.length > 0) {
+            clearTimeout(timer);
             return res.json({ results, fetchedAt: new Date().toISOString(), focus, source: 'anthropic' });
           }
         }
       }
-    } catch (_) {}
+    } catch (_) { /* timeout / network error → curated fallback below */ }
+    clearTimeout(timer);
   }
 
   // Fallback — shuffle by seed so the order varies even without Anthropic
