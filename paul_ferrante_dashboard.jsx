@@ -3180,7 +3180,83 @@ function Arrow({ pct }) {
   return <span style={{ color: up ? '#16A34A' : '#DC2626', fontWeight:800 }}>{up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%</span>;
 }
 
-function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics, igConnected, ttConnected, ytConnected, flash, setFollowerEdit, analyticsWindow, setAnalyticsWindow, followerEvents, isMobile, setTab }) {
+// ── overview section chrome ──────────────────────────────────────────────
+// SecCtl: per-section collapse + up/down reorder controls (state persisted via
+// the load()/save() helpers by the App). DeepCard: a Card that deep-links to a
+// tab with pointer cursor + subtle hover affordance. RevenuePulseChart: compact
+// 2026 monthly-revenue chart with labeled axes + prior-period dashed overlay.
+function SecCtl({ collapsed, onToggle, onMove, isFirst, isLast }) {
+  const btn = dis => ({
+    background:'none', border:`1px solid ${BDR}`, borderRadius:6, width:22, height:22,
+    fontSize:11, color:SLATE, fontFamily:'inherit', padding:0,
+    display:'inline-flex', alignItems:'center', justifyContent:'center',
+    opacity: dis ? 0.35 : 1, cursor: dis ? 'default' : 'pointer',
+  });
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', gap:4, flexShrink:0 }}>
+      <button onClick={onToggle} title={collapsed ? 'expand section' : 'collapse section'} style={btn(false)}>{collapsed ? '▸' : '▾'}</button>
+      <button onClick={() => onMove(-1)} disabled={isFirst} title="move section up" style={btn(isFirst)}>↑</button>
+      <button onClick={() => onMove(1)} disabled={isLast} title="move section down" style={btn(isLast)}>↓</button>
+    </span>
+  );
+}
+function DeepCard({ tab, setTab, title, style, children }) {
+  const [hov, setHov] = useState(false);
+  const hoverStyle = hov ? { boxShadow:'0 6px 20px rgba(26,39,68,0.14)', transform:'translateY(-1px)', borderColor: BLUE } : {};
+  return (
+    <Card style={{ cursor:'pointer', transition:'box-shadow .18s ease, transform .18s ease, border-color .18s ease', ...hoverStyle, ...style }}>
+      <div role="link" tabIndex={0} title={title || (tab ? `open ${tab}` : 'open')}
+        onClick={() => { if (setTab && tab) setTab(tab); }}
+        onKeyDown={e => { if (e.key === 'Enter' && setTab && tab) setTab(tab); }}
+        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{ outline:'none' }}>
+        {children}
+      </div>
+    </Card>
+  );
+}
+// Indices of revenueByMonth entries that belong to 2026 (REVENUE_MONTHS order).
+function rev2026Idx(revenueMonths) {
+  return (revenueMonths || []).map((x, i) => (x && x.y === 2026 ? i : -1)).filter(i => i >= 0);
+}
+function RevenuePulseChart({ revenueByMonth, revenueMonths, isMobile, setTab }) {
+  const idx = rev2026Idx(revenueMonths);
+  const rows = idx.map((ri, k) => ({
+    m: (revenueByMonth[ri] || {}).m || '',
+    r: (revenueByMonth[ri] || {}).r || 0,
+    // prior-period overlay: the 4 months preceding jan 2026 (nov 2025 – feb 2026), aligned by index
+    prev: (revenueByMonth[k] || {}).r || 0,
+  }));
+  const total26 = rows.reduce((s, x) => s + x.r, 0);
+  if (!rows.length) return null;
+  return (
+    <DeepCard tab="revenue" setTab={setTab} title="open revenue">
+      <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:6 }}>
+        <div style={{ fontSize:10, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>revenue pulse · 2026</div>
+        <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>{usd(total26)} <span style={{ fontSize:10, fontWeight:600, color:SLATE }}>ytd</span></div>
+      </div>
+      <ResponsiveContainer width="100%" height={isMobile ? 120 : 150}>
+        <AreaChart data={rows} margin={{ top:4, right:8, bottom:20, left:4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
+          <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555', fontSize:10 }}
+            label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#94A3B8' }} />
+          <YAxis stroke="#333" tick={{ fill:'#555', fontSize:10 }} tickFormatter={v => `$${v}`} width={48}
+            label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#94A3B8' }} />
+          <Tooltip contentStyle={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, fontSize:12 }}
+            formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period' : '2026']} />
+          <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
+          <Area type="monotone" dataKey="r" name="r" stroke={BLUE} strokeWidth={2} fill={BLUE} fillOpacity={0.12} />
+        </AreaChart>
+      </ResponsiveContainer>
+      <div style={{ display:'flex', gap:14, marginTop:4, fontSize:10, color:SLATE, flexWrap:'wrap' }}>
+        <span><span style={{ display:'inline-block', width:14, height:3, background:BLUE, borderRadius:2, marginRight:5, verticalAlign:'middle' }} />2026</span>
+        <span><span style={{ display:'inline-block', width:14, borderTop:`2px dashed ${SLATE}`, marginRight:5, verticalAlign:'middle' }} />prior period (nov 2025 – feb 2026)</span>
+      </div>
+    </DeepCard>
+  );
+}
+
+function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAnalytics, ttAnalytics, ytAnalytics, igConnected, ttConnected, ytConnected, flash, setFollowerEdit, analyticsWindow, setAnalyticsWindow, followerEvents, isMobile, setTab, secCtl, collapsed, revenueByMonth, revenueMonths }) {
   const connected = { ig: igConnected, tt: ttConnected, yt: ytConnected };
   const N = WIN_DAYS[analyticsWindow] || 7;
   const today = pacDate();
@@ -3268,13 +3344,23 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
     </div>
   );
 
+  const headerEl = (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>trends</div>
+        {secCtl}
+      </div>
+      <div style={{ display:'flex', gap:6 }}>{['24h', '7d', '30d'].map(winBtn)}</div>
+    </div>
+  );
+  if (collapsed) return headerEl;
+
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-      {/* window toggle (applies to the whole delta layer) */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-        <Label>trends</Label>
-        <div style={{ display:'flex', gap:6 }}>{['24h', '7d', '30d'].map(winBtn)}</div>
-      </div>
+      {headerEl}
+
+      {/* revenue pulse — 2026 monthly revenue w/ prior-period overlay (deep-links to revenue) */}
+      <RevenuePulseChart revenueByMonth={revenueByMonth} revenueMonths={revenueMonths} isMobile={isMobile} setTab={setTab} />
 
       {/* Zone 1 — audience pulse */}
       <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
@@ -3323,14 +3409,14 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
         <Label>per-platform health · {analyticsWindow}</Label>
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {PLAT_META.map(({ k, label, Logo }) => (
-            <Card key={k}>
+            <DeepCard key={k} tab="analytics" setTab={setTab} title="open analytics">
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}><Logo size={16} /><span style={{ fontSize:12, fontWeight:800, color:TEXT }}>{label}</span></div>
               <div style={{ display:'flex', gap: isMobile ? 12 : 20, flexWrap:'wrap' }}>
                 {/* Followers delta intentionally NOT shown here — it lives only in the merged top section (dedupe rule) */}
                 {cell('Engagement', delta(k, 'e'), curVals[k].e, x => `${x}%`, 'e', k)}
                 {cell('Avg Views', delta(k, 'v'), curVals[k].v, fmtViews, 'v', k)}
               </div>
-            </Card>
+            </DeepCard>
           ))}
         </div>
       </div>
@@ -3830,6 +3916,11 @@ export default function App() {
   // f=followers, e=avgEngRate, v=avgViews. Persisted to localStorage + Vercel KV.
   const [snapshots,       setSnapshots]       = useState(() => load('pf_snapshots', {}));
   const [analyticsWindow, setAnalyticsWindow] = useState('7d'); // '24h' | '7d' | '30d'
+  // overview sections: collapse + reorder state (persisted); revenue tab filters
+  const [ovOrder, setOvOrder] = useState(() => load('ovOrder', ['trends', 'revenue', 'milestones', 'deals']));
+  const [ovCollapsed, setOvCollapsed] = useState(() => load('ovCollapsed', {}));
+  const [revPlatform, setRevPlatform] = useState('All');
+  const [revBrandQ, setRevBrandQ] = useState('');
   const [followerEvents,  setFollowerEvents]  = useState([]);   // {t, plat, delta} live changes
   const [ytConnected, setYtConnected] = useState(false);
   const [igConnected, setIgConnected] = useState(false);
@@ -6697,44 +6788,90 @@ function ExportTab({ data, year }) {
         <div style={{ flex:1,padding:isMobile?'16px 16px 80px':'28px 32px',overflowY:'auto',background:'#FFFFFF' }}>
 
         {/* ══ OVERVIEW ══════════════════════════════════════════ */}
-        {tab === 'overview' && (
-          <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
+        {tab === 'overview' && (() => {
+          // ── overview sections: collapsible + reorderable (order/collapsed persisted) ──
+          const OV_IDS = ['trends', 'revenue', 'milestones', 'deals'];
+          const ovOrderSafe = (Array.isArray(ovOrder) ? ovOrder.filter(id => OV_IDS.includes(id)) : []);
+          OV_IDS.forEach(id => { if (!ovOrderSafe.includes(id)) ovOrderSafe.push(id); });
+          const ovC = ovCollapsed || {};
+          const toggleSec = id => { const n = { ...ovC, [id]: !ovC[id] }; setOvCollapsed(n); save('ovCollapsed', n); };
+          const moveSec = (i, dir) => {
+            const n = [...ovOrderSafe]; const j = i + dir;
+            if (j < 0 || j >= n.length) return;
+            const t = n[i]; n[i] = n[j]; n[j] = t;
+            setOvOrder(n); save('ovOrder', n);
+          };
+          const mkCtl = (id, i) => (
+            <SecCtl collapsed={!!ovC[id]} onToggle={() => toggleSec(id)} onMove={dir => moveSec(i, dir)}
+              isFirst={i === 0} isLast={i === ovOrderSafe.length - 1} />
+          );
+          // 2026 monthly revenue for the glance sparkline + MoM delta
+          const idx26 = rev2026Idx(REVENUE_MONTHS);
+          const vals26 = idx26.map(i => (revenueByMonth[i] || {}).r || 0);
+          const momAbs = vals26.length >= 2 ? vals26[vals26.length - 1] - vals26[vals26.length - 2] : null;
+          const momLbl = idx26.length >= 2 ? `${(revenueByMonth[idx26[idx26.length - 1]] || {}).m} vs ${(revenueByMonth[idx26[idx26.length - 2]] || {}).m}` : '';
 
-            {/* Audience / engagement / avg-views delta layer (24h/7d/30d) */}
-            <OverviewDeltaLayer
-              snapshots={snapshots}
-              igFollowers={igFollowers} ttFollowers={ttFollowers} ytSubs={ytSubs}
-              igAnalytics={igAnalytics} ttAnalytics={ttAnalytics} ytAnalytics={ytAnalytics}
-              igConnected={igConnected} ttConnected={ttConnected} ytConnected={ytConnected}
-              flash={flash} setFollowerEdit={setFollowerEdit}
-              analyticsWindow={analyticsWindow} setAnalyticsWindow={setAnalyticsWindow}
-              followerEvents={followerEvents} isMobile={isMobile} setTab={setTab} />
+          const secBody = (id, i) => {
+            const ctl = mkCtl(id, i);
+            if (id === 'trends') return (
+              <OverviewDeltaLayer
+                snapshots={snapshots}
+                igFollowers={igFollowers} ttFollowers={ttFollowers} ytSubs={ytSubs}
+                igAnalytics={igAnalytics} ttAnalytics={ttAnalytics} ytAnalytics={ytAnalytics}
+                igConnected={igConnected} ttConnected={ttConnected} ytConnected={ytConnected}
+                flash={flash} setFollowerEdit={setFollowerEdit}
+                analyticsWindow={analyticsWindow} setAnalyticsWindow={setAnalyticsWindow}
+                followerEvents={followerEvents} isMobile={isMobile} setTab={setTab}
+                secCtl={ctl} collapsed={!!ovC[id]}
+                revenueByMonth={revenueByMonth} revenueMonths={REVENUE_MONTHS} />
+            );
+            if (id === 'revenue') return (
+              <div>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                  <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>revenue</div>
+                  {ctl}
+                </div>
+                {!ovC[id] && (
+                <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
+                  <DeepCard tab="revenue" setTab={setTab} title="open revenue" style={{ borderLeft:`3px solid ${BLUE}` }}>
+                    <div style={{ fontSize:10,color:'#0E6A80',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned (2026)</div>
+                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#0E6A80' }}>{usd(totalRevenue2026)}</div>
+                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{paidDeals2026.length} deals</div>
+                    {momAbs != null && (
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, flexWrap:'wrap' }}>
+                        <span style={{ fontSize:11, fontWeight:800, color: momAbs >= 0 ? '#16A34A' : '#DC2626' }}>
+                          {momAbs >= 0 ? '▲ +' : '▼ '}{usd(Math.abs(momAbs))}
+                        </span>
+                        <span style={{ fontSize:10, color:'#94A3B8' }}>{momLbl} mom</span>
+                        <Sparkline values={vals26} up={momAbs >= 0} />
+                      </div>
+                    )}
+                  </DeepCard>
+                  <DeepCard tab="deals" setTab={setTab} title="open deals" style={{ borderLeft:`3px solid ${YELL}` }}>
+                    <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
+                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
+                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{deals.filter(d=>d.s==='Pitching').length} pitches</div>
+                  </DeepCard>
+                  {!isMobile && (
+                    <DeepCard tab="deals" setTab={setTab} title="open deals" style={{ borderLeft:'3px solid #5DBF8A' }}>
+                      <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
+                      <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
+                      <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
+                    </DeepCard>
+                  )}
+                </div>
+                )}
+              </div>
+            );
 
-            {/* Revenue stats */}
-            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
-              <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
-                <div style={{ fontSize:10,color:'#0E6A80',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned</div>
-                <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#0E6A80' }}>{usd(totalRevenue)}</div>
-                <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{paidDeals.length} deals</div>
-              </Card>
-              <Card style={{ borderLeft:`3px solid ${YELL}` }}>
-                <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
-                <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
-                <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{deals.filter(d=>d.s==='Pitching').length} pitches</div>
-              </Card>
-              {!isMobile && (
-                <Card style={{ borderLeft:`3px solid #5DBF8A` }}>
-                  <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
-                  <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
-                  <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
-                </Card>
-              )}
-            </div>
-
-            {/* Milestones + Why We Do This */}
-            <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'1fr 1fr',gap:gutter }}>
+            if (id === 'milestones') return (
               <Card>
-                <Label>milestones 🏆</Label>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                  <Label>milestones 🏆</Label>
+                  {ctl}
+                </div>
+                {!ovC[id] && (
+                <div>
 
                 {/* Completed milestones — full-width banners stacked at top */}
                 {liveMilestones.filter(m => m.done).map(m => (
@@ -6839,19 +6976,22 @@ function ExportTab({ data, year }) {
                     </div>
                   );
                 })()}
+                </div>
+                )}
               </Card>
-
-
-            </div>
-
-            {/* Active Deals Snapshot */}
-            <Card>
-              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
-                <Label>active deals</Label>
-                <button onClick={() => setDealModal({ ...EMPTY_DEAL })} style={{ background:'none',border:`1px solid ${BLUE}44`,color:BLUE,borderRadius:8,padding:'6px 14px',fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600 }}>
-                  + New Deal
-                </button>
-              </div>
+            );
+            if (id === 'deals') return (
+              <Card>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span onClick={() => setTab('deals')} title="open deals" style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, cursor:'pointer' }}>active deals</span>
+                    {ctl}
+                  </div>
+                  <button onClick={() => setDealModal({ ...EMPTY_DEAL })} style={{ background:'none',border:`1px solid ${BLUE}44`,color:BLUE,borderRadius:8,padding:'6px 14px',fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600 }}>
+                    + New Deal
+                  </button>
+                </div>
+                {!ovC[id] && (
               <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)',gap:isMobile?10:12 }}>
                 {deals.filter(d=>['Pitching','Awaiting Approval'].includes(d.s)).slice(0,isMobile?4:8).map(d => (
                   <div key={d.id} onClick={() => setDealModal({ ...d })}
@@ -6861,10 +7001,18 @@ function ExportTab({ data, year }) {
                     <Tag color={statusColor(d.s)}>{d.s}</Tag>
                   </div>
                 ))}
-              </div>
-            </Card>
-          </div>
-        )}
+                </div>
+                )}
+              </Card>
+            );
+            return null;
+          };
+          return (
+            <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
+              {ovOrderSafe.map((id, i) => <div key={id}>{secBody(id, i)}</div>)}
+            </div>
+          );
+        })()}
 
         {/* ══ BRAND DEALS ═══════════════════════════════════════ */}
         {tab === 'deals' && (
@@ -7211,14 +7359,40 @@ function ExportTab({ data, year }) {
         )}
 
         {/* ══ REVENUE ═══════════════════════════════════════════ */}
-        {tab === 'revenue' && (
+        {tab === 'revenue' && (() => {
+          // ── honest year framing: KPIs + chart scoped to 2026; 2025 shown only as labeled context ──
+          const yr = new Date().getFullYear();
+          const idx26r = rev2026Idx(REVENUE_MONTHS);
+          const rev26 = idx26r.map(i => revenueByMonth[i]);
+          let bestI = 0;
+          rev26.forEach((d, i) => { if (((d || {}).r || 0) > ((rev26[bestI] || {}).r || 0)) bestI = i; });
+          const best26 = rev26[bestI] || { m:'—', r:0 };
+          // chart rows: 2026 solid; dashed overlay = prior 4-month period aligned by index
+          const revRows = idx26r.map((ri, k) => ({
+            m: (revenueByMonth[ri] || {}).m || '',
+            r: (revenueByMonth[ri] || {}).r || 0,
+            prev: (revenueByMonth[k] || {}).r || 0,
+          }));
+          const nov25 = (revenueByMonth[0] || {}).r || 0;
+          const dec25 = (revenueByMonth[1] || {}).r || 0;
+          const paid2025 = paidDeals.filter(d => dealYear(d.d, yr) === 2025);
+          // accounts receivable: delivered / awaiting approval with a value
+          const arDeals = deals
+            .filter(d => ['Delivered', 'Awaiting Approval'].includes(canonStage(d.s)) && dealAmount(d.v) > 0)
+            .sort((a, b) => dealAmount(b.v) - dealAmount(a.v));
+          const arTotal = arDeals.reduce((s, d) => s + dealAmount(d.v), 0);
+          const compDeals = paidDeals2026.filter(d =>
+            (revPlatform === 'All' || d.p === revPlatform) &&
+            (!revBrandQ.trim() || (d.b || '').toLowerCase().includes(revBrandQ.trim().toLowerCase())));
+          const filtStyle = { background:'#fff', border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 10px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' };
+          return (
           <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:gutter }}>
               {[
                 { lbl:'Total Earned (2026)',  val:usd(totalRevenue2026),           color:BLUE,      sub:`${paidDeals2026.length} paid deals` },
                 { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${deals.filter(d=>d.s==='Pitching').length} pitches` },
                 { lbl:'Avg Deal Value',       val:usd(totalRevenue2026/Math.max(paidDeals2026.length,1)), color:'#a78bfa', sub:'paid deals only' },
-                { lbl:'Best Month',           val:'$2,600',                       color:'#4ade80', sub:'November 2025' },
+                { lbl:'Best Month (2026)',    val:usd(best26.r),                  color:'#4ade80', sub:`${best26.m} 2026` },
               ].map(({ lbl, val, color, sub }) => (
                 <Card key={lbl} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
                   <div style={{ fontSize:9,color,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
@@ -7228,9 +7402,15 @@ function ExportTab({ data, year }) {
               ))}
             </div>
             <Card>
-              <Label>monthly revenue (Nov 2025 – Apr 2026)</Label>
-              <ResponsiveContainer width="100%" height={isMobile?160:220}>
-                <AreaChart data={revenueByMonth}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                <Label>monthly revenue (2026)</Label>
+                <div style={{ display:'flex', gap:14, fontSize:10, color:SLATE, marginBottom:14, flexWrap:'wrap' }}>
+                  <span><span style={{ display:'inline-block', width:14, height:3, background:BLUE, borderRadius:2, marginRight:5, verticalAlign:'middle' }} />2026</span>
+                  <span><span style={{ display:'inline-block', width:14, borderTop:`2px dashed ${SLATE}`, marginRight:5, verticalAlign:'middle' }} />prior period</span>
+                </div>
+              </div>
+              <ResponsiveContainer width="100%" height={isMobile?170:230}>
+                <AreaChart data={revRows} margin={{ top:4, right:8, bottom:20, left:4 }}>
                   <defs>
                     <linearGradient id="rg" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={BLUE} stopOpacity={0.28} />
@@ -7238,21 +7418,58 @@ function ExportTab({ data, year }) {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
-                  <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555',fontSize:11 }} />
-                  <YAxis stroke="#333" tick={{ fill:'#555',fontSize:11 }} tickFormatter={v=>`$${v}`} />
-                  <Tooltip contentStyle={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:8,fontSize:12 }} formatter={v=>[usd(v),'Revenue']} />
-                  <Area type="monotone" dataKey="r" stroke={BLUE} strokeWidth={2} fill="url(#rg)" />
+                  <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555',fontSize:11 }}
+                    label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#94A3B8' }} />
+                  <YAxis stroke="#333" tick={{ fill:'#555',fontSize:11 }} tickFormatter={v=>`$${v}`} width={48}
+                    label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#94A3B8' }} />
+                  <Tooltip contentStyle={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:8,fontSize:12 }}
+                    formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period (nov 2025 – feb 2026)' : '2026']} />
+                  <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
+                  <Area type="monotone" dataKey="r" name="r" stroke={BLUE} strokeWidth={2} fill="url(#rg)" />
                 </AreaChart>
               </ResponsiveContainer>
+              <div style={{ fontSize:10, color:'#94A3B8', marginTop:6 }}>dashed line: prior 4-month period (nov 2025 – feb 2026), aligned by month index</div>
             </Card>
             <Card>
-              <Label>completed deals</Label>
-              {paidDeals.map(d => (
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8 }}>
+                <Label>accounts receivable</Label>
+                <div style={{ fontSize:18, fontWeight:800, color:YELL, marginBottom:14 }}>{usd(arTotal)}</div>
+              </div>
+              <div style={{ fontSize:11, color:SLATE, marginTop:-8, marginBottom:10 }}>delivered or awaiting approval · not yet paid</div>
+              {arDeals.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>nothing outstanding — nice.</div>}
+              {arDeals.map(d => (
+                <div key={d.id} onClick={() => setDealModal({ ...d })}
+                  style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:isMobile?13:14,fontWeight:600,marginBottom:4 }}>{d.b}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <Tag color={statusColor(d.s)}>{d.s}</Tag>
+                      {d.invoiceUrl && <a href={d.invoiceUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ fontSize:10,color:'#E1D9AE',textDecoration:'none',fontWeight:600 }}>🧾 invoice</a>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:YELL,flexShrink:0,marginLeft:12 }}>{usd(dealAmount(d.v))}</div>
+                </div>
+              ))}
+            </Card>
+            <Card>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                <Label>completed deals (2026)</Label>
+                <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+                  <input value={revBrandQ} onChange={e => setRevBrandQ(e.target.value)} placeholder="filter brand…"
+                    style={{ ...filtStyle, flex:'1 1 140px' }} />
+                  <select value={revPlatform} onChange={e => setRevPlatform(e.target.value)}
+                    style={{ ...filtStyle, cursor:'pointer' }}>
+                    {dealPlatforms.map(p => <option key={p} value={p}>{p === 'All' ? 'all platforms' : p}</option>)}
+                  </select>
+                </div>
+              </div>
+              {compDeals.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>no completed deals match the current filters.</div>}
+              {compDeals.map(d => (
                 <div key={d.id} onClick={() => setDealModal({ ...d })}
                   style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
                   <div>
                     <div style={{ fontSize:isMobile?13:14,fontWeight:600,marginBottom:4 }}>{d.b}</div>
-                    <div style={{ fontSize:11,color:'#64748B' }}>{d.p} · {d.d}</div>
+                    <div style={{ fontSize:11,color:'#64748B' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
                   </div>
                   <div style={{ textAlign:'right',flexShrink:0,marginLeft:12 }}>
                     <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:'#4ade80' }}>{usd(d.v)}</div>
@@ -7261,8 +7478,33 @@ function ExportTab({ data, year }) {
                 </div>
               ))}
             </Card>
+            <Card style={{ background:'#F8FAFC' }}>
+              <Label>prior-year context</Label>
+              <div style={{ fontSize:11, color:SLATE, marginBottom:10 }}>nov 2025 income is shown here for context only — it is not counted in any 2026 total.</div>
+              <div style={{ display:'flex', gap:24, flexWrap:'wrap', marginBottom: paid2025.length ? 10 : 0 }}>
+                <div>
+                  <div style={{ fontSize:10, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>nov 2025</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:TEXT }}>{usd(nov25)}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>dec 2025</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:TEXT }}>{usd(dec25)}</div>
+                </div>
+              </div>
+              {paid2025.map(d => (
+                <div key={d.id} onClick={() => setDealModal({ ...d })}
+                  style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
+                  <div>
+                    <div style={{ fontSize:13,fontWeight:600,marginBottom:2 }}>{d.b}</div>
+                    <div style={{ fontSize:11,color:'#64748B' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
+                  </div>
+                  <div style={{ fontSize:16,fontWeight:800,color:'#4ade80',flexShrink:0,marginLeft:12 }}>{usd(d.v)}</div>
+                </div>
+              ))}
+            </Card>
           </div>
-        )}
+          );
+        })()}
 
 
 
