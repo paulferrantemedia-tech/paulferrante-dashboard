@@ -3958,6 +3958,13 @@ export default function App() {
   const [editCrmId,       setEditCrmId]       = useState(null);
   const [crmBuf,          setCrmBuf]          = useState({});
   const [crmFilter,       setCrmFilter]       = useState({ search:'', status:'All', type:'All', country:'All', niche:'All' });
+  // ── CRM re-engagement + email drafts (child-6) ──────────
+  const [crmDraftLog,   setCrmDraftLog]   = useState(() => load('pf_crm_draft_log', [])); // logged drafts, never sent
+  const [draftComposer, setDraftComposer] = useState(null);                             // {contactId, template, subject, body, showHistory}
+  // ── Deliverables: files + timeline view (child-6) ───────
+  const [delivFiles,    setDelivFiles]    = useState(() => load('pf_deliv_files', {}));   // {delivKey: [{v,name,size,ts,dataUrl}]}
+  const [delivView,     setDelivView]     = useState('list');                             // 'list' | 'timeline'
+  const [expandedDeliv, setExpandedDeliv] = useState(null);                              // deliv key with files panel open
   const [pendingCrmBrand, setPendingCrmBrand] = useState(null); // { b, v, del } after deal save
   const [editDelivId,  setEditDelivId]  = useState(null);
   const [delivBuf,     setDelivBuf]     = useState({});
@@ -7532,11 +7539,184 @@ function ExportTab({ data, year }) {
           const activeCount  = crm.filter(c => c.s === 'Active Partner').length;
           const warmCount    = crm.filter(c => c.s === 'Warm Lead').length;
           const paidCount    = crm.filter(c => c.paidDeal).length;
+          // ── Re-engagement nudges (child-6) ─────────────────
+          // Last touch is derived from the existing c.lastDate field (no new
+          // field added; null = unknown). Cooldowns: 30d for partners and past
+          // respondents, 45d for unanswered pitches. Declined contacts never nudge.
+          const tinyBtn = { background:'none', border:`1px solid ${BDR}`, borderRadius:6, padding:'3px 8px', fontSize:10, color:SLATE, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' };
+          const daysSince = iso => { if (!iso) return null; const t = new Date(iso); if (isNaN(t)) return null; return Math.floor((Date.now() - t.getTime()) / 86400000); };
+          const nudgeTier = c => c.s === 'Declined' ? null : (c.s === 'Active Partner' || c.paidDeal) ? 'partner' : c.s === 'Warm Lead' ? 'respondent' : 'pitch';
+          const nudgeInfo = c => {
+            const tier = nudgeTier(c);
+            if (!tier) return null;
+            const cooldown = tier === 'pitch' ? 45 : 30;
+            const days = daysSince(c.lastDate);
+            if (days === null) return tier === 'pitch' ? null : { tier, cooldown, days:null, due:true, unknown:true };
+            return { tier, cooldown, days, due: days >= cooldown, unknown:false };
+          };
+          const dueNudges = crm.map(c => ({ c, n: nudgeInfo(c) }))
+            .filter(x => x.n && x.n.due)
+            .sort((a, b) => {
+              const rank = { partner:0, respondent:1, pitch:2 };
+              const r = rank[a.n.tier] - rank[b.n.tier];
+              if (r !== 0) return r;
+              const da = a.n.days === null ? -1 : a.n.days, db = b.n.days === null ? -1 : b.n.days;
+              return db - da;
+            });
+          const nudgeWhy = (c, n) => {
+            const bits = [];
+            if (n.tier === 'partner') bits.push(c.paidDeal ? 'past paid partner' : 'active partner');
+            else if (n.tier === 'respondent') bits.push('warm lead - they replied before');
+            else bits.push('unanswered pitch');
+            if (c.dealValue > 0) bits.push(`$${c.dealValue.toLocaleString()} potential`);
+            bits.push(n.unknown ? 'last touch unknown' : `${n.days}d since last touch (cooldown ${n.cooldown}d)`);
+            return bits.join(' · ');
+          };
+          const markTouched = c => {
+            const today = new Date().toISOString().slice(0,10);
+            const label = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+            setCrm(prev => prev.map(x => x.id === c.id ? { ...x, lastDate: today, last: label } : x));
+            showToast('marked as touched today');
+          };
+          // ── Email verification affordance (child-6) ────────
+          // Manual toggle only. No external verification API is called; the
+          // state is stored per contact as c.emailOk ('verified' | 'flagged').
+          const hasUsableEmail = c => !!(c.e && c.e.includes('@'));
+          const emailFlaggedNote = c => /wrong email|may not be correct/i.test(c.note || '');
+          const setEmailOk = (c, v) => {
+            setCrm(prev => prev.map(x => x.id === c.id ? { ...x, emailOk: v } : x));
+            showToast(v === 'verified' ? 'marked verified - manual check only' : v === 'flagged' ? 'flagged as wrong email' : 'email check cleared');
+          };
+          const emailCheckCtl = c => (
+            <div style={{ marginTop:4, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }} title="manual check only - no automated verification is performed">
+              {c.emailOk === 'verified' && <Tag color="#96C9AA">✓ verified</Tag>}
+              {c.emailOk === 'flagged' && <Tag color="#C9A0A0">⚠ flagged wrong</Tag>}
+              {c.emailOk !== 'verified' && <button onClick={() => setEmailOk(c, 'verified')} style={tinyBtn}>mark verified</button>}
+              {c.emailOk !== 'flagged' && <button onClick={() => setEmailOk(c, 'flagged')} style={tinyBtn}>flag wrong</button>}
+              {c.emailOk && <button onClick={() => setEmailOk(c, null)} style={tinyBtn}>clear</button>}
+            </div>
+          );
+          // ── Email templates + draft composer (child-6) ─────
+          // UI + logging only. Nothing here sends email, ever. The mailto: link
+          // opens Paul's own email app; "log draft" only records the draft below.
+          const EMAIL_TEMPLATES = [
+            { key:'partner', label:'partner check-in (value-first)',
+              subject:'an idea for {{brand}}',
+              body:'hi {{name}},\n\nwas thinking about {{brand}} this week and had a fun idea i wanted to run by you. i just wrapped something my audience loved and i think there is a version of it with {{brand}} that could really work.\n\nopen to a quick chat next week?\n\npaul' },
+            { key:'warm', label:'warm lead follow-up',
+              subject:'following up',
+              body:'hi {{name}},\n\ncircling back on my last note. no pressure at all, just wanted to share one quick thought: {{idea}}.\n\nhappy to send over a couple examples of similar stuff i have done if helpful.\n\npaul' },
+            { key:'cold', label:'cold re-pitch (45d+)',
+              subject:'quick intro',
+              body:'hi {{name}},\n\ni am paul, a travel and lifestyle creator who makes comedy content (skits about everyday life). i have been loving what {{brand}} has been up to lately.\n\nwould love to know if you are open to a potential brand partnership. here are a few examples of my content, to give you a feel for it: {{links}}\n\nmy website: https://paulferrante-media-kit.vercel.app/\n\npaul' },
+            { key:'timely', label:'timely hook / congrats',
+              subject:'loved what {{brand}} just did',
+              body:'hi {{name}},\n\nsaw {{brand}} in the news this week and it got me thinking about a fun angle with my audience that i think you would like.\n\nwant me to send over a quick one pager?\n\npaul' },
+          ];
+          const fillTpl = (tpl, c) => {
+            const name = (c.n && c.n !== '—') ? String(c.n).split(' ')[0] : 'there';
+            const sub = s => String(s).replace(/{{name}}/g, name).replace(/{{brand}}/g, c.b || '');
+            return { subject: sub(tpl.subject), body: sub(tpl.body) };
+          };
+          const openDraft = (c, tplKey) => {
+            const tier = nudgeTier(c);
+            const def = { partner:'partner', respondent:'warm', pitch:'cold' }[tier] || 'cold';
+            const tpl = EMAIL_TEMPLATES.find(t => t.key === (tplKey || def)) || EMAIL_TEMPLATES[0];
+            const f = fillTpl(tpl, c);
+            setDraftComposer({ contactId: c.id, template: tpl.key, subject: f.subject, body: f.body, showHistory:false });
+            setTimeout(() => { const el = document.getElementById('crm-draft-composer'); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); }, 80);
+          };
+          const logDraft = () => {
+            if (!draftComposer) return;
+            const c = crm.find(x => x.id === draftComposer.contactId) || {};
+            const entry = {
+              id: Date.now(), ts: new Date().toISOString(),
+              to: hasUsableEmail(c) ? c.e : `${(c.n && c.n !== '—' ? c.n + ' - ' : '')}${c.b || ''}`,
+              brand: c.b || '', contactId: draftComposer.contactId, template: draftComposer.template,
+              subject: draftComposer.subject || '', body: draftComposer.body || '',
+            };
+            const next = [entry, ...(crmDraftLog || [])];
+            setCrmDraftLog(next); save('pf_crm_draft_log', next);
+            showToast('draft logged - nothing was sent');
+          };
+          const deleteLoggedDraft = id => {
+            const next = (crmDraftLog || []).filter(d => d.id !== id);
+            setCrmDraftLog(next); save('pf_crm_draft_log', next);
+          };
           // EditForm hoisted to a stable top-level component (CrmEditForm) so it
           // is NOT recreated on every render — that recreation was remounting the
           // inputs and dropping focus after each keystroke.
           return (
             <div>
+              {/* ── Email draft composer (child-6): UI + logging only, never sends ── */}
+              {draftComposer && (() => {
+                const c = crm.find(x => x.id === draftComposer.contactId) || {};
+                const usable = hasUsableEmail(c);
+                const href = usable ? `mailto:${c.e}?subject=${encodeURIComponent(draftComposer.subject||'')}&body=${encodeURIComponent(draftComposer.body||'')}` : null;
+                const lbl = { fontSize:10, color:SLATE, marginBottom:4, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700 };
+                return (
+                  <div id="crm-draft-composer">
+                    <Card style={{ marginBottom:gutter, border:`1px solid ${BLUE}55` }}>
+                      <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:4 }}>✉ email draft - manual send only</div>
+                      <div style={{ fontSize:11, color:SLATE, marginBottom:12 }}>nothing is sent automatically. logging only records the draft below; you send it yourself from your email app.</div>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:10 }}>
+                        <div style={{ fontSize:12 }}><span style={{ color:SLATE }}>to: </span><span style={{ fontWeight:700 }}>{usable ? c.e : 'no email on file'}</span>{c.b && <span style={{ color:SLATE }}> · {(c.n && c.n !== '—') ? `${c.n} · ` : ''}{c.b}</span>}</div>
+                        {c.emailOk === 'flagged' && <Tag color="#C9A0A0">⚠ email flagged as wrong - double-check before sending</Tag>}
+                        {c.emailOk === 'verified' && <Tag color="#96C9AA">✓ verified (manual check)</Tag>}
+                      </div>
+                      <div style={{ marginBottom:10 }}>
+                        <div style={lbl}>template</div>
+                        <select value={draftComposer.template}
+                          onChange={e => { const tpl = EMAIL_TEMPLATES.find(t => t.key === e.target.value); const f = fillTpl(tpl, c); setDraftComposer(p => ({ ...p, template: tpl.key, subject: f.subject, body: f.body })); }}
+                          style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
+                          {EMAIL_TEMPLATES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ marginBottom:10 }}>
+                        <div style={lbl}>subject</div>
+                        <Inp value={draftComposer.subject||''} onChange={v => setDraftComposer(p => ({ ...p, subject: v }))} />
+                      </div>
+                      <div style={{ marginBottom:10 }}>
+                        <div style={lbl}>body</div>
+                        <textarea value={draftComposer.body||''} onChange={e => setDraftComposer(p => ({ ...p, body: e.target.value }))} rows={9}
+                          style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', resize:'vertical', lineHeight:1.6 }} />
+                      </div>
+                      <div style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'12px 14px', marginBottom:12 }}>
+                        <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:8, fontWeight:700 }}>preview - exact send copy</div>
+                        <div style={{ fontSize:12, marginBottom:4 }}><span style={{ color:SLATE }}>to: </span>{usable ? c.e : 'no email on file'}</div>
+                        <div style={{ fontSize:12, marginBottom:8 }}><span style={{ color:SLATE }}>subject: </span>{draftComposer.subject}</div>
+                        <div style={{ fontSize:12, whiteSpace:'pre-wrap', lineHeight:1.6 }}>{draftComposer.body}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                        <button onClick={logDraft} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:8, padding:'9px 18px', fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>log draft</button>
+                        {href && <a href={href} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 18px', fontSize:12, fontWeight:700, textDecoration:'none', fontFamily:'inherit' }}>open in email app →</a>}
+                        {!href && <span style={{ fontSize:11, color:SLATE }}>add an email to the contact to use the mailto shortcut</span>}
+                        <button onClick={() => setDraftComposer(null)} style={{ background:'none', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 14px', color:SLATE, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>close</button>
+                      </div>
+                      <div style={{ marginTop:14 }}>
+                        <button onClick={() => setDraftComposer(p => ({ ...p, showHistory: !p.showHistory }))} style={tinyBtn}>
+                          logged drafts ({(crmDraftLog||[]).length}) {draftComposer.showHistory ? '▾' : '▸'}
+                        </button>
+                        {draftComposer.showHistory && (
+                          <div style={{ marginTop:8 }}>
+                            {(crmDraftLog||[]).length === 0 && <div style={{ fontSize:11, color:SLATE }}>no drafts logged yet.</div>}
+                            {(crmDraftLog||[]).map(d => (
+                              <div key={d.id} style={{ border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 12px', marginBottom:6 }}>
+                                <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'center' }}>
+                                  <div style={{ fontSize:11 }}><span style={{ fontWeight:700 }}>{d.subject}</span> <span style={{ color:SLATE }}>· to {d.to}</span></div>
+                                  <button onClick={() => deleteLoggedDraft(d.id)} style={tinyBtn}>delete</button>
+                                </div>
+                                <div style={{ fontSize:10, color:SLATE, marginTop:2 }}>{new Date(d.ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} · {d.brand} · template: {d.template}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  </div>
+                );
+              })()}
+
               {/* ── Header ── */}
               <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
                 <div>
@@ -7558,10 +7738,33 @@ function ExportTab({ data, year }) {
                       <Tag color={statusColor(c.s)} style={{ marginBottom:6 }}>{c.s}</Tag>
                       <div style={{ fontSize:10,color:SLATE,lineHeight:1.5,marginTop:4 }}>{crmWhy(c)}</div>
                       {c.e && c.e !== 'TikTok DM' && c.e !== 'n/a' && <div style={{ fontSize:10,color:BLUE,marginTop:6 }}>{c.e}</div>}
+                      <button onClick={e => { e.stopPropagation(); openDraft(c); }} style={{ marginTop:8,width:'100%',background:'none',border:`1px solid ${BLUE}66`,borderRadius:7,padding:'6px 8px',color:BLUE,fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit' }}>✉ draft follow-up</button>
                     </div>
                   ))}
                 </div>
               </Card>
+
+              {/* ── Re-engagement nudges (child-6) ── */}
+              {dueNudges.length > 0 && (
+                <Card style={{ marginBottom:gutter }}>
+                  <div style={{ fontSize:10, color:YELL, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:4 }}>⏰ re-engagement nudges - {dueNudges.length} due</div>
+                  <div style={{ fontSize:11, color:SLATE, marginBottom:12 }}>30-day cooldown for partners and past respondents · 45-day for unanswered pitches · keep every touch value-first</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {dueNudges.slice(0, 10).map(({ c, n }) => (
+                      <div key={c.id} style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap', border:`1px solid ${BDR}`, borderRadius:8, padding:'10px 14px', background:`${OCEAN}22` }}>
+                        <div style={{ flex:1, minWidth:180 }}>
+                          <div style={{ fontSize:13, fontWeight:800 }}>{c.b}{(c.n && c.n !== '—') ? <span style={{ fontWeight:400, color:SLATE }}> · {c.n}</span> : null}</div>
+                          <div style={{ fontSize:11, color:SLATE, marginTop:2 }}>{nudgeWhy(c, n)}</div>
+                        </div>
+                        <Tag color={n.tier === 'partner' ? '#96C9AA' : n.tier === 'respondent' ? YELL : SLATE}>{n.unknown ? 'last touch unknown' : `${n.days}d since touch`}</Tag>
+                        <button onClick={() => openDraft(c)} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:8, padding:'7px 12px', fontWeight:700, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✉ draft follow-up</button>
+                        <button onClick={() => markTouched(c)} style={tinyBtn}>mark touched</button>
+                      </div>
+                    ))}
+                  </div>
+                  {dueNudges.length > 10 && <div style={{ fontSize:11, color:SLATE, marginTop:8 }}>+{dueNudges.length - 10} more past cooldown</div>}
+                </Card>
+              )}
 
               {/* ── Filter bar ── */}
               <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:14,alignItems:'center' }}>
@@ -7609,12 +7812,14 @@ function ExportTab({ data, year }) {
                           </div>
                           {c.n && c.n !== '—' && <div style={{ fontSize:11,color:'#94A3B8',marginBottom:3 }}>👤 {c.n}</div>}
                           {c.e && c.e !== '—' && c.e !== 'TikTok DM' && c.e !== 'n/a' && <div style={{ fontSize:11,color:BLUE,marginBottom:3 }}>{c.e}</div>}
+                          {(hasUsableEmail(c) || emailFlaggedNote(c)) && <div style={{ marginBottom:6 }}>{emailCheckCtl(c)}</div>}
                           <div style={{ display:'flex',gap:10,flexWrap:'wrap',marginBottom:6 }}>
                             {(c.niche||[]).slice(0,3).map(n=><Tag key={n} color={SLATE}>{n}</Tag>)}
                             {c.dealValue > 0 && <Tag color='#D9D0A0'>${c.dealValue.toLocaleString()}</Tag>}
                             <div style={{ fontSize:10,color:'#64748B' }}>{c.country}</div>
                           </div>
                           <div style={{ fontSize:11,color:'#94A3B8',lineHeight:1.5 }}>{c.last && `Last: ${c.last} · `}{c.note}</div>
+                          {(() => { const n = nudgeInfo(c); return n && n.due ? <div style={{ fontSize:10, color:'#C9A0A0', fontWeight:700, marginTop:4 }}>due for re-engagement</div> : null; })()}
                         </Card>
                       )
                   ))}
@@ -7650,10 +7855,12 @@ function ExportTab({ data, year }) {
                               })()}
                               <div style={{ fontSize:10, color:'#94A3B8' }}>{c.last||'—'}</div>
                             </div>
+                            {(() => { const n = nudgeInfo(c); return n && n.due ? <div style={{ fontSize:9, color:'#C9A0A0', fontWeight:700, marginTop:2 }}>due for re-engagement</div> : null; })()}
                             {c.dealValue > 0 && <div style={{ fontSize:9,color:'#D9D0A0',marginTop:2 }}>${c.dealValue.toLocaleString()}</div>}
                           </div>
                           <div style={{ fontSize:10,color:'#64748B',lineHeight:1.5,overflow:'hidden' }}>
                             {c.e && c.e !== '—' && c.e !== 'TikTok DM' && c.e !== 'n/a' && <div style={{ color:BLUE,marginBottom:2 }}>{c.e}</div>}
+                            {(hasUsableEmail(c) || emailFlaggedNote(c)) && emailCheckCtl(c)}
                             <div style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{c.note}</div>
                           </div>
                           <button onClick={()=>startEditCrm(c)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 8px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
@@ -7670,19 +7877,204 @@ function ExportTab({ data, year }) {
         })()}
 
         {/* ══ DELIVERABLES ══════════════════════════════════════ */}
-        {tab === 'deliverables' && (
+        {tab === 'deliverables' && (() => {
+          // ── Deliverables helpers (child-6) ─────────────────
+          const tinyBtn = { background:'none', border:`1px solid ${BDR}`, borderRadius:6, padding:'4px 9px', fontSize:10, color:SLATE, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' };
+          const TERMINAL_D = ['Paid','Not Paid','Declined'];
+          // due-date parsing: ISO day precision, or 'Apr' / 'Apr 2026' month precision, else null
+          const parseDue = raw => {
+            if (!raw) return null;
+            const s = String(raw).trim();
+            if (!s || s.toUpperCase() === 'TBC') return null;
+            let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (m) return { date:new Date(+m[1], +m[2]-1, +m[3]), precision:'day', label:s };
+            const M = { jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11 };
+            m = s.match(/^([A-Za-z]{3,9})(?:\s+(\d{4}))?$/);
+            if (m) {
+              const mo = M[m[1].slice(0,3).toLowerCase()];
+              if (mo == null) return null;
+              const yr = m[2] ? +m[2] : new Date().getFullYear();
+              return { date:new Date(yr, mo, 1), precision:'month', label:s };
+            }
+            return null;
+          };
+          const dueState = d => {
+            const p = parseDue(d.d);
+            if (!p) return { key:'nodate', p:null };
+            const now = new Date(); now.setHours(0,0,0,0);
+            const t = new Date(p.date); t.setHours(0,0,0,0);
+            if (p.precision === 'month') {
+              const ym = t.getFullYear()*12 + t.getMonth(), cm = now.getFullYear()*12 + now.getMonth();
+              if (ym < cm) return { key:'overdue', p, days:null };
+              if (ym === cm) return { key:'thismonth', p, days:null };
+              return { key:'upcoming', p, days:null };
+            }
+            const diff = Math.round((t - now) / 86400000);
+            if (diff < 0) return { key:'overdue', p, days:-diff };
+            if (diff <= 7) return { key:'week', p, days:diff };
+            return { key:'upcoming', p, days:diff };
+          };
+          const dueLabel = d => {
+            const ds = dueState(d);
+            if (ds.key === 'nodate') return 'tbc';
+            if (ds.key === 'overdue') return ds.days != null ? `${ds.days}d overdue` : `overdue (${ds.p.label})`;
+            if (ds.key === 'week') return ds.days === 0 ? 'due today' : `due in ${ds.days}d`;
+            if (ds.key === 'thismonth') return `due ${ds.p.label}`;
+            return ds.p.label;
+          };
+          // auto-populate from deals: keyed by deal id so re-renders never duplicate
+          const dealDelivs = (deals || []).filter(x => x && x.del && String(x.del).trim()).map(x => ({
+            id:`deal-${x.id}`, key:`deal-${x.id}`, b:x.b, sc:x.del, d:x.d || 'TBC',
+            s: DELIV_STATUSES.includes(x.s) ? x.s : 'Pitching',
+            pl:x.p || '', pay: typeof x.v === 'number' ? '$' + x.v.toLocaleString() : (x.v || ''),
+            src:'deal',
+          }));
+          const allDelivs = [...(delivs || []).map(x => ({ ...x, key:String(x.id), src:'manual' })), ...dealDelivs];
+          // status automation nudges: suggest/flag only, never mutate user data
+          const delivNudges = [];
+          allDelivs.forEach(dd => {
+            if (TERMINAL_D.includes(dd.s)) return;
+            const ds = dueState(dd);
+            if (ds.key === 'overdue') delivNudges.push({ d:dd, level:'high', text:`overdue${ds.days != null ? ` by ${ds.days}d` : ` (${ds.p.label})`} - follow up with the brand or update the date` });
+            else if (ds.key === 'week' || ds.key === 'thismonth') delivNudges.push({ d:dd, level:'med', text:`due ${ds.p ? ds.p.label : 'soon'} - confirm the delivery plan` });
+            else if (dd.s === 'Awaiting Approval') delivNudges.push({ d:dd, level:'low', text:'awaiting approval - nudge the brand if it has been quiet' });
+          });
+          // file uploads + version history (data URLs in localStorage, size-guarded)
+          const MAX_MB = 2;
+          const filesFor = key => ((delivFiles || {})[key] || []);
+          const fmtSize = b => b >= 1048576 ? (b/1048576).toFixed(1) + 'mb' : Math.max(1, Math.round(b/1024)) + 'kb';
+          const fmtTs = iso => { try { const t = new Date(iso); return t.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' + t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}); } catch(e) { return ''; } };
+          const addDelivFile = (key, file) => {
+            if (!file) return;
+            if (file.size > MAX_MB * 1024 * 1024) { showToast(`too large - keep files under ${MAX_MB}mb so the dashboard stays fast`); return; }
+            const rd = new FileReader();
+            rd.onload = () => {
+              const cur = filesFor(key);
+              const ver = { v:cur.length + 1, name:file.name, size:file.size, ts:new Date().toISOString(), dataUrl:rd.result };
+              const next = { ...(delivFiles || {}), [key]:[...cur, ver] };
+              try { localStorage.setItem('pf_deliv_files', JSON.stringify(next)); setDelivFiles(next); showToast(`saved v${ver.v} - ${file.name}`); }
+              catch(e) { showToast('not saved - browser storage is full. delete an old version first.'); }
+            };
+            rd.onerror = () => showToast('could not read that file.');
+            rd.readAsDataURL(file);
+          };
+          const removeDelivFile = (key, v) => {
+            const rest = filesFor(key).filter(f => f.v !== v);
+            const next = { ...(delivFiles || {}) };
+            if (rest.length) next[key] = rest; else delete next[key];
+            try { localStorage.setItem('pf_deliv_files', JSON.stringify(next)); } catch(e) {}
+            setDelivFiles(next); showToast('version removed');
+          };
+          const filesPanel = dd => {
+            const fs = filesFor(dd.key);
+            return (
+              <div style={{ padding:'10px 20px 14px', background:`${OCEAN}22`, borderBottom:`1px solid ${BDR}` }}>
+                <div style={{ fontSize:10, color:SLATE, marginBottom:8, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700 }}>versions ({fs.length})</div>
+                {fs.map(f => (
+                  <div key={f.v} style={{ display:'flex', alignItems:'center', gap:10, fontSize:11, marginBottom:6, flexWrap:'wrap' }}>
+                    <Tag color={BLUE}>v{f.v}</Tag>
+                    <span style={{ color:TEXT }}>{f.name}</span>
+                    <span style={{ color:SLATE }}>{fmtSize(f.size)} · {fmtTs(f.ts)}</span>
+                    <a href={f.dataUrl} download={f.name} style={{ color:BLUE, fontSize:11 }}>download</a>
+                    <button onClick={() => removeDelivFile(dd.key, f.v)} style={tinyBtn}>remove</button>
+                  </div>
+                ))}
+                {fs.length === 0 && <div style={{ fontSize:11, color:SLATE, marginBottom:6 }}>no files yet.</div>}
+                <label style={{ display:'inline-block', marginTop:4, background:'#F7F9FC', border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', color:TEXT, fontFamily:'inherit' }}>
+                  + upload new version
+                  <input type="file" style={{ display:'none' }} onChange={e => { addDelivFile(dd.key, e.target.files[0]); e.target.value = ''; }} />
+                </label>
+                <div style={{ fontSize:10, color:SLATE, marginTop:6 }}>files stay in this browser only (max {MAX_MB}mb each). oversized files are rejected with a message, never saved silently.</div>
+              </div>
+            );
+          };
+          // timeline buckets (chronological)
+          const buckets = [
+            { key:'overdue',  label:'overdue',     items:[] },
+            { key:'soon',     label:'due soon',    items:[] },
+            { key:'upcoming', label:'upcoming',    items:[] },
+            { key:'nodate',   label:'no date yet', items:[] },
+          ];
+          allDelivs.forEach(dd => {
+            const ds = dueState(dd), term = TERMINAL_D.includes(dd.s);
+            if (ds.key === 'overdue' && !term) buckets[0].items.push(dd);
+            else if ((ds.key === 'week' || ds.key === 'thismonth') && !term) buckets[1].items.push(dd);
+            else if (ds.key === 'nodate') buckets[3].items.push(dd);
+            else buckets[2].items.push(dd);
+          });
+          buckets.forEach(b => b.items.sort((a, b2) => { const pa = parseDue(a.d), pb = parseDue(b2.d); if (!pa && !pb) return 0; if (!pa) return 1; if (!pb) return -1; return pa.date - pb.date; }));
+          const nudgeFor = dd => delivNudges.find(x => x.d.key === dd.key);
+          return (
           <div>
             <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
               <Label>deliverables hub</Label>
-              <button onClick={addDeliv} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:10,padding:'9px 18px',fontWeight:800,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>
-                + Add
-              </button>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ display:'flex', border:`1px solid ${BDR}`, borderRadius:8, overflow:'hidden' }}>
+                  {['list','timeline'].map(v => (
+                    <button key={v} onClick={() => setDelivView(v)} style={{ background: delivView === v ? BLUE : 'transparent', color: delivView === v ? TEXT : SLATE, border:'none', padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>{v}</button>
+                  ))}
+                </div>
+                <button onClick={addDeliv} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:10,padding:'9px 18px',fontWeight:800,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>
+                  + Add
+                </button>
+              </div>
             </div>
 
-            {isMobile ? (
+            {/* ── Automation nudges: suggestions only, nothing changes automatically ── */}
+            {delivNudges.length > 0 && (
+              <Card style={{ marginBottom:gutter }}>
+                <div style={{ fontSize:10, color:YELL, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:4 }}>⚠ automation nudges - suggestions only</div>
+                <div style={{ fontSize:11, color:SLATE, marginBottom:10 }}>nothing is changed automatically. review and act yourself.</div>
+                {delivNudges.slice(0, 8).map((n, i) => (
+                  <div key={i} style={{ display:'flex', gap:8, alignItems:'baseline', fontSize:12, marginBottom:6 }}>
+                    <Tag color={n.level === 'high' ? '#C9A0A0' : n.level === 'med' ? YELL : SLATE}>{n.level === 'high' ? 'overdue' : n.level === 'med' ? 'due soon' : 'fyi'}</Tag>
+                    <div><span style={{ fontWeight:700 }}>{n.d.b}</span><span style={{ color:SLATE }}> - {n.text}</span></div>
+                  </div>
+                ))}
+                {delivNudges.length > 8 && <div style={{ fontSize:11, color:SLATE }}>+{delivNudges.length - 8} more</div>}
+              </Card>
+            )}
+
+            {delivView === 'timeline' ? (
+              /* Timeline view: chronological buckets with overdue flags */
+              <div>
+                {buckets.map(b => b.items.length > 0 && (
+                  <div key={b.key} style={{ marginBottom:18 }}>
+                    <div style={{ fontSize:10, color: b.key === 'overdue' ? '#C9A0A0' : SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8 }}>{b.key === 'overdue' ? '⚠ ' : ''}{b.label} ({b.items.length})</div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {b.items.map(d => {
+                        const n = nudgeFor(d);
+                        const od = dueState(d).key === 'overdue';
+                        return (
+                          <div key={d.key}>
+                            <Card style={{ padding:'12px 16px' }}>
+                              <div style={{ display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' }}>
+                                <div style={{ minWidth:100 }}>
+                                  <div style={{ fontSize:12, fontWeight:800, color: od ? '#C9A0A0' : TEXT }}>{dueLabel(d)}</div>
+                                  {od && <div style={{ marginTop:3 }}><Tag color="#C9A0A0">overdue</Tag></div>}
+                                </div>
+                                <div style={{ flex:1, minWidth:160 }}>
+                                  <div style={{ fontSize:13, fontWeight:700 }}>{d.b}</div>
+                                  <div style={{ fontSize:11, color:'#94A3B8' }}>{d.sc}</div>
+                                  {n && <div style={{ fontSize:11, color:YELL, marginTop:3 }}>⚠ {n.text}</div>}
+                                </div>
+                                <Tag color={statusColor(d.s)}>{d.s}</Tag>
+                                <Tag color={d.src === 'deal' ? OCEAN : SLATE}>{d.src === 'deal' ? 'from deal' : 'manual'}</Tag>
+                                <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} style={tinyBtn} title="files and versions">📎 files{filesFor(d.key).length > 0 ? ` (${filesFor(d.key).length})` : ''}</button>
+                              </div>
+                            </Card>
+                            {expandedDeliv === d.key && filesPanel(d)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : isMobile ? (
               /* Mobile: card layout */
               <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
-                {delivs.map(d => (
+                {allDelivs.map(d => (
                   editDelivId === d.id ? (
                     <Card key={d.id} style={{ border:`1px solid ${BLUE}44` }}>
                       <div style={{ display:'flex',flexDirection:'column',gap:10,marginBottom:12 }}>
@@ -7700,33 +8092,41 @@ function ExportTab({ data, year }) {
                       </div>
                     </Card>
                   ) : (
-                    <Card key={d.id}>
-                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10 }}>
-                        <div>
-                          <div style={{ fontSize:15,fontWeight:700,marginBottom:6 }}>{d.b}</div>
-                          <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
-                            <Tag color={statusColor(d.s)}>{d.s}</Tag>
-                            <Tag color="#666">{d.pl}</Tag>
+                    <div key={d.key}>
+                      <Card>
+                        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10 }}>
+                          <div>
+                            <div style={{ fontSize:15,fontWeight:700,marginBottom:6 }}>{d.b}</div>
+                            <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+                              <Tag color={statusColor(d.s)}>{d.s}</Tag>
+                              <Tag color="#666">{d.pl}</Tag>
+                              <Tag color={d.src === 'deal' ? OCEAN : SLATE}>{d.src === 'deal' ? 'from deal' : 'manual'}</Tag>
+                            </div>
+                          </div>
+                          <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                            <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
+                            {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
                           </div>
                         </div>
-                        <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
-                      </div>
-                      <div style={{ fontSize:12,color:'#94A3B8',marginBottom:6 }}>{d.sc}</div>
-                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-                        <div style={{ fontSize:12,color:YELL }}>{d.d !== 'TBC' ? `Due: ${d.d}` : 'TBC'}</div>
-                        <div style={{ fontSize:16,fontWeight:800,color:BLUE }}>{d.pay}</div>
-                      </div>
-                    </Card>
+                        <div style={{ fontSize:12,color:'#94A3B8',marginBottom:6 }}>{d.sc}</div>
+                        {d.src === 'deal' && <div style={{ fontSize:10, color:SLATE, marginBottom:6 }}>edit this on the deals board</div>}
+                        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                          <div style={{ fontSize:12,color:YELL }}>{d.d !== 'TBC' ? `Due: ${d.d}` : 'TBC'}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <span style={{ color:'#C9A0A0', fontWeight:700 }}> · OVERDUE</span> : null}</div>
+                          <div style={{ fontSize:16,fontWeight:800,color:BLUE }}>{d.pay}</div>
+                        </div>
+                      </Card>
+                      {expandedDeliv === d.key && filesPanel(d)}
+                    </div>
                   )
                 ))}
               </div>
             ) : (
               /* Desktop: table */
               <div style={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:14,overflow:'hidden' }}>
-                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.35fr',padding:'10px 20px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
+                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.5fr',padding:'10px 20px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
                   {['Brand','Notes / Script','Due','Status','Platform','Rate',''].map(h => <div key={h}>{h}</div>)}
                 </div>
-                {delivs.map((d, i) => (
+                {allDelivs.map((d, i) => (
                   editDelivId === d.id ? (
                     <div key={d.id} style={{ padding:'14px 20px',borderBottom:`1px solid ${BDR}`,background:`${OCEAN}55` }}>
                       <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr',gap:8,marginBottom:10 }}>
@@ -7744,21 +8144,31 @@ function ExportTab({ data, year }) {
                       </div>
                     </div>
                   ) : (
-                    <div key={d.id} style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.35fr',padding:'16px 20px',borderBottom:`1px solid ${OCEAN}44`,background:i%2===0?`${OCEAN}22`:'transparent',alignItems:'center' }}>
-                      <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
-                      <div style={{ fontSize:11,color:'#94A3B8' }}>{d.sc}</div>
-                      <div style={{ fontSize:12,color:YELL,fontWeight:600 }}>{d.d}</div>
-                      <Tag color={statusColor(d.s)}>{d.s}</Tag>
-                      <div style={{ fontSize:12,color:'#94A3B8' }}>{d.pl}</div>
-                      <div style={{ fontSize:12,color:BLUE,fontWeight:700 }}>{d.pay}</div>
-                      <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
+                    <div key={d.key}>
+                      <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.5fr',padding:'16px 20px',borderBottom:`1px solid ${OCEAN}44`,background:i%2===0?`${OCEAN}22`:'transparent',alignItems:'center' }}>
+                        <div>
+                          <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
+                          <div style={{ marginTop:4 }}><Tag color={d.src === 'deal' ? OCEAN : SLATE}>{d.src === 'deal' ? 'from deal' : 'manual'}</Tag></div>
+                        </div>
+                        <div style={{ fontSize:11,color:'#94A3B8' }}>{d.sc}{d.src === 'deal' && <div style={{ fontSize:9, color:SLATE, marginTop:2 }}>edit on the deals board</div>}</div>
+                        <div style={{ fontSize:12,color:YELL,fontWeight:600 }}>{d.d}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <div style={{ marginTop:3 }}><Tag color="#C9A0A0">overdue</Tag></div> : null}</div>
+                        <Tag color={statusColor(d.s)}>{d.s}</Tag>
+                        <div style={{ fontSize:12,color:'#94A3B8' }}>{d.pl}</div>
+                        <div style={{ fontSize:12,color:BLUE,fontWeight:700 }}>{d.pay}</div>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
+                          {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
+                        </div>
+                      </div>
+                      {expandedDeliv === d.key && filesPanel(d)}
                     </div>
                   )
                 ))}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══ AUDIENCE ════════════════════════════════════════ */}
         {tab === 'audience' && (() => {
