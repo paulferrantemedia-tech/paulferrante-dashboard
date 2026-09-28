@@ -1799,7 +1799,7 @@ const SEED_CASTINGS = [
   makeCasting({ id:'c4', showName:'Squid Game: The Challenge — Season 3', network:'Netflix', formatType:'big-cast-hybrid', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Returning finalist angle + show alumni credibility. Watchlist now, prep tape early.', flags:['solo','annual','returnee-angle'], dqRisk:true, dqRiskNotes:'Confirm returnee policy with casting before tape — some Netflix series block S1 finalists.', scoreInputs:{ brandFit:9, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
   makeCasting({ id:'c5', showName:'The Amazing Race Australia — Season 8', network:'Channel 10', formatType:'race-travel', market:'AU', deadline:castingDaysFromNow(18), pipelineStatus:'researching', applyLink:'https://10play.com.au/the-amazing-race-australia/casting', oneLineWhy:'AU passport route. Travel + Dan duo + strong AU follower base = home-market home-run.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:10, exposureValue:8, careerUpside:8, networkEcosystem:7, timeCommitmentDays:30, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
   makeCasting({ id:'c6', showName:'The Traitors Australia — Season 4', network:'Channel 10', formatType:'social-strategy', market:'AU', deadline:castingDaysFromNow(22), pipelineStatus:'applied', applyLink:'https://10play.com.au/the-traitors-australia/casting', oneLineWhy:'AU eligibility. Strong audience overlap (49% AU). Squid Game finalist = camera-ready credit.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
-  makeCasting({ id:'c7', showName:'Big Brother — Season 27 (US)', network:'CBS', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(25), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/big_brother/casting/', oneLineWhy:'Long-form social game with massive fanbase. Time commitment is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c7', showName:'Big Brother — Season 29 (US)', network:'CBS', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(25), pipelineStatus:'researching', applyLink:'https://www.cbs.com/shows/big_brother/casting/', oneLineWhy:'Long-form social game with massive fanbase. Time commitment is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
   makeCasting({ id:'c8', showName:'The Mole — Season 4', network:'Netflix', formatType:'social-strategy', market:'US', deadline:castingDaysFromNow(31), pipelineStatus:'researching', applyLink:'https://www.netflix.com/casting', oneLineWhy:'Pure deception game — character-driven, strong showreel material. Travel-shoot format suits travel creator.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:7, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
   makeCasting({ id:'c9', showName:'Race Across the World — Series 6 (UK/AU)', network:'BBC / SBS', formatType:'race-travel', market:'INTL', deadline:castingDaysFromNow(45), pipelineStatus:'researching', applyLink:'https://www.bbc.co.uk/programmes/articles/casting', oneLineWhy:'Slow-travel format — exactly the RGG Media brand. Dan duo angle is producer catnip.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
   makeCasting({ id:'c10', showName:'Deal or No Deal Island — Season 3', network:'NBC', formatType:'big-cast-hybrid', market:'US', deadline:castingDaysFromNow(60), pipelineStatus:'researching', applyLink:'https://www.nbc.com/casting', oneLineWhy:'Travel-set big-cast hybrid. Tropical shoot + social strategy = high content cross-pollination.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:8, careerUpside:7, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
@@ -1815,18 +1815,18 @@ const SEED_CASTINGS = [
 //   1. a curated, verified per-show application portal
 //   2. the network's official casting hub (verified, stable)
 //   3. a Google search for the show's casting application (always resolves)
-const CASTING_LINKS_CHECKED = '2026-06-22';
+const CASTING_LINKS_CHECKED = '2026-09-28';
 // Human-readable "last updated" label for the casting board header.
 const CASTING_CHECKED_LABEL = new Date(CASTING_LINKS_CHECKED + 'T00:00:00')
   .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-// Verified official network casting hubs (checked 2026-06-22). Matched by substring
+// Verified official network casting hubs (checked 2026-09-28). Matched by substring
 // of the show's network string, so "CBS / Paramount+" still maps to the CBS hub.
 const NETWORK_CASTING_HUBS = {
   'CBS':        'https://www.cbs.com/casting/',
   'NBC':        'https://www.nbc.com/global/pages/casting',
   'Channel 10': 'https://10.com.au/casting',
 };
-// Verified per-show application portals (checked 2026-06-22).
+// Verified per-show application portals (checked 2026-09-28).
 const SHOW_APPLY_PORTALS = {
   c2: 'https://www.theamazingracecasting.com/home',  // The Amazing Race US (verified via cbs.com/casting)
   c7: 'https://www.bigbrothercasting.tv/',            // Big Brother US (verified via cbs.com/casting)
@@ -1834,16 +1834,32 @@ const SHOW_APPLY_PORTALS = {
 const castingSearchUrl = (name) =>
   `https://www.google.com/search?q=${encodeURIComponent((name || 'reality tv') + ' casting application apply')}`;
 // Returns { url, label, source, status, checked } — label is honest about whether
-// it's a direct application ("Apply Now") or a fallback ("Find the application").
+// it's a verified application page ("Apply Now") or a search fallback
+// ("Search for application"). Verified = a curated per-show portal or the
+// network's official casting hub. Anything else resolves to a Google search
+// for the show's casting application and renders as a secondary link.
 function resolveApply(show) {
   if (!show) return null;
   const portal = SHOW_APPLY_PORTALS[show.id];
   if (portal) return { url: portal, label: 'Apply Now', source: 'verified-portal', status: 'valid', checked: CASTING_LINKS_CHECKED };
   const netKey = Object.keys(NETWORK_CASTING_HUBS).find(n => (show.network || '').includes(n));
-  if (netKey) return { url: NETWORK_CASTING_HUBS[netKey], label: 'Find the application', source: 'network-hub', status: 'valid', checked: CASTING_LINKS_CHECKED };
-  return { url: castingSearchUrl(show.showName), label: 'Find the application', source: 'search', status: 'fallback', checked: CASTING_LINKS_CHECKED };
+  if (netKey) return { url: NETWORK_CASTING_HUBS[netKey], label: 'Apply Now', source: 'network-hub', status: 'valid', checked: CASTING_LINKS_CHECKED };
+  return { url: castingSearchUrl(show.showName), label: 'Search for application', source: 'search', status: 'fallback', checked: CASTING_LINKS_CHECKED };
 }
-function castingDaysUntil(d) { if (!d) return null; return Math.ceil((new Date(d) - CASTING_TODAY_REF) / 86400000); }
+function castingTodayLocal() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
+// Real-today arithmetic for filtering, badging, and auto-archive. Seed
+// deadlines stay frozen absolute strings (never relative countdowns); only
+// the "how far away" math moves off the hardcoded CASTING_TODAY_REF onto the
+// actual current date. Dates compare as local calendar days.
+function castingDaysUntil(d) {
+  if (!d) return null;
+  const [y, m, dd] = d.split('-').map(Number);
+  return Math.round((new Date(y, m - 1, dd) - castingTodayLocal()) / 86400000);
+}
+// Deadline for a newly added casting: N days from the real today.
+function castingDateFromToday(d) { const x = castingTodayLocal(); x.setDate(x.getDate() + d); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; }
+// A casting is closed (auto-archived to the Closed tab) when its deadline is before today.
+function castingIsClosed(d) { return !!d && castingDaysUntil(d) < 0; }
 // Absolute deadline dates only — the seed deadlines are frozen reference data,
 // so relative countdowns ("Closes in 2 days") go stale. Never invent new dates.
 function castingDeadlineLabel(d) {
@@ -2410,10 +2426,32 @@ function RealityCastingTab() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
+  // "Open" excludes past-deadline castings; those live on the Closed tab.
+  const closedList  = cards.filter(c => c.bucket !== 'no' && castingIsClosed(c.deadline));
+  const openList    = cards.filter(c => c.bucket !== 'no' && c.deadline && !castingIsClosed(c.deadline));
+  // Deadline alerts: open castings closing within 14 days get a banner.
+  const closingSoon = openList.filter(c => castingDaysUntil(c.deadline) <= 14)
+    .sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline));
+
+  // All sub-tabs share one array and one switch handler (Annual Cycles
+  // included). No per-tab branching anywhere in this strip.
+  const castingTabs = [
+    ['open','Open Now'],
+    ['closing','Closing Soon'],
+    ['watchlist','Watchlist'],
+    ['annual','Annual Cycles'],
+    ['closed',`Closed${closedList.length?` (${closedList.length})`:''}`],
+    ['tracker',`My Applications${applications.length?` (${applications.length})`:''}`],
+  ];
+
   const visible = cards.filter(c => {
     if (c.bucket === 'no') return false;
+    // Auto-archive: past-deadline castings appear ONLY on the Closed tab.
+    const closed = castingIsClosed(c.deadline);
+    if (activeTab === 'closed' && !closed) return false;
+    if (activeTab !== 'closed' && closed) return false;
     if (activeTab === 'open' && c.deadline === null) return false;
-    if (activeTab === 'closing' && (!c.deadline || castingDaysUntil(c.deadline) > 7 || castingDaysUntil(c.deadline) < 0)) return false;
+    if (activeTab === 'closing' && (!c.deadline || castingDaysUntil(c.deadline) > 7)) return false;
     if (activeTab === 'watchlist' && !c.flags.includes('watchlist') && !c.flags.includes('returnee-angle')) return false;
     if (activeTab === 'annual' && c.deadline !== null) return false;
     if (filters.market !== 'all' && c.market !== filters.market) return false;
@@ -2431,7 +2469,7 @@ function RealityCastingTab() {
   }).sort((a,b) => b.fitScore - a.fitScore || (a.deadline ? castingDaysUntil(a.deadline) : 999) - (b.deadline ? castingDaysUntil(b.deadline) : 999));
 
   const formatOptions = [...new Set(cards.filter(c => c.bucket !== 'no').map(c => c.formatType))];
-  const open       = cards.filter(c => c.bucket !== 'no' && c.deadline);
+  const open       = openList;
   const inFlight   = cards.filter(c => ['applied','first-tape','callback','producer-interview'].includes(c.pipelineStatus));
   const topScore   = open.length ? Math.max(...open.map(c => c.fitScore)) : 0;
   const topCard    = open.filter(c => c.fitScore === topScore).sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline))[0];
@@ -2447,7 +2485,7 @@ function RealityCastingTab() {
       id: `c${Date.now()}`,
       showName: text.split('\n')[0].slice(0,60) || 'Untitled casting',
       network: 'TBD', formatType:'social-strategy', market:'US',
-      deadline: castingDaysFromNow(14), pipelineStatus:'researching',
+      deadline: castingDateFromToday(14), pipelineStatus:'researching',
       applyLink: '', oneLineWhy:'Just added — review fields and adjust scoring inputs.',
       flags:['solo'], dqRisk:false,
       scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:6, careerUpside:6, networkEcosystem:6, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' }
@@ -2533,7 +2571,7 @@ function RealityCastingTab() {
 
       {/* Sub-tabs */}
       <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BDR}`, marginBottom:14, flexWrap:'wrap' }}>
-        {[['open','Open Now'],['closing','Closing Soon'],['watchlist','Watchlist'],['annual','Annual Cycles'],['tracker',`My Applications${applications.length?` (${applications.length})`:''}`]].map(([k,l]) => (
+        {castingTabs.map(([k,l]) => (
           <div key={k} onClick={() => setActiveTab(k)} style={{
             padding:'10px 18px', fontSize:12, fontWeight:600, cursor:'pointer',
             color: activeTab===k ? TEXT : SLATE, borderBottom: activeTab===k ? `2px solid ${TEXT}` : '2px solid transparent', marginBottom:'-1px',
@@ -2542,13 +2580,24 @@ function RealityCastingTab() {
       </div>
 
       {activeTab === 'tracker' && <ApplicationTracker applications={applications} setApplications={setApplications} />}
+
+      {/* Deadline alerts: banner surfaces open castings closing within 14 days */}
+      {activeTab !== 'tracker' && closingSoon.length > 0 && (
+        <div style={{ background:'#FFF7E0', border:`1px solid ${YELL}`, borderRadius:8, padding:'10px 14px', marginBottom:14 }}>
+          <div style={{ fontSize:10, color:'#8A6A10', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:800, marginBottom:4 }}>closing within 14 days</div>
+          <div style={{ fontSize:12, color:TEXT, lineHeight:1.7 }}>
+            {closingSoon.map(c => (<span key={c.id} style={{ marginRight:16 }}><strong>{c.showName}</strong> · {castingDeadlineLabel(c.deadline)}</span>))}
+          </div>
+        </div>
+      )}
+
       {activeTab !== 'tracker' && (<>
 
       {/* Filters */}
       <Card style={{ marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Filters</div>
-          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (auto-archived hidden)</div>
+          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (format-archived hidden · closed on the Closed tab)</div>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           <div>
@@ -2595,8 +2644,9 @@ function RealityCastingTab() {
           </Card>
         ) : visible.map(c => {
           const sc = castingScoreColor(c.fitScore);
-          const sev = !c.deadline ? 'open' : (castingDaysUntil(c.deadline) <= 7 ? 'urgent' : (castingDaysUntil(c.deadline) <= 21 ? 'soon' : 'open'));
-          const dlColor = sev==='urgent' ? '#A32D2D' : sev==='soon' ? '#8A6A10' : SLATE;
+          const daysLeft = c.deadline ? castingDaysUntil(c.deadline) : null;
+          const sev = daysLeft === null ? 'open' : daysLeft < 0 ? 'closed' : daysLeft <= 7 ? 'urgent' : daysLeft <= 21 ? 'soon' : 'open';
+          const dlColor = sev==='urgent' ? '#A32D2D' : sev==='soon' ? '#8A6A10' : sev==='closed' ? '#94A3B8' : SLATE;
           return (
             <Card key={c.id} style={{ cursor:'pointer', padding:16 }}>
               <div onClick={() => setSelected(c)} style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
@@ -2689,7 +2739,10 @@ function RealityCastingTab() {
                 return (
                   <div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                      <a href={ap.url} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>
+                      {/* Verified pages get the filled "Apply Now" button; search fallbacks render as a secondary link */}
+                      <a href={ap.url} target="_blank" rel="noopener noreferrer" style={ap.source === 'search'
+                        ? { display:'inline-block', background:'#FFFFFF', color:TEXT, textDecoration:'none', borderRadius:8, padding:'8px 15px', fontSize:13, fontWeight:700, border:`1px solid ${BDR}` }
+                        : { display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>
                       <button onClick={() => { trackApplication(selected); setSelected(null); }} disabled={alreadyTracked}
                         style={{ background: alreadyTracked ? '#F1F5F9' : '#fff', color: alreadyTracked ? '#94A3B8' : '#0E6A80', border:`1px solid ${alreadyTracked ? BDR : BLUE}`, borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700, cursor: alreadyTracked ? 'default' : 'pointer', fontFamily:'inherit' }}>
                         {alreadyTracked ? '✓ Tracked' : '+ Track this application'}</button>
