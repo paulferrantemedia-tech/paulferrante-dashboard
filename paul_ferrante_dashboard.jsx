@@ -1091,6 +1091,14 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
   const [dismissedHint, setDismissedHint] = useState(null);
   const [dismissedAlerts, setDismissedAlerts] = useState(() => load('pf_dismissed_rate_alerts', []));
 
+  // ── Proposal drafts & templates (whole-form snapshots) ───────────
+  const [drafts, setDrafts] = useState(() => load('pf_prop_drafts', []));
+  const [templates, setTemplates] = useState(() => load('pf_prop_templates', []));
+  const [draftName, setDraftName] = useState('');
+  const [showDraftBox, setShowDraftBox] = useState(false);
+  // ── Client-facing preview modal ─────────────────────────────────
+  const [showPreview, setShowPreview] = useState(false);
+
   // ── Calculations ─────────────────────────────────────────────
   const delivSub = DELIVERABLES_DEF.reduce((s,d) => {
     const v = sel[d.id]; return v?.checked ? s + (rates[d.id]||d.defaultRate)*(v.qty||1) : s;
@@ -1221,6 +1229,45 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
     setDealForm(null); setDealSaved(true); showToast('Deal added to pipeline!');
   };
 
+  // ── Convert an accepted proposal straight into a deal ───────────
+  const convertToDeal = () => {
+    if (!showProposal) return;
+    const platforms = [...new Set(DELIVERABLES_DEF.filter(d=>sel[d.id]?.checked).map(d=>d.platform))].join('/');
+    const delSummary = DELIVERABLES_DEF.filter(d=>sel[d.id]?.checked)
+      .map(d=>{ const s=sel[d.id]; return s.qty>1?`${s.qty}x ${d.name}`:d.name; }).join(', ');
+    const deal = { ...EMPTY_DEAL, id:Date.now(), b:hdr.brand||hdr.campaign||'untitled proposal', v:clientCost,
+      p:platforms||'TikTok', del:delSummary, s:'Awaiting Approval',
+      nextStep:'proposal accepted, confirm deliverables and send contract', remindDate:'' };
+    setDeals(prev=>[...prev, deal]);
+    setDealSaved(true); showToast('Proposal converted to deal, awaiting approval');
+  };
+
+  // ── Drafts & templates: snapshot / restore the whole form ────────
+  const formSnapshot = () => ({ hdr:{...hdr}, sel:JSON.parse(JSON.stringify(sel)),
+    usageOn, usageMode, usageCustom, exclOn, exclMode, exclCustom, libFlat, discVal, discType });
+  const applySnapshot = s => {
+    if (!s) return;
+    if (s.hdr) setHdr({ campaign:'', brand:'', contact:'', email:'', date:today, ...s.hdr });
+    if (s.sel) setSel(s.sel);
+    setUsageOn(!!s.usageOn); setUsageMode(s.usageMode||'30'); setUsageCustom(s.usageCustom||'');
+    setExclOn(!!s.exclOn);   setExclMode(s.exclMode||'30');   setExclCustom(s.exclCustom||'');
+    setLibFlat(!!s.libFlat); setDiscVal(s.discVal||'');      setDiscType(s.discType||'percent');
+    setShowProposal(false); setDealSaved(false);
+  };
+  const persistDrafts = u => { setDrafts(u); save('pf_prop_drafts', u); };
+  const persistTemplates = u => { setTemplates(u); save('pf_prop_templates', u); };
+  const saveDraft = () => {
+    const d = { id:Date.now(), name:draftName.trim()||'untitled draft',
+      savedAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}), state:formSnapshot() };
+    persistDrafts([d, ...drafts]); setDraftName(''); setShowDraftBox(false); showToast('Draft saved');
+  };
+  const saveTemplate = () => {
+    const t = { id:Date.now(), name:draftName.trim()||'untitled template', state:formSnapshot() };
+    persistTemplates([t, ...templates]); setDraftName(''); setShowDraftBox(false); showToast('Template saved');
+  };
+  const deleteDraft = id => persistDrafts(drafts.filter(d => d.id !== id));
+  const deleteTemplate = id => persistTemplates(templates.filter(t => t.id !== id));
+
   const confirmCrmAdd = () => {
     const id = Date.now();
     const entry = { id, b:hdr.brand||crmBuf2.b||'', n:hdr.contact||'—', e:hdr.email||crmBuf2.e||'',
@@ -1323,6 +1370,52 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
           </div>
         </Card>
 
+        {/* Drafts & Templates — snapshot the whole form */}
+        <Card>
+          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
+            <div style={SECTION_HDR}>Drafts & Templates</div>
+            <button onClick={()=>setShowDraftBox(p=>!p)} style={{ ...BTN_GHOST,fontSize:10,padding:'5px 12px' }}>💾 Save current</button>
+          </div>
+          {showDraftBox && (
+            <div style={{ display:'flex',gap:8,marginBottom:14,flexWrap:'wrap' }}>
+              <input value={draftName} onChange={e=>setDraftName(e.target.value)} placeholder="name it…" style={{ ...INP,flex:'1 1 140px' }}
+                onKeyDown={e=>{ if(e.key==='Enter') saveDraft(); }} />
+              <button onClick={saveDraft} style={{ ...BTN_BLUE,padding:'9px 14px' }}>save draft</button>
+              <button onClick={saveTemplate} style={{ ...BTN_GHOST,padding:'9px 14px' }}>save as template</button>
+            </div>
+          )}
+          {drafts.length > 0 && (
+            <div style={{ marginBottom:templates.length ? 12 : 0 }}>
+              <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:6,fontWeight:700 }}>drafts</div>
+              {drafts.map(d => (
+                <div key={d.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${BDR}22` }}>
+                  <div style={{ flex:1,fontSize:12,fontWeight:600 }}>{d.name}
+                    <span style={{ color:SLATE,fontWeight:400,fontSize:10 }}> · saved {d.savedAt}</span></div>
+                  <button onClick={()=>{ applySnapshot(d.state); showToast(`Draft "${d.name}" loaded`); }} style={{ ...BTN_GHOST,fontSize:10,padding:'4px 10px' }}>load</button>
+                  <button onClick={()=>deleteDraft(d.id)} style={{ ...BTN_GHOST,fontSize:10,padding:'4px 8px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {templates.length > 0 && (
+            <div>
+              <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:6,fontWeight:700 }}>templates</div>
+              {templates.map(t => (
+                <div key={t.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${BDR}22` }}>
+                  <div style={{ flex:1,fontSize:12,fontWeight:600 }}>{t.name}</div>
+                  <button onClick={()=>{ applySnapshot(t.state); showToast(`Template "${t.name}" loaded`); }} style={{ ...BTN_GHOST,fontSize:10,padding:'4px 10px' }}>load</button>
+                  <button onClick={()=>deleteTemplate(t.id)} style={{ ...BTN_GHOST,fontSize:10,padding:'4px 8px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {drafts.length === 0 && templates.length === 0 && !showDraftBox && (
+            <div style={{ fontSize:11,color:SLATE,lineHeight:1.6 }}>
+              save the current form as a draft to pick it up later, or as a template to reuse the same setup on new proposals.
+            </div>
+          )}
+        </Card>
+
         {/* Section 3 — Bundles (above deliverables for UX) */}
         <Card>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
@@ -1374,6 +1467,12 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
             <button onClick={()=>setEditingRC(p=>!p)} style={{ ...BTN_GHOST,fontSize:10,padding:'5px 12px',borderColor:editingRC?BLUE:BDR,color:editingRC?BLUE:'#888' }}>
               {editingRC ? '🔒 Lock Rate Card' : '✏️ Edit Rate Card'}
             </button>
+          </div>
+          <div style={{ fontSize:11,color:SLATE,lineHeight:1.6,background:`${OCEAN}22`,borderRadius:8,padding:'10px 12px',marginBottom:16 }}>
+            <strong style={{ color:BLUE }}>how transition pricing works:</strong> when a rate sits 15%+ below the market
+            floor for your audience size, the rate alert suggests a transition rate, the midpoint between your current rate
+            and the niche-adjusted floor (benchmark × 1.3 travel/lifestyle premium). test the transition rate on your next
+            2–3 pitches, then move to the full market rate once brands accept it.
           </div>
           {['TikTok','Instagram','YouTube','UGC'].map(platform => {
             const items = DELIVERABLES_DEF.filter(d=>d.platform===platform);
@@ -1598,9 +1697,80 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
             {/* Actions — outside snapshot */}
             <div style={{ display:'flex',gap:10,flexWrap:'wrap',padding:'14px 16px',borderTop:`1px solid ${OCEAN}44` }}>
               <button onClick={downloadSnapshot} disabled={snapping} style={{ ...BTN_BLUE,flex:1,opacity:snapping?0.7:1 }}>{snapping ? '⏳ Generating…' : '📸 Save as Image'}</button>
+              <button onClick={()=>setShowPreview(true)} style={{ ...BTN_GHOST,flex:1 }}>👁 Preview</button>
               {!dealSaved
-                ? <button onClick={openDealSave} style={{ ...BTN_GHOST,flex:1 }}>+ Add to Deals</button>
+                ? <>
+                    <button onClick={openDealSave} style={{ ...BTN_GHOST,flex:1 }}>+ Add to Deals</button>
+                    <button onClick={convertToDeal} style={{ ...BTN_GHOST,flex:1 }}>✓ Convert to Deal</button>
+                  </>
                 : <div style={{ flex:1,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,color:'#96C9AA',fontWeight:700 }}>✓ Added to Deals</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Client-facing preview modal — clean render + copy text for email */}
+        {showPreview && (
+          <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:isMobile?'flex-end':'center',justifyContent:'center',padding:isMobile?0:16 }}
+            onClick={e=>{ if (e.target === e.currentTarget) setShowPreview(false); }}>
+            <div style={{ background:'#FFFFFF',borderRadius:isMobile?'20px 20px 0 0':16,width:isMobile?'100%':560,maxWidth:'100vw',maxHeight:'90vh',overflowY:'auto',padding:isMobile?'24px 20px 32px':28 }}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                <div style={{ fontSize:15,fontWeight:800 }}>client preview</div>
+                <button onClick={()=>setShowPreview(false)} style={{ ...BTN_GHOST,padding:'6px 10px' }}>✕</button>
+              </div>
+              <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'3px',marginBottom:6 }}>paulferrante · creator proposal</div>
+              <div style={{ fontSize:18,fontWeight:900,marginBottom:4 }}>{hdr.campaign || 'Creator Partnership Proposal'}</div>
+              <div style={{ fontSize:12,color:SLATE,marginBottom:16 }}>
+                prepared for <strong style={{ color:'#1A2744' }}>{hdr.brand || '—'}</strong>
+                {hdr.contact && <span> · {hdr.contact}</span>}
+                <span> · {new Date(hdr.date + 'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</span>
+              </div>
+              {['TikTok','Instagram','YouTube','UGC'].map(platform => {
+                const items = DELIVERABLES_DEF.filter(d=>sel[d.id]?.checked && d.platform===platform);
+                if (!items.length) return null;
+                return (
+                  <div key={platform} style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:10,fontWeight:800,color:PLAT_COLORS[platform],textTransform:'uppercase',letterSpacing:'2px',marginBottom:6 }}>{platform}</div>
+                    {items.map(d => {
+                      const s = sel[d.id], rate = rates[d.id] || d.defaultRate;
+                      return (
+                        <div key={d.id} style={{ display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:`1px solid ${BDR}22` }}>
+                          <span style={{ color:'#1A2744' }}>{d.name}{s.qty > 1 ? <span style={{ color:SLATE }}> ×{s.qty}</span> : ''}</span>
+                          <span style={{ fontWeight:700 }}>${(rate * s.qty).toLocaleString()}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              {(usageOn || exclOn || libFlat) && (
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10,fontWeight:800,color:BLUE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:6 }}>add-ons</div>
+                  {usageOn && <div style={{ display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0' }}><span>usage rights ({usageMode === 'perpetuity' ? 'in perpetuity' : usageMode === 'custom' ? `${usageCustom} days` : usageMode + ' days'})</span><span style={{ fontWeight:700 }}>${usageFee.toLocaleString()}</span></div>}
+                  {exclOn && <div style={{ display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0' }}><span>exclusivity ({exclMode === 'custom' ? `${exclCustom} days` : exclMode + ' days'})</span><span style={{ fontWeight:700 }}>${exclFee.toLocaleString()}</span></div>}
+                  {libFlat && <div style={{ display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0' }}><span>link in bio, 24hr</span><span style={{ fontWeight:700 }}>$150</span></div>}
+                </div>
+              )}
+              <div style={{ borderTop:`1px solid ${BDR}`,paddingTop:12,marginTop:4 }}>
+                <div style={{ display:'flex',justifyContent:'space-between',fontSize:12,color:SLATE,padding:'3px 0' }}>
+                  <span>standard value</span><span style={{ textDecoration:discAmt ? 'line-through' : 'none' }}>${totalWithAddons.toLocaleString()}</span>
+                </div>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline',padding:'6px 0' }}>
+                  <span style={{ fontSize:11,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',fontWeight:700 }}>your investment</span>
+                  <span style={{ fontSize:24,fontWeight:900 }}>${clientCost.toLocaleString()}</span>
+                </div>
+                {discAmt > 0 && <div style={{ fontSize:11,color:'#1A7A40',fontWeight:700,textAlign:'right' }}>you save ${discAmt.toLocaleString()}</div>}
+              </div>
+              <div style={{ fontSize:10,color:SLATE,fontStyle:'italic',marginTop:12 }}>
+                Rates based on current RGG Media rate card. Valid for 14 days.
+              </div>
+              <div style={{ display:'flex',gap:10,marginTop:20 }}>
+                <button onClick={copyEmail} style={{ ...BTN_BLUE,flex:1 }}>{copied ? '✓ Copied!' : '📋 Copy Text'}</button>
+                <button onClick={()=>setShowPreview(false)} style={{ ...BTN_GHOST }}>close</button>
+              </div>
+              <div style={{ fontSize:10,color:SLATE,marginTop:10 }}>
+                copies the plain-text version, ready to paste into an email. nothing is sent.
+              </div>
             </div>
           </div>
         )}
@@ -3685,6 +3855,14 @@ export default function App() {
   const [dealPlatform, setDealPlatform] = useState('All');
   const [dealStage,    setDealStage]    = useState('All');
   const [dealModal,    setDealModal]    = useState(null);
+  // ── Deals board enhancements: board/calendar view, bulk select, per-deal tasks ──
+  const [dealView,     setDealView]     = useState('board');   // 'board' | 'calendar'
+  const [selDeals,     setSelDeals]     = useState([]);        // bulk-selected deal ids
+  const [bulkStage,    setBulkStage]    = useState('');
+  const [bulkDate,     setBulkDate]     = useState('');
+  const [calCursor,    setCalCursor]    = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const [openTasks,    setOpenTasks]    = useState({});        // dealId -> task expander open
+  const [taskInputs,   setTaskInputs]   = useState({});        // dealId -> { text, due }
   const [followerEdit, setFollowerEdit] = useState(null);
   const [editCrmId,       setEditCrmId]       = useState(null);
   const [crmBuf,          setCrmBuf]          = useState({});
@@ -6715,7 +6893,141 @@ function ExportTab({ data, year }) {
               )}
             </div>
 
-            {isMobile ? (
+            {/* Board / Calendar toggle */}
+            <div style={{ display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap' }}>
+              <div style={{ display:'flex',background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,overflow:'hidden' }}>
+                {[['board','board'],['calendar','calendar']].map(([v,lbl]) => (
+                  <button key={v} onClick={() => setDealView(v)}
+                    style={{ padding:'7px 14px',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:11,
+                      background:dealView===v?BLUE:'transparent',color:dealView===v?TEXT:'#888',transition:'all 0.15s' }}>{lbl}</button>
+                ))}
+              </div>
+              {dealView === 'calendar' && (
+                <div style={{ display:'flex',gap:6,alignItems:'center' }}>
+                  <button onClick={() => setCalCursor(c => c.m === 0 ? { y:c.y-1, m:11 } : { y:c.y, m:c.m-1 })}
+                    style={{ background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>‹</button>
+                  <div style={{ fontSize:12,fontWeight:800,minWidth:130,textAlign:'center' }}>
+                    {new Date(calCursor.y, calCursor.m, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}
+                  </div>
+                  <button onClick={() => setCalCursor(c => c.m === 11 ? { y:c.y+1, m:0 } : { y:c.y, m:c.m+1 })}
+                    style={{ background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>›</button>
+                  <button onClick={() => { const d = new Date(); setCalCursor({ y:d.getFullYear(), m:d.getMonth() }); }}
+                    style={{ background:'none',border:'none',fontSize:11,color:BLUE,cursor:'pointer',fontFamily:'inherit',fontWeight:700 }}>today</button>
+                </div>
+              )}
+            </div>
+
+            {/* Overdue follow-ups banner (tasks + legacy reminders, active pipeline only) */}
+            {(() => {
+              const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+              const items = [];
+              deals.forEach(d => {
+                if (canonStage(d.s) === 'Paid') return;
+                (d.tasks || []).forEach(t => {
+                  if (!t.done && t.due && t.due < todayLA) items.push({ deal:d, kind:'task', text:t.text, due:t.due, tid:t.id });
+                });
+                if (d.nextStep && d.remindDate && d.remindDate < todayLA)
+                  items.push({ deal:d, kind:'reminder', text:d.nextStep, due:d.remindDate, tid:null });
+              });
+              items.sort((a, b) => a.due < b.due ? -1 : 1);
+              if (!items.length) return null;
+              const fmtDue = k => new Date(k + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+              return (
+                <div style={{ background:'#FDEAEA',border:'1px solid #f8717155',borderRadius:12,padding:'12px 14px',marginBottom:12 }}>
+                  <div style={{ fontSize:11,fontWeight:800,color:'#A32D2D',marginBottom:6 }}>overdue follow-ups ({items.length})</div>
+                  {items.map((it, i) => (
+                    <div key={it.kind + '-' + (it.tid || it.deal.id) + '-' + i}
+                      style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i ? '1px solid #f8717122' : 'none',fontSize:12 }}>
+                      <span style={{ fontWeight:700 }}>{it.deal.b}</span>
+                      <span style={{ color:'#4A6080',flex:1 }}>{it.kind === 'reminder' && <span style={{ fontSize:9,color:'#8A6A10',fontWeight:700,marginRight:4 }}>reminder</span>}{it.text}</span>
+                      <span style={{ color:'#A32D2D',fontSize:10,fontWeight:700,whiteSpace:'nowrap' }}>due {fmtDue(it.due)}</span>
+                      {it.kind === 'task'
+                        ? <button onClick={() => { setDeals(prev => prev.map(x => x.id === it.deal.id ? { ...x, tasks:(x.tasks || []).map(t => t.id === it.tid ? { ...t, done:true } : t) } : x)); showToast('Task done!'); }}
+                            style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'#1A7A40' }}>✓ done</button>
+                        : <button onClick={() => setDealModal({ ...it.deal })}
+                            style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:BLUE }}>open</button>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Bulk actions bar */}
+            {selDeals.length > 0 && (
+              <div style={{ display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',background:`${BLUE}11`,border:`1px solid ${BLUE}44`,borderRadius:10,padding:'10px 12px',marginBottom:12 }}>
+                <div style={{ fontSize:12,fontWeight:800 }}>{selDeals.length} selected</div>
+                <select value={bulkStage} onChange={e => setBulkStage(e.target.value)}
+                  style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 10px',fontSize:11,fontFamily:'inherit',color:TEXT,outline:'none',cursor:'pointer' }}>
+                  <option value="">move to stage…</option>
+                  {STAGE_COLS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button disabled={!bulkStage} onClick={() => { setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, s:bulkStage } : d)); showToast(`Moved ${selDeals.length} to ${bulkStage}`); setSelDeals([]); setBulkStage(''); }}
+                  style={{ background:!bulkStage?'#F7F9FC':BLUE,color:!bulkStage?'#94A3B8':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkStage?'default':'pointer',fontFamily:'inherit' }}>move</button>
+                <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)}
+                  style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 10px',fontSize:11,fontFamily:'inherit',color:TEXT,outline:'none',colorScheme:'light',cursor:'pointer' }} />
+                <button disabled={!bulkDate} onClick={() => { setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, remindDate:bulkDate } : d)); showToast(`Follow-up date set on ${selDeals.length}`); setSelDeals([]); setBulkDate(''); }}
+                  style={{ background:!bulkDate?'#F7F9FC':BLUE,color:!bulkDate?'#94A3B8':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkDate?'default':'pointer',fontFamily:'inherit' }}>set follow-up</button>
+                <button onClick={() => { if (!window.confirm(`Archive ${selDeals.length} deal${selDeals.length > 1 ? 's' : ''} (move to Declined)?`)) return; setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, s:'Declined' } : d)); showToast('Archived to Declined'); setSelDeals([]); }}
+                  style={{ background:'#fff',border:`1px solid #f8717166`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'#A32D2D' }}>archive</button>
+                <button onClick={() => setSelDeals([])}
+                  style={{ background:'none',border:'none',fontSize:11,color:SLATE,cursor:'pointer',fontFamily:'inherit',fontWeight:600 }}>clear</button>
+              </div>
+            )}
+
+            {dealView === 'calendar' ? (
+              /* Calendar: month grid plotting deals by reminder + task due dates */
+              (() => {
+                const { y, m } = calCursor;
+                const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+                const startDay = new Date(y, m, 1).getDay();
+                const daysInMonth = new Date(y, m + 1, 0).getDate();
+                const cells = [];
+                for (let i = 0; i < startDay; i++) cells.push(null);
+                for (let dd = 1; dd <= daysInMonth; dd++) cells.push(dd);
+                const dayKey = dd => `${y}-${String(m + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+                const itemsFor = dd => {
+                  const k = dayKey(dd);
+                  return deals.filter(d => dealMatchesQuery(d) && (d.remindDate === k || (d.tasks || []).some(t => t.due === k)));
+                };
+                return (
+                  <div>
+                    <div style={{ display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:4 }}>
+                      {['sun','mon','tue','wed','thu','fri','sat'].map(w => (
+                        <div key={w} style={{ fontSize:9,color:SLATE,textTransform:'uppercase',letterSpacing:'1px',textAlign:'center',fontWeight:700 }}>{w}</div>
+                      ))}
+                    </div>
+                    <div style={{ display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4 }}>
+                      {cells.map((dd, i) => {
+                        if (!dd) return <div key={'e' + i} style={{ minHeight:64 }} />;
+                        const k = dayKey(dd);
+                        const items = itemsFor(dd);
+                        const isToday = k === todayLA;
+                        return (
+                          <div key={k} style={{ minHeight:64,background:CARD,border:`1px solid ${isToday ? BLUE : BDR}`,borderRadius:8,padding:6,overflow:'hidden' }}>
+                            <div style={{ fontSize:10,fontWeight:isToday ? 800 : 400,color:isToday ? BLUE : '#888',marginBottom:4 }}>{dd}</div>
+                            {items.slice(0, 3).map(d => {
+                              const overdue = (d.remindDate === k && d.remindDate < todayLA)
+                                || (d.tasks || []).some(t => !t.done && t.due === k && t.due < todayLA);
+                              return (
+                                <button key={d.id} onClick={() => setDealModal({ ...d })} title={`${d.b} — open deal`}
+                                  style={{ display:'block',width:'100%',textAlign:'left',fontSize:9,fontWeight:700,padding:'2px 5px',marginBottom:3,
+                                    borderRadius:5,cursor:'pointer',fontFamily:'inherit',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
+                                    background:overdue ? '#FDEAEA' : `${OCEAN}33`,border:`1px solid ${overdue ? '#f8717166' : OCEAN}`,
+                                    color:overdue ? '#A32D2D' : '#1A2744' }}>
+                                  {d.b}
+                                </button>
+                              );
+                            })}
+                            {items.length > 3 && <div style={{ fontSize:8,color:SLATE }}>+{items.length - 3} more</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize:10,color:SLATE,marginTop:8 }}>plotted by follow-up reminder date + task due dates · red = overdue · respects search + platform filter</div>
+                  </div>
+                );
+              })()
+            ) : isMobile ? (
               /* Mobile: stage selector + card list */
               <div>
                 <div style={{ display:'flex',gap:8,overflowX:'auto',paddingBottom:10,WebkitOverflowScrolling:'touch' }}>
@@ -6728,11 +7040,23 @@ function ExportTab({ data, year }) {
                     }}>{s} ({deals.filter(d=>d.s===s).length})</button>
                   ))}
                 </div>
+                {mobileStage === 'Paid' && (() => {
+                  const pd = deals.filter(d => canonStage(d.s) === 'Paid');
+                  const cash = pd.filter(d => dealAmount(d.v) > 0);
+                  const sum = cash.reduce((s, d) => s + dealAmount(d.v), 0);
+                  return <div style={{ fontSize:10,color:SLATE,marginBottom:4 }}>
+                    {cash.length} paid ({usd(sum)}) + {pd.length - cash.length} gifted</div>;
+                })()}
                 <div style={{ display:'flex',flexDirection:'column',gap:10,marginTop:12 }}>
                   {mobileDeals.sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
                     <div key={d.id} style={{ background:CARD,border:`1px solid ${BDR}`,borderLeft:`4px solid ${d.col}`,borderRadius:10,padding:16 }}>
                       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
-                        <div style={{ fontSize:15,fontWeight:700 }}>{d.b}</div>
+                        <div style={{ display:'flex',alignItems:'flex-start',gap:8,minWidth:0 }}>
+                          <input type="checkbox" checked={selDeals.includes(d.id)} title="select for bulk actions"
+                            onChange={() => setSelDeals(p => p.includes(d.id) ? p.filter(x => x !== d.id) : [...p, d.id])}
+                            style={{ marginTop:3,cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
+                          <div style={{ fontSize:15,fontWeight:700 }}>{d.b}</div>
+                        </div>
                         <button onClick={() => setDealModal({ ...d })} style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',color:'#64748B',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
                       </div>
                       <div style={{ fontSize:22,fontWeight:800,color:d.s==='Paid'?'#4ade80':BLUE,marginBottom:8 }}>{d.v ? usd(d.v) : 'gifted'}</div>
@@ -6740,6 +7064,44 @@ function ExportTab({ data, year }) {
                         <Tag color="#666">{d.p}</Tag>
                         {d.d && d.d!=='TBC' && <Tag color={YELL}>{d.d}</Tag>}
                         {d.del && <span style={{ fontSize:10,color:'#64748B' }}>{d.del}</span>}
+                      </div>
+                      {/* per-deal tasks */}
+                      <div style={{ marginTop:10,borderTop:`1px solid ${OCEAN}66`,paddingTop:8 }}>
+                        <button onClick={() => setOpenTasks(p => ({ ...p, [d.id]:!p[d.id] }))}
+                          style={{ background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontSize:11,color:BLUE,fontWeight:700,padding:0 }}>
+                          {(() => { const open = (d.tasks || []).filter(t => !t.done).length;
+                            return open ? `☑ ${open} open task${open > 1 ? 's' : ''}` : '＋ add task'; })()}
+                        </button>
+                        {openTasks[d.id] && (
+                          <div style={{ marginTop:6 }}>
+                            {(d.tasks || []).map(t => (
+                              <div key={t.id} style={{ display:'flex',alignItems:'center',gap:6,padding:'5px 0' }}>
+                                <input type="checkbox" checked={!!t.done}
+                                  onChange={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).map(y => y.id === t.id ? { ...y, done:!y.done } : y) } : x))}
+                                  style={{ cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
+                                <span style={{ flex:1,fontSize:12,color:t.done ? '#94A3B8' : '#1A2744',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
+                                {t.due && <span style={{ fontSize:10,whiteSpace:'nowrap',
+                                  color:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? '#A32D2D' : '#888',
+                                  fontWeight:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? 700 : 400 }}>{t.due}</span>}
+                                <button onClick={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).filter(y => y.id !== t.id) } : x))}
+                                  title="delete task" style={{ background:'none',border:'none',color:'#94A3B8',cursor:'pointer',fontSize:11,padding:0,flexShrink:0 }}>✕</button>
+                              </div>
+                            ))}
+                            <div style={{ display:'flex',gap:4,marginTop:4 }}>
+                              <input value={(taskInputs[d.id] || {}).text || ''} placeholder="new task…"
+                                onChange={e => setTaskInputs(p => ({ ...p, [d.id]:{ ...(p[d.id] || {}), text:e.target.value } }))}
+                                style={{ flex:1,minWidth:0,fontSize:12,padding:'6px 8px',border:`1px solid ${BDR}`,borderRadius:6,fontFamily:'inherit',outline:'none' }} />
+                              <input type="date" value={(taskInputs[d.id] || {}).due || ''}
+                                onChange={e => setTaskInputs(p => ({ ...p, [d.id]:{ ...(p[d.id] || {}), due:e.target.value } }))}
+                                style={{ fontSize:12,padding:'5px 6px',border:`1px solid ${BDR}`,borderRadius:6,fontFamily:'inherit',colorScheme:'light' }} />
+                              <button onClick={() => { const ti = taskInputs[d.id] || {}; if (!ti.text?.trim()) return;
+                                  const nt = { id:Date.now(), text:ti.text.trim(), due:ti.due || '', done:false };
+                                  setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:[...(x.tasks || []), nt] } : x));
+                                  setTaskInputs(p => ({ ...p, [d.id]:{ text:'', due:'' } })); }}
+                                style={{ fontSize:12,background:BLUE,color:TEXT,border:'none',borderRadius:6,padding:'6px 12px',cursor:'pointer',fontFamily:'inherit',fontWeight:700,flexShrink:0 }}>add</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -6759,12 +7121,25 @@ function ExportTab({ data, year }) {
                     style={{ minHeight:120,borderRadius:12,padding:'8px 6px',background:dragOver===status?`${STAGE_COLORS[status]}15`:'transparent',border:`2px dashed ${dragOver===status?STAGE_COLORS[status]:'transparent'}`,transition:'all 0.15s' }}>
                     <div style={{ fontSize:10,color:STAGE_COLORS[status],fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:'1.5px',padding:'0 6px' }}>
                       {status} ({deals.filter(d=>d.s===status).length})
+                      {status === 'Paid' && (() => {
+                        const pd = deals.filter(d => canonStage(d.s) === 'Paid');
+                        const cash = pd.filter(d => dealAmount(d.v) > 0);
+                        const sum = cash.reduce((s, d) => s + dealAmount(d.v), 0);
+                        return <div style={{ textTransform:'none',letterSpacing:'0',fontWeight:400,fontSize:9,color:SLATE,marginTop:3 }}>
+                          {cash.length} paid ({usd(sum)}) + {pd.length - cash.length} gifted</div>;
+                      })()}
                     </div>
                     {dealsForColumn(status).sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
                       <div key={d.id} draggable onDragStart={() => setDragId(d.id)} onDragEnd={() => { setDragId(null); setDragOver(null); }}
                         style={{ background:CARD,border:`1px solid ${BDR}`,borderTop:`3px solid ${d.col}`,borderRadius:10,padding:14,marginBottom:10,opacity:dragId===d.id?0.4:1,userSelect:'none',cursor:'grab' }}>
                         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:4 }}>
-                          <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
+                          <div style={{ display:'flex',alignItems:'flex-start',gap:6,minWidth:0 }}>
+                            <input type="checkbox" checked={selDeals.includes(d.id)} title="select for bulk actions"
+                              onDragStart={e => e.stopPropagation()}
+                              onChange={() => setSelDeals(p => p.includes(d.id) ? p.filter(x => x !== d.id) : [...p, d.id])}
+                              style={{ marginTop:2,cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
+                            <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
+                          </div>
                           <button onClick={e => { e.stopPropagation(); setDealModal({ ...d }); }}
                             style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'3px 8px',color:'#64748B',fontSize:11,cursor:'pointer',fontFamily:'inherit',flexShrink:0,marginLeft:6 }}>✏</button>
                         </div>
@@ -6780,6 +7155,48 @@ function ExportTab({ data, year }) {
                             {d.invoiceUrl && <a href={d.invoiceUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ fontSize:10,color:'#E1D9AE',textDecoration:'none',fontWeight:600 }}>🧾 Invoice</a>}
                           </div>
                         )}
+                        {/* per-deal tasks — structured next steps with due dates */}
+                        <div onDragStart={e => e.stopPropagation()} style={{ marginTop:6,borderTop:`1px solid ${OCEAN}66`,paddingTop:6 }}>
+                          <button onClick={() => setOpenTasks(p => ({ ...p, [d.id]:!p[d.id] }))}
+                            style={{ background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',fontSize:10,color:BLUE,fontWeight:700,padding:0 }}>
+                            {(() => { const open = (d.tasks || []).filter(t => !t.done).length;
+                              return open ? `☑ ${open} open task${open > 1 ? 's' : ''}` : '＋ add task'; })()}
+                          </button>
+                          {openTasks[d.id] && (
+                            <div style={{ marginTop:6 }}>
+                              {(d.tasks || []).map(t => (
+                                <div key={t.id} style={{ display:'flex',alignItems:'center',gap:6,padding:'4px 0' }}>
+                                  <input type="checkbox" checked={!!t.done}
+                                    onChange={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).map(y => y.id === t.id ? { ...y, done:!y.done } : y) } : x))}
+                                    style={{ cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
+                                  <span style={{ flex:1,fontSize:11,color:t.done ? '#94A3B8' : '#1A2744',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
+                                  {t.due && <span style={{ fontSize:9,whiteSpace:'nowrap',
+                                    color:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? '#A32D2D' : '#888',
+                                    fontWeight:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? 700 : 400 }}>{t.due}</span>}
+                                  <button onClick={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).filter(y => y.id !== t.id) } : x))}
+                                    title="delete task" style={{ background:'none',border:'none',color:'#94A3B8',cursor:'pointer',fontSize:10,padding:0,flexShrink:0 }}>✕</button>
+                                </div>
+                              ))}
+                              <div style={{ display:'flex',gap:4,marginTop:4 }}>
+                                <input value={(taskInputs[d.id] || {}).text || ''} placeholder="new task…"
+                                  onChange={e => setTaskInputs(p => ({ ...p, [d.id]:{ ...(p[d.id] || {}), text:e.target.value } }))}
+                                  onKeyDown={e => { if (e.key === 'Enter') { const ti = taskInputs[d.id] || {}; if (!ti.text?.trim()) return;
+                                    const nt = { id:Date.now(), text:ti.text.trim(), due:ti.due || '', done:false };
+                                    setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:[...(x.tasks || []), nt] } : x));
+                                    setTaskInputs(p => ({ ...p, [d.id]:{ text:'', due:'' } })); } }}
+                                  style={{ flex:1,minWidth:0,fontSize:11,padding:'5px 8px',border:`1px solid ${BDR}`,borderRadius:6,fontFamily:'inherit',outline:'none' }} />
+                                <input type="date" value={(taskInputs[d.id] || {}).due || ''}
+                                  onChange={e => setTaskInputs(p => ({ ...p, [d.id]:{ ...(p[d.id] || {}), due:e.target.value } }))}
+                                  style={{ fontSize:11,padding:'4px 6px',border:`1px solid ${BDR}`,borderRadius:6,fontFamily:'inherit',colorScheme:'light' }} />
+                                <button onClick={() => { const ti = taskInputs[d.id] || {}; if (!ti.text?.trim()) return;
+                                    const nt = { id:Date.now(), text:ti.text.trim(), due:ti.due || '', done:false };
+                                    setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:[...(x.tasks || []), nt] } : x));
+                                    setTaskInputs(p => ({ ...p, [d.id]:{ text:'', due:'' } })); }}
+                                  style={{ fontSize:11,background:BLUE,color:TEXT,border:'none',borderRadius:6,padding:'5px 10px',cursor:'pointer',fontFamily:'inherit',fontWeight:700,flexShrink:0 }}>add</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <div style={{ marginTop:8,fontSize:9,color:'#94A3B8',textAlign:'right' }}>drag to move</div>
                       </div>
                     ))}
