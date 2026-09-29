@@ -1450,6 +1450,10 @@ export default async function handler(req, res) {
   if (action === 'catalog-classify') return handleCatalogClassify(req, res);
   if (action === 'catalog-override') return handleCatalogOverride(req, res);
 
+  // In-video hook transcript store (powers hook analytics from spoken hooks, not captions)
+  if (action === 'hook-text')        return handleHookTextGet(req, res);
+  if (action === 'hook-text-upsert') return handleHookTextUpsert(req, res);
+
   // Books actions take precedence when action= is set
   if (action === 'process-receipt')  return handleProcessReceipt(req, res);
   if (action === 'process-inbox')    return handleProcessInbox(req, res);
@@ -1748,6 +1752,35 @@ function catSecretOk(req) {
   const secret = (req.query.secret || '').toString();
   const expected = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
   return secret === expected;
+}
+
+// ── In-video hook transcript store ──────────────────────────────────────────
+// Keyed by "<platform>:<videoId>" → { hookText, source, capturedAt }.
+// The dashboard's hook analytics prefers hookText (what Paul actually says in
+// the first seconds) over the caption/title text. Populated by the backfill
+// script and the weekly hook-transcript refresh cron; never written by clients.
+const HOOK_TEXT_KEY = 'pf_hook_text';
+async function handleHookTextGet(req, res) {
+  const hooks = (await kvGetKey(HOOK_TEXT_KEY)) || {};
+  return res.status(200).json({ ok: true, hooks, count: Object.keys(hooks).length });
+}
+async function handleHookTextUpsert(req, res) {
+  if (!catSecretOk(req)) return res.status(403).json({ error: 'bad or missing secret' });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  let body = req.body;
+  if (typeof body === 'string') { try { body = JSON.parse(body); } catch { body = {}; } }
+  const entries = (body && body.entries) || {};
+  const clean = {};
+  for (const [k, v] of Object.entries(entries)) {
+    if (typeof k !== 'string' || !v || typeof v.hookText !== 'string' || !v.hookText.trim()) continue;
+    clean[k] = { hookText: v.hookText.trim().slice(0, 300), source: String(v.source || 'unknown').slice(0, 40), capturedAt: v.capturedAt || new Date().toISOString() };
+  }
+  if (!Object.keys(clean).length) return res.status(400).json({ error: 'no valid entries' });
+  const existing = (await kvGetKey(HOOK_TEXT_KEY)) || {};
+  const merged = { ...existing, ...clean };
+  const ok = await kvSetKey(HOOK_TEXT_KEY, merged);
+  if (!ok) return res.status(500).json({ error: 'KV write failed' });
+  return res.status(200).json({ ok: true, upserted: Object.keys(clean).length, total: Object.keys(merged).length });
 }
 
 async function handleCatalogData(req, res) {
