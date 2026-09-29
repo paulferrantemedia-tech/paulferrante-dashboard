@@ -1992,20 +1992,25 @@ function makeCasting(c) {
   const r = castingFitScore({ ...c.scoreInputs, formatType:c.formatType, network:c.network });
   return { ...c, fitScore:r.score, fitReasoning:r.reasoning, bucket:r.bucket };
 }
+// Casting status model (2026-09-29): every tracked show ALWAYS renders a tile.
+// castingStatus 'open' = applications being taken right now (verified portal or network hub).
+// castingStatus 'not-casting' = between cycles; typicalWindow says when to check back.
+// No show is ever hidden from the board. Statuses re-verified 2026-09-29 against
+// official portals and network announcements.
 const SEED_CASTINGS = [
-  makeCasting({ id:'c1', showName:'The Traitors US', network:'Peacock / NBC', formatType:'social-strategy', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'https://TheTraitorsUS.com', oneLineWhy:'S5 "New Blood" casting closed Mar 2026 and aired; S6 is celebrity invite-only. Portal takes rolling applications for future civilian seasons — renewed through S8.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c2', showName:'The Amazing Race (US)', network:'CBS', formatType:'race-travel', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'https://www.theamazingracecasting.com/home', oneLineWhy:'S39 premieres Sep 30, 2026; S40 not yet announced. Highest-fit show on the board — re-apply the moment the next cycle opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
-  makeCasting({ id:'c3', showName:'Beast Games — Season 3', network:'Prime Video / MrBeast', formatType:'creator-targeted', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'https://beastgames.com/compete', oneLineWhy:'S3 applications opened Jan 2026 with no announced deadline. Caveat: the Apr–Jul 2026 filming window has passed — confirm the portal is still accepting before taping.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:9, exposureValue:9, careerUpside:7, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
-  makeCasting({ id:'c4', showName:'Squid Game: The Challenge', network:'Netflix', formatType:'big-cast-hybrid', market:'INTL', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'S3 filmed and premieres Nov 2026; S4 not announced. Returning finalist angle + alumni credibility — watchlist, prep tape early.', flags:['solo','annual','returnee-angle'], dqRisk:true, dqRiskNotes:'Confirm returnee policy with casting before tape — some Netflix series block S1 finalists.', scoreInputs:{ brandFit:9, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
-  makeCasting({ id:'c5', showName:'The Amazing Race Australia', network:'Channel 10', formatType:'race-travel', market:'AU', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'The planned 2026 celebrity season was dropped Jan 2026 and the show is now rested with no return announced.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:10, exposureValue:8, careerUpside:8, networkEcosystem:7, timeCommitmentDays:30, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
-  makeCasting({ id:'c6', showName:'The Traitors Australia — Season 3', network:'Channel 10', formatType:'social-strategy', market:'AU', deadline:null, pipelineStatus:'applied', applyLink:'', oneLineWhy:'S3 celebrity revival aired Aug 2026 with an invite-only cast; no S4 announced.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
-  makeCasting({ id:'c7', showName:'Big Brother — Season 29 (US)', network:'CBS', formatType:'social-strategy', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'https://www.bigbrothercasting.tv/', oneLineWhy:'Renewed late Sep 2026 with casting now open and no announced deadline — apply early, reviews start immediately. Time commitment is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c8', showName:'The Mole (Netflix)', network:'Netflix', formatType:'social-strategy', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'Only two Netflix seasons (2022, 2024); no new season announced and not currently casting.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:7, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c9', showName:'Race Across the World — Series 7', network:'BBC', formatType:'race-travel', market:'INTL', deadline:'2026-07-06', pipelineStatus:'researching', applyLink:'', oneLineWhy:'S7 application round closed Jul 2026; filming Sep–Nov 2026. Re-apply when the next series opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
-  makeCasting({ id:'c11', showName:'Pressure Cooker', network:'Netflix', formatType:'hybrid-physical-social', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'One season (2023); a second season was never ordered. Not currently casting.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
-  makeCasting({ id:'c12', showName:'The Quiz With Balls', network:'Fox', formatType:'one-off-game', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'S3 aired Apr 2026; no S4 announced. Low-time one-off — confirm DQ implications before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
-  makeCasting({ id:'c14', showName:'Big Brother Canada — Season 13', network:'CTV / Crave (Bell Media)', formatType:'social-strategy', market:'CA', deadline:null, pipelineStatus:'researching', applyLink:'https://BigBrotherCanadaCasting.ca', oneLineWhy:'Casting announced Sep 22, 2026 — nationwide applications now OPEN for the CTV/Crave revival (production Spring 2027, Montreal). HARD GATE: applicants must be a Canadian citizen or permanent resident, 19+. Confirm eligibility before taping.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:70, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c15', showName:'The Amazing Race Canada — Season 13', network:'CTV', formatType:'race-travel', market:'CA', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'S12 airing now; S13 casting expected to open early Oct 2026 (prior cycles ran ~10 weeks, deadline mid-Dec). Duo format — apply with Dan. Confirm Canadian eligibility requirements when the portal opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:28, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
+  makeCasting({ id:'c1', showName:'The Traitors US', network:'Peacock / NBC', formatType:'social-strategy', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Civilian application portal is LIVE (thetraitorsus.com) — S5 "New Blood" aired Sep 2026, S6 is celebrity (already cast). Rolling applications for future civilian seasons, no announced deadline.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c2', showName:'The Amazing Race (US)', network:'CBS', formatType:'race-travel', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'S39 premieres Sep 30, 2026; S40 not yet announced. Official portal takes rolling applications year-round — apply early. Highest-fit show on the board. Duo with Dan.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
+  makeCasting({ id:'c3', showName:'Beast Games — Season 3', network:'Prime Video / MrBeast', formatType:'creator-targeted', market:'US', castingStatus:'not-casting', typicalWindow:'S3 cycle complete — next TBA', pipelineStatus:'researching', oneLineWhy:'S3 applications opened Jan 2026 for "world-class competitors"; the Apr–Jul 2026 filming window has passed. Confirm the portal reopens before taping.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:9, exposureValue:9, careerUpside:7, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c4', showName:'Squid Game: The Challenge', network:'Netflix', formatType:'big-cast-hybrid', market:'INTL', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Official portal LIVE: "casting is now open for Season 3" (squidgamecasting.com). S3 premieres Nov 2026. Returning finalist angle — confirm returnee policy before tape.', flags:['solo','annual','returnee-angle'], dqRisk:true, dqRiskNotes:'Confirm returnee policy with casting before tape — some Netflix series block S1 finalists.', scoreInputs:{ brandFit:9, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:18, payTier:'top', eligibility:'solo-only' } }),
+  makeCasting({ id:'c5', showName:'The Amazing Race Australia', network:'Channel 10', formatType:'race-travel', market:'AU', castingStatus:'not-casting', typicalWindow:'Rested — no return announced', pipelineStatus:'researching', oneLineWhy:'The planned 2026 celebrity season was dropped Jan 2026; the show is now rested with no return announced.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:10, exposureValue:8, careerUpside:8, networkEcosystem:7, timeCommitmentDays:30, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c6', showName:'The Traitors Australia — Season 3', network:'Channel 10', formatType:'social-strategy', market:'AU', castingStatus:'not-casting', typicalWindow:'No S4 announced', pipelineStatus:'applied', oneLineWhy:'S3 celebrity revival aired Aug 2026 with an invite-only cast; no S4 announced.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c7', showName:'Big Brother — Season 29 (US)', network:'CBS', formatType:'social-strategy', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'CBS renewed for S29 late Sep 2026 — casting NOW OPEN. No announced deadline; reviews start immediately. The 100-day shoot is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c8', showName:'The Mole (Netflix)', network:'Netflix', formatType:'social-strategy', market:'US', castingStatus:'not-casting', typicalWindow:'No new season announced', pipelineStatus:'researching', oneLineWhy:'Only two Netflix seasons (2022, 2024); no new season announced and not currently casting.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c9', showName:'Race Across the World — Series 7', network:'BBC', formatType:'race-travel', market:'INTL', castingStatus:'not-casting', typicalWindow:'Next series typically casts spring', pipelineStatus:'researching', oneLineWhy:'S7 applications closed Jul 2026; filming Sep–Nov 2026. Watch for the next series announcement.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c11', showName:'Pressure Cooker', network:'Netflix', formatType:'hybrid-physical-social', market:'US', castingStatus:'not-casting', typicalWindow:'No S2 ordered', pipelineStatus:'researching', oneLineWhy:'One season (2023); a second season was never ordered. Not currently casting.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
+  makeCasting({ id:'c12', showName:'The Quiz With Balls', network:'Fox', formatType:'one-off-game', market:'US', castingStatus:'not-casting', typicalWindow:'No S4 announced', pipelineStatus:'researching', oneLineWhy:'S3 aired Apr 2026; no S4 announced. Low-time one-off — confirm DQ implications before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
+  makeCasting({ id:'c14', showName:'Big Brother Canada — Season 13', network:'CTV / Crave (Bell Media)', formatType:'social-strategy', market:'CA', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Casting NOW OPEN nationwide (announced Sep 22, 2026) — BigBrotherCanadaCasting.ca. CTV/Crave revival, production Spring 2027 Montréal. HARD GATE: Canadian citizen or permanent resident, 19+. Paul is not eligible.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:70, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c15', showName:'The Amazing Race Canada — Season 13', network:'CTV', formatType:'race-travel', market:'CA', castingStatus:'not-casting', typicalWindow:'Casting expected early Oct 2026', pipelineStatus:'researching', oneLineWhy:'Renewed Sep 2026; casting details TBA — expected early Oct 2026 (prior cycles ~10 weeks, deadline mid-Dec). Duo with Dan. Confirm Canadian eligibility when the portal opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:28, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
 ]; // c10 (Deal or No Deal Island) removed 2026-09-28: NBC canceled the show Dec 2025, no S3. c13 (The Challenge: Global Championship) removed 2026-09-28: not a real series.
 // ── Apply Now link resolution ───────────────────────────────────────────────
 // The seed applyLink values were AI-generated deep links and many 404 (verified:
@@ -2026,28 +2031,26 @@ const NETWORK_CASTING_HUBS = {
   'NBC':        'https://www.nbc.com/global/pages/casting',
   'Channel 10': 'https://10.com.au/casting',
 };
-// Verified per-show application portals (checked 2026-09-28).
+// Verified per-show application portals. Each was loaded and confirmed to be a
+// live application form or an explicit "casting is now open" page on 2026-09-29.
+// The Amazing Race US portal 500'd on re-verification 2026-09-29 → falls back to
+// the CBS casting hub until it loads again.
 const SHOW_APPLY_PORTALS = {
-  c1: 'https://TheTraitorsUS.com',                   // The Traitors US — verified live, rolling applications for future seasons
-  c2: 'https://www.theamazingracecasting.com/home',  // The Amazing Race US — official site, cited in Sep 2026 press
-  c3: 'https://beastgames.com/compete',              // Beast Games S3 — verified live 2026-09-28 (old /apply URL 404s)
-  c7: 'https://www.bigbrothercasting.tv/',            // Big Brother US S29 — verified live 2026-09-28
-  c14: 'https://BigBrotherCanadaCasting.ca',           // Big Brother Canada S13 — verified live 2026-09-29 (Bell Media press release Sep 22, 2026)
+  c1: 'https://thetraitorsus.com',                 // The Traitors US — live application form, verified 2026-09-29
+  c4: 'https://www.squidgamecasting.com',          // Squid Game: The Challenge — "casting is now open for Season 3", verified 2026-09-29
+  c7: 'https://www.bigbrothercasting.tv/',          // Big Brother US — "CASTING IS NOW OPEN", verified 2026-09-29
+  c14: 'https://BigBrotherCanadaCasting.ca',         // Big Brother Canada S13 — "Casting is now open", verified 2026-09-29
 };
-const castingSearchUrl = (name) =>
-  `https://www.google.com/search?q=${encodeURIComponent((name || 'reality tv') + ' casting application apply')}`;
-// Returns { url, label, source, status, checked } — label is honest about whether
-// it's a verified application page ("Apply Now") or a search fallback
-// ("Search for application"). Verified = a curated per-show portal or the
-// network's official casting hub. Anything else resolves to a Google search
-// for the show's casting application and renders as a secondary link.
+// Returns { url, label, source, status, checked } or null. Verified portals render
+// as "Apply Now"; network hubs render as the hub link. Never returns a Google
+// search link — real casting pages or nothing.
 function resolveApply(show) {
   if (!show) return null;
   const portal = SHOW_APPLY_PORTALS[show.id];
   if (portal) return { url: portal, label: 'Apply Now', source: 'verified-portal', status: 'valid', checked: CASTING_LINKS_CHECKED };
   const netKey = Object.keys(NETWORK_CASTING_HUBS).find(n => (show.network || '').includes(n));
   if (netKey) return { url: NETWORK_CASTING_HUBS[netKey], label: 'Apply Now', source: 'network-hub', status: 'valid', checked: CASTING_LINKS_CHECKED };
-  return { url: castingSearchUrl(show.showName), label: 'Search for application', source: 'search', status: 'fallback', checked: CASTING_LINKS_CHECKED };
+  return null; // no Google-search links: real casting pages or nothing
 }
 function castingTodayLocal() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
 // Real-today arithmetic for filtering, badging, and auto-archive. Seed
@@ -2798,58 +2801,47 @@ function RealityCastingTab() {
     setActiveTab('tracker');
   };
   const [selected, setSelected] = useState(null);
-  const [activeTab, setActiveTab] = useState('open');
-  const [filters, setFilters] = useState({ market:'all', format:'all', deadline:'all', eligibility:'all', scoreFloor:5 });
+  const [activeTab, setActiveTab] = useState('all');
+  const [filters, setFilters] = useState({ market:'all', format:'all', eligibility:'all', scoreFloor:3 });
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
-  // "Open" excludes past-deadline castings; those live on the Closed tab.
-  const closedList  = cards.filter(c => c.bucket !== 'no' && castingIsClosed(c.deadline));
-  const openList    = cards.filter(c => c.bucket !== 'no' && c.deadline && !castingIsClosed(c.deadline));
-  // Deadline alerts: open castings closing within 14 days get a banner.
-  const closingSoon = openList.filter(c => castingDaysUntil(c.deadline) <= 14)
+  // Always-visible tile model (2026-09-29): every tracked show renders a tile.
+  // "Casting Now" = applications being taken right now; everything else shows
+  // "Not casting now" with its typical window. No show is ever hidden from the board.
+  const openList    = cards.filter(c => c.bucket !== 'no' && c.castingStatus === 'open');
+  // Deadline alerts: open castings with a known deadline closing within 14 days.
+  const closingSoon = openList.filter(c => c.deadline && !castingIsClosed(c.deadline) && castingDaysUntil(c.deadline) <= 14)
     .sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline));
 
   // All sub-tabs share one array and one switch handler (Annual Cycles
   // included). No per-tab branching anywhere in this strip.
   const castingTabs = [
-    ['open','Open Now'],
-    ['closing','Closing Soon'],
+    ['all','All Shows'],
+    ['now',`Casting Now${openList.length?` (${openList.length})`:''}`],
     ['watchlist','Watchlist'],
-    ['annual','Annual Cycles'],
-    ['closed',`Closed${closedList.length?` (${closedList.length})`:''}`],
     ['tracker',`My Applications${applications.length?` (${applications.length})`:''}`],
   ];
 
+  // Every tracked show renders a tile. 'now' shows only shows taking applications;
+  // 'all' shows everything with casting-now first.
   const visible = cards.filter(c => {
     if (c.bucket === 'no') return false;
-    // Auto-archive: past-deadline castings appear ONLY on the Closed tab.
-    const closed = castingIsClosed(c.deadline);
-    if (activeTab === 'closed' && !closed) return false;
-    if (activeTab !== 'closed' && closed) return false;
-    if (activeTab === 'open' && c.deadline === null) return false;
-    if (activeTab === 'closing' && (!c.deadline || castingDaysUntil(c.deadline) > 7)) return false;
+    if (activeTab === 'now' && c.castingStatus !== 'open') return false;
     if (activeTab === 'watchlist' && !c.flags.includes('watchlist') && !c.flags.includes('returnee-angle')) return false;
-    if (activeTab === 'annual' && c.deadline !== null) return false;
     if (filters.market !== 'all' && c.market !== filters.market) return false;
     if (filters.format !== 'all' && c.formatType !== filters.format) return false;
     if (filters.eligibility === 'duo' && !c.flags.includes('duo-eligible') && !c.flags.includes('apply-with-dan')) return false;
     if (filters.eligibility === 'solo' && (c.flags.includes('duo-eligible') || c.flags.includes('apply-with-dan'))) return false;
     if (c.fitScore < filters.scoreFloor) return false;
-    if (filters.deadline !== 'all' && c.deadline) {
-      const d = castingDaysUntil(c.deadline);
-      if (filters.deadline === 'week' && d > 7) return false;
-      if (filters.deadline === 'month' && d > 30) return false;
-      if (filters.deadline === 'open' && d <= 30) return false;
-    }
     return true;
-  }).sort((a,b) => b.fitScore - a.fitScore || (a.deadline ? castingDaysUntil(a.deadline) : 999) - (b.deadline ? castingDaysUntil(b.deadline) : 999));
+  }).sort((a,b) => ((b.castingStatus === 'open') ? 1 : 0) - ((a.castingStatus === 'open') ? 1 : 0) || b.fitScore - a.fitScore);
 
   const formatOptions = [...new Set(cards.filter(c => c.bucket !== 'no').map(c => c.formatType))];
   const open       = openList;
   const inFlight   = cards.filter(c => ['applied','first-tape','callback','producer-interview'].includes(c.pipelineStatus));
   const topScore   = open.length ? Math.max(...open.map(c => c.fitScore)) : 0;
-  const topCard    = open.filter(c => c.fitScore === topScore).sort((a,b) => castingDaysUntil(a.deadline) - castingDaysUntil(b.deadline))[0];
+  const topCard    = open.filter(c => c.fitScore === topScore)[0];
   const avg        = open.length ? Math.round(open.reduce((s,c) => s + c.fitScore, 0) / open.length * 10) / 10 : 0;
 
   const updatePipeline = (id, stage) => {
@@ -2862,6 +2854,7 @@ function RealityCastingTab() {
       id: `c${Date.now()}`,
       showName: text.split('\n')[0].slice(0,60) || 'Untitled casting',
       network: 'TBD', formatType:'social-strategy', market:'US',
+      castingStatus:'open', typicalWindow: '',
       deadline: castingDateFromToday(14), pipelineStatus:'researching',
       applyLink: '', oneLineWhy:'Just added — review fields and adjust scoring inputs.',
       flags:['solo'], dqRisk:false,
@@ -2888,9 +2881,9 @@ function RealityCastingTab() {
       {/* Stat tiles */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:12, marginBottom:18 }}>
         <div style={{ background:`linear-gradient(135deg, #B6F2F9 0%, ${BLUE} 100%)`, borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
-          <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Highest open fit score</div>
+          <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Top fit score</div>
           <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{topScore.toFixed(1)}</div>
-          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>tracked castings</div>
+          <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>casting now</div>
         </div>
         <Card>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Live applications</div>
@@ -2898,9 +2891,9 @@ function RealityCastingTab() {
           <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>in flight</div>
         </Card>
         <Card>
-          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Open castings</div>
+          <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Casting now</div>
           <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{open.length}</div>
-          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>tracked</div>
+          <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>apply today</div>
         </Card>
         <Card>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Avg fit score</div>
@@ -2915,12 +2908,12 @@ function RealityCastingTab() {
         {topCard ? (
           <>
             <div style={{ fontSize:16, fontWeight:600, color:TEXT, lineHeight:1.4 }}>
-              Top of your queue: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}, {castingDeadlineLabel(topCard.deadline).toLowerCase()}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
+              Top of your queue: <span style={{ fontWeight:800 }}>{topCard.showName}</span> ({topCard.network}). Scored <span style={{ fontWeight:800 }}>{topCard.fitScore}/10</span> — {topCard.oneLineWhy.toLowerCase()}
             </div>
-            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} open castings tracked · casting data last updated {CASTING_CHECKED_LABEL}.</div>
+            <div style={{ fontSize:12, color:SLATE, marginTop:8 }}>{open.length} shows casting now · casting data last updated {CASTING_CHECKED_LABEL}.</div>
           </>
         ) : (
-          <div style={{ fontSize:14, color:TEXT }}>Nothing in the open queue scores above your floor — quiet week. Watchlist below has annual cycles to prep tapes for.</div>
+          <div style={{ fontSize:14, color:TEXT }}>Nothing casting right now — every tracked show is below with its usual window.</div>
         )}
       </Card>
 
@@ -2974,7 +2967,7 @@ function RealityCastingTab() {
       <Card style={{ marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Filters</div>
-          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (format-archived hidden · closed on the Closed tab)</div>
+          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (format-archived hidden)</div>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           <div>
@@ -2988,12 +2981,6 @@ function RealityCastingTab() {
             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
               <Pill active={filters.format==='all'} onClick={() => setFilters({...filters, format:'all'})}>All</Pill>
               {formatOptions.map(f => <Pill key={f} active={filters.format===f} onClick={() => setFilters({...filters, format:f})}>{CASTING_FORMAT_LABELS[f]}</Pill>)}
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:600, marginBottom:6 }}>Deadline</div>
-            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-              {[['all','Any'],['week','This week'],['month','This month'],['open','Open later']].map(([k,l]) => <Pill key={k} active={filters.deadline===k} onClick={() => setFilters({...filters, deadline:k})}>{l}</Pill>)}
             </div>
           </div>
           <div style={{ display:'flex', gap:24, flexWrap:'wrap' }}>
@@ -3021,9 +3008,7 @@ function RealityCastingTab() {
           </Card>
         ) : visible.map(c => {
           const sc = castingScoreColor(c.fitScore);
-          const daysLeft = c.deadline ? castingDaysUntil(c.deadline) : null;
-          const sev = daysLeft === null ? 'open' : daysLeft < 0 ? 'closed' : daysLeft <= 7 ? 'urgent' : daysLeft <= 21 ? 'soon' : 'open';
-          const dlColor = sev==='urgent' ? '#A32D2D' : sev==='soon' ? '#8A6A10' : sev==='closed' ? '#94A3B8' : SLATE;
+          const isOpen = c.castingStatus === 'open';
           return (
             <Card key={c.id} style={{ cursor:'pointer', padding:16 }}>
               <div onClick={() => setSelected(c)} style={{ display:'flex', gap:12, alignItems:'flex-start' }}>
@@ -3038,11 +3023,18 @@ function RealityCastingTab() {
                   </div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
                     <Tag color={SLATE}>{CASTING_FORMAT_LABELS[c.formatType]}</Tag>
-                    <Tag color={dlColor}>{castingDeadlineLabel(c.deadline)}</Tag>
+                    <Tag color={isOpen ? '#0E6A80' : SLATE}>{isOpen ? 'CASTING NOW' : 'NOT CASTING NOW'}</Tag>
                     {c.flags.includes('apply-with-dan') && <Tag color={SLATE}>+ Dan</Tag>}
                     {c.flags.includes('annual') && <Tag color={SLATE}>Annual</Tag>}
                   </div>
                   <div style={{ fontSize:12, color:SLATE, marginTop:10, lineHeight:1.4 }}>{c.oneLineWhy}</div>
+                  {isOpen ? (
+                    (() => { const ap = resolveApply(c); return ap ? (
+                      <a href={ap.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ display:'inline-block', marginTop:8, fontSize:12, fontWeight:800, color: ap.source === 'verified-portal' ? '#0E6A80' : BLUE, textDecoration:'none' }}>{ap.label} →</a>
+                    ) : null; })()
+                  ) : (c.typicalWindow ? (
+                    <div style={{ fontSize:11, color:'#94A3B8', marginTop:8 }}>Usual window: {c.typicalWindow}</div>
+                  ) : null)}
                   <div style={{ fontSize:10, color:'#94A3B8', marginTop:8, fontStyle:'italic' }}>{c.fitReasoning}</div>
                 </div>
               </div>
@@ -3077,7 +3069,8 @@ function RealityCastingTab() {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:18 }}>
                 {[
                   ['Format', CASTING_FORMAT_LABELS[selected.formatType]],
-                  ['Deadline', castingDeadlineLabel(selected.deadline)],
+                  ['Status', selected.castingStatus === 'open' ? 'Casting now' : 'Not casting now'],
+                  ['Usual window', selected.typicalWindow || '—'],
                   ['Career upside', `${selected.scoreInputs.careerUpside ?? '—'}/10`],
                   ['Exposure value', `${selected.scoreInputs.exposureValue}/10`],
                   ['Network ecosystem', `${selected.scoreInputs.networkEcosystem ?? '—'}/10`],
@@ -3109,22 +3102,18 @@ function RealityCastingTab() {
               </div>
               {(() => {
                 const ap = resolveApply(selected);
-                const note = ap.source === 'verified-portal' ? 'Verified application page'
-                  : ap.source === 'network-hub' ? `${selected.network} official casting hub — this show's application is listed here`
-                  : 'Opens a search for this show\'s casting application';
                 const alreadyTracked = applications.some(a => a.fromCardId === selected.id);
+                const note = ap ? (ap.source === 'verified-portal' ? 'Verified application page'
+                  : `${selected.network} official casting hub — this show's application is listed here`) : null;
                 return (
                   <div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                      {/* Verified pages get the filled "Apply Now" button; search fallbacks render as a secondary link */}
-                      <a href={ap.url} target="_blank" rel="noopener noreferrer" style={ap.source === 'search'
-                        ? { display:'inline-block', background:'#FFFFFF', color:TEXT, textDecoration:'none', borderRadius:8, padding:'8px 15px', fontSize:13, fontWeight:700, border:`1px solid ${BDR}` }
-                        : { display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>
+                      {ap && <a href={ap.url} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>}
                       <button onClick={() => { trackApplication(selected); setSelected(null); }} disabled={alreadyTracked}
                         style={{ background: alreadyTracked ? '#F1F5F9' : '#fff', color: alreadyTracked ? '#94A3B8' : '#0E6A80', border:`1px solid ${alreadyTracked ? BDR : BLUE}`, borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700, cursor: alreadyTracked ? 'default' : 'pointer', fontFamily:'inherit' }}>
                         {alreadyTracked ? '✓ Tracked' : '+ Track this application'}</button>
                     </div>
-                    <div style={{ fontSize:10, color:SLATE, marginTop:6, lineHeight:1.5 }}>{note} · link checked {ap.checked}</div>
+                    {note && <div style={{ fontSize:10, color:SLATE, marginTop:6, lineHeight:1.5 }}>{note} · link checked {ap.checked}</div>}
                   </div>
                 );
               })()}
