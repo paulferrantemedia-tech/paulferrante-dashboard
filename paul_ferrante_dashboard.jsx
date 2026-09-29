@@ -32,6 +32,7 @@ function usd(n) {
 }
 // ── Analytics helpers ─────────────────────────────────────────
 function detectHookType(title) {
+  if (!title || typeof title !== 'string') return null;
   const t = title.toLowerCase().trim();
   if (/^(why|what|how|which|when|who|does|is|can|should|will|do|are)\b/.test(t) || t.endsWith('?')) return 'Question';
   if (/\b\$[\d,]+|\b\d+\s*(days?|hours?|weeks?|months?|years?|things?|ways?|tips?|secrets?|reasons?|mistakes?|cities?|countries?|flights?|stops?|places?|spots?|nights?)\b/.test(t)) return 'Number';
@@ -8835,11 +8836,11 @@ function ExportTab({ data, year }) {
                         eng: ytAnalytics ? `${agg.avgEngRate}%` : '—',
                         views: ytAnalytics ? fmtViews(agg.avgViews) : '—', viewsLabel:'avg views/video' },
                       { logo: <IGLogo size={18}/>, name:'Instagram', color:'#E1306C',
-                        followers: igAnalytics ? fmtFull(igAnalytics.profile.followersCount) : (igFollowers ? fmtFull(igFollowers) : '—'),
+                        followers: igAnalytics?.profile ? fmtFull(igAnalytics.profile.followersCount) : (igFollowers ? fmtFull(igFollowers) : '—'),
                         eng: igAnalytics && igAnalytics.aggregates ? `${igAnalytics.aggregates.avgEngRate || 0}%` : '—',
                         views: igAnalytics && igAnalytics.aggregates ? fmtViews(igAnalytics.aggregates.avgReach || 0) : '—', viewsLabel:'avg reach/post' },
                       { logo: <TTLogo size={18}/>, name:'TikTok',    color:'#69C9D0',
-                        followers: ttAnalytics ? fmtFull(ttAnalytics.profile.followerCount) : (ttFollowers ? fmtFull(ttFollowers) : '—'),
+                        followers: ttAnalytics?.profile ? fmtFull(ttAnalytics.profile.followerCount) : (ttFollowers ? fmtFull(ttFollowers) : '—'),
                         eng: ttAnalytics && ttAnalytics.aggregates ? `${ttAnalytics.aggregates.avgEngRate || 0}%` : '—',
                         views: ttAnalytics && ttAnalytics.aggregates ? fmtViews(ttAnalytics.aggregates.avgViews || 0) : '—', viewsLabel:'avg views/video' },
                     ].map(({ logo, name, color, followers, eng, views, viewsLabel }) => (
@@ -8962,7 +8963,7 @@ function ExportTab({ data, year }) {
                             <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                               {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width:48, height:27, borderRadius:4, objectFit:'cover', flexShrink:0 }} />}
                               <div>
-                                <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{v.title.length > 55 ? v.title.slice(0,55)+'…' : v.title}</div>
+                                <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{(v.title||'').length > 55 ? (v.title||'').slice(0,55)+'…' : (v.title||'(untitled)')}</div>
                                 <div style={{ fontSize:10, color:SLATE, marginTop:2 }}>{new Date(v.publishedAt).toLocaleDateString('en-US',{month:'short',year:'numeric'})} · {v.duration}</div>
                               </div>
                             </div>
@@ -9028,7 +9029,7 @@ function ExportTab({ data, year }) {
                         <div style={{ background:`${OCEAN}33`, borderRadius:10, padding:'12px 14px', borderLeft:`3px solid ${YELL}` }}>
                           <div style={{ fontSize:11, fontWeight:700, color:YELL, marginBottom:4 }}>🏆 Top video</div>
                           <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.5 }}>
-                            "{topVid.title.slice(0,60)}{topVid.title.length>60?'…':''}" leads with <strong>{fmtViews(topVid.viewCount)}</strong> views and <strong>{topVid.engagementRate}%</strong> engagement.
+                            "{(topVid.title||'').slice(0,60)}{(topVid.title||'').length>60?'…':''}" leads with <strong>{fmtViews(topVid.viewCount)}</strong> views and <strong>{topVid.engagementRate}%</strong> engagement.
                           </div>
                         </div>
                       )}
@@ -9097,7 +9098,7 @@ function ExportTab({ data, year }) {
                     </div>
                   )}
                   {igAnalytics && (() => {
-                    const { profile: igP, posts, aggregates: igAgg } = igAnalytics;
+                    const { profile: igP = {}, posts = [], aggregates: igAgg = {} } = igAnalytics;
                     const reachAvailable = igAgg.avgReach > 0;
                     // Per-post: if reach is 0, compute eng rate from followers as fallback
                     const enrichedPosts = posts.map(p => {
@@ -9234,14 +9235,14 @@ function ExportTab({ data, year }) {
                             })}
                           </div>
                         )}
+                        {sortedPosts.length > 5 && (
+                          <button onClick={() => setShowAllIgPosts(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#E1306C', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                            {showAllIgPosts ? 'show less' : `show more (${Math.min(sortedPosts.length, isMobile ? 10 : 15) - 5} more)`}
+                          </button>
+                        )}
                       </div>
                     );
                   })()}
-                  {sortedPosts.length > 5 && (
-                    <button onClick={() => setShowAllIgPosts(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#E1306C', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-                      {showAllIgPosts ? 'show less' : `show more (${Math.min(sortedPosts.length, isMobile ? 10 : 15) - 5} more)`}
-                    </button>
-                  )}
                 </Card>
 
                 {/* ── TikTok section ── */}
@@ -9272,7 +9273,7 @@ function ExportTab({ data, year }) {
                     </div>
                   )}
                   {ttAnalytics && (() => {
-                    const { profile: ttP, videos: ttVids, aggregates: ttAgg } = ttAnalytics;
+                    const { profile: ttP = {}, videos: ttVids = [], aggregates: ttAgg = {} } = ttAnalytics;
                     // Compute per-video rates against views, averaged across the recent set
                     const ttBench = ttBenchmark(ttP.followerCount || 0);
                     const ttN = ttVids.length;
@@ -9375,7 +9376,7 @@ function ExportTab({ data, year }) {
                                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                                     {v.thumbnail && <img src={v.thumbnail} alt="" loading="lazy" style={{ width:44, height:44, borderRadius:6, objectFit:'cover', flexShrink:0 }} />}
                                     <div>
-                                      <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{v.title.length > 60 ? v.title.slice(0,60)+'…' : v.title}</div>
+                                      <div style={{ fontSize:12, fontWeight:600, lineHeight:1.35, maxWidth:280 }}>{(v.title||'').length > 60 ? (v.title||'').slice(0,60)+'…' : (v.title||'(untitled)')}</div>
                                       <div style={{ fontSize:10, color:SLATE, marginTop:2 }}>{new Date(v.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}{v.duration ? ` · ${v.duration}s` : ''}</div>
                                     </div>
                                   </div>
@@ -9390,14 +9391,14 @@ function ExportTab({ data, year }) {
                             })}
                           </div>
                         )}
+                        {ttVids.length > 5 && (
+                          <button onClick={() => setShowAllTtVids(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#69C9D0', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
+                            {showAllTtVids ? 'show less' : `show more (${Math.min(ttVids.length, isMobile ? 10 : 15) - 5} more)`}
+                          </button>
+                        )}
                       </div>
                     );
                   })()}
-                  {ttVids.length > 5 && (
-                    <button onClick={() => setShowAllTtVids(s => !s)} style={{ marginTop:12, background:'none', border:`1px solid ${BDR}`, borderRadius:8, color:'#69C9D0', padding:'8px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>
-                      {showAllTtVids ? 'show less' : `show more (${Math.min(ttVids.length, isMobile ? 10 : 15) - 5} more)`}
-                    </button>
-                  )}
                 </Card>
 
                 {/* ── API Setup Instructions ── */}
