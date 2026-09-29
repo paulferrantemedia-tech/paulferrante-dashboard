@@ -45,6 +45,15 @@ function detectHookType(title) {
   if (/\b(you won'?t believe|this changed|changed my life|insane|unbelievable|mindblowing|blew my mind|i can'?t believe|wait until|watch this|shocked)\b/.test(t)) return 'Clickbait';
   return 'Standard';
 }
+// ── In-video hook lookup ────────────────────────────────────────
+// hookTextMap is keyed "<platform>:<videoId>" → { hookText, source }.
+// The transcribed spoken hook (first ~8s of the video) is preferred over
+// caption/title text everywhere hook types are computed.
+function hookTextFor(map, platform, id) {
+  if (!map || !platform || !id) return null;
+  const e = map[`${platform}:${id}`];
+  return (e && typeof e.hookText === 'string' && e.hookText.trim()) ? e.hookText.trim() : null;
+}
 const HOOK_COLORS = {
   'Question':   '#88EAF6',
   'Number':     '#E1D9AE',
@@ -4058,6 +4067,7 @@ export default function App() {
   // ── Feature 1: Analytics sort ──────────────────────────────
   const [ytSort, setYtSort] = useState('views'); // 'views' | 'engRate' | 'likes' | 'comments' | 'date'
   const [expandedHook, setExpandedHook] = useState(null); // analytics: expanded hook-format row
+  const [hookTextMap, setHookTextMap] = useState({}); // in-video hook transcripts, keyed "platform:id" (what Paul actually says, not captions)
 
   // ── Feature 2: Posting Cadence ─────────────────────────────
   const getWeekStart = () => {
@@ -4432,6 +4442,15 @@ export default function App() {
           if (d.profile?.followerCount) setTtFollowers(d.profile.followerCount);
         }
       })
+      .catch(() => {});
+  }, []);
+
+  // ── In-video hook transcripts on startup (powers hook analytics from spoken hooks, not captions) ──
+  // Independent of platform gating: shows "caption" fallback wherever a transcript is missing.
+  useEffect(() => {
+    fetch(`/api/sync?action=hook-text&t=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => { if (d.ok && d.hooks) setHookTextMap(d.hooks); })
       .catch(() => {});
   }, []);
 
@@ -8383,10 +8402,11 @@ function ExportTab({ data, year }) {
           const personaReach = `${fmtFull((ytSubs||0)+(igFollowers||0)+(ttFollowers||0))}+`;
 
           // ── Trust-killer evidence: detectable patterns in his own video data ──
+          // Hook classification prefers the transcribed in-video hook over caption/title.
           const libVids = [
-            ...(ytVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(v.title) })),
-            ...(igPostsTop || []).map(p => ({ title: p.caption || `(${p.mediaType})`, eng: p.engagementRate || 0, hook: detectHookType(p.caption || '') })),
-            ...(ttVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(v.title) })),
+            ...(ytVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(hookTextFor(hookTextMap, 'yt', v.id) || v.title) })),
+            ...(igPostsTop || []).map(p => ({ title: p.caption || `(${p.mediaType})`, eng: p.engagementRate || 0, hook: detectHookType(hookTextFor(hookTextMap, 'ig', p.id) || p.caption || '') })),
+            ...(ttVidsTop || []).map(v => ({ title: v.title, eng: v.engagementRate, hook: detectHookType(hookTextFor(hookTextMap, 'tt', v.id) || v.title) })),
           ];
           const worstMatching = (pred) => {
             const hits = libVids.filter(pred);
@@ -8549,7 +8569,8 @@ function ExportTab({ data, year }) {
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
                       {ytVidsTop.map(v => {
-                        const hook = detectHookType(v.title);
+                        const spokenHook = hookTextFor(hookTextMap, 'yt', v.id);
+                        const hook = detectHookType(spokenHook || v.title);
                         return (
                           <div key={v.id} onClick={() => setSelectedYtVideo(v)} style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 14px', border:'1px solid #CDD4E0', cursor:'pointer', transition:'background 0.12s' }}
                             onMouseEnter={e => e.currentTarget.style.background='#EEF9FD'}
@@ -8558,6 +8579,7 @@ function ExportTab({ data, year }) {
                               {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width:64, height:36, borderRadius:4, objectFit:'cover', flexShrink:0 }} />}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontSize:12, fontWeight:600, lineHeight:1.4, marginBottom:6 }}>{v.title.length>65?v.title.slice(0,65)+'…':v.title}</div>
+                                {spokenHook && <div style={{ fontSize:11, color:'#0E6A80', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
                                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                                   <span style={{ fontSize:11, color:TEXT, fontWeight:700 }}>▶ {fmtViews(v.viewCount)}</span>
                                   <span style={{ fontSize:11, color:YELL }}>♥ {fmtViews(v.likeCount)}</span>
@@ -8587,7 +8609,8 @@ function ExportTab({ data, year }) {
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
                       {igPostsTop.map(p => {
-                        const hook = detectHookType(p.caption||'');
+                        const spokenHook = hookTextFor(hookTextMap, 'ig', p.id);
+                        const hook = detectHookType(spokenHook || p.caption||'');
                         return (
                           <a key={p.id} href={p.permalink} target="_blank" rel="noopener noreferrer" style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 14px', border:'1px solid #CDD4E0', textDecoration:'none', color:'inherit', display:'block', transition:'background 0.12s' }}
                             onMouseEnter={e => e.currentTarget.style.background='#EEF9FD'}
@@ -8596,6 +8619,7 @@ function ExportTab({ data, year }) {
                               {p.thumbnail && <img src={p.thumbnail} alt="" style={{ width:44, height:44, borderRadius:6, objectFit:'cover', flexShrink:0 }} />}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontSize:12, fontWeight:600, lineHeight:1.4, marginBottom:6 }}>{(p.caption||`(${p.mediaType})`).slice(0,65)}{(p.caption||'').length>65?'…':''}</div>
+                                {spokenHook && <div style={{ fontSize:11, color:'#0E6A80', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
                                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                                   <span style={{ fontSize:11, color:TEXT, fontWeight:700 }}>👁 {fmtViews(p.reach||0)}</span>
                                   <span style={{ fontSize:11, color:YELL }}>♥ {fmtViews(p.likeCount)}</span>
@@ -8625,10 +8649,12 @@ function ExportTab({ data, year }) {
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
                       {ttVidsTop.map(v => {
-                        const hook = detectHookType(v.title);
+                        const spokenHook = hookTextFor(hookTextMap, 'tt', v.id);
+                        const hook = detectHookType(spokenHook || v.title);
                         return (
                           <div key={v.id} style={{ background:'#0a1a1a', borderRadius:10, padding:'12px 14px', border:'1px solid #69C9D033' }}>
                             <div style={{ fontSize:12, fontWeight:600, lineHeight:1.4, marginBottom:6 }}>{v.title.length>70?v.title.slice(0,70)+'…':v.title}</div>
+                            {spokenHook && <div style={{ fontSize:11, color:'#9FD8E8', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
                             <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                               <span style={{ fontSize:11, color:TEXT, fontWeight:700 }}>▶ {fmtViews(v.viewCount)}</span>
                               <span style={{ fontSize:11, color:YELL }}>♥ {fmtViews(v.likeCount)}</span>
@@ -8757,10 +8783,11 @@ function ExportTab({ data, year }) {
             return (b.viewCount || 0) - (a.viewCount || 0);
           });
 
-          // Content pattern: avg views by hook type
+          // Content pattern: avg views by hook type (spoken in-video hook preferred over title)
           const hookMap = {};
           vids.forEach(v => {
-            const h = detectHookType(v.title) || 'Standard';
+            const spoken = hookTextFor(hookTextMap, 'yt', v.id);
+            const h = detectHookType(spoken || v.title) || 'Standard';
             if (!hookMap[h]) hookMap[h] = { total: 0, count: 0 };
             hookMap[h].total += v.viewCount;
             hookMap[h].count++;
@@ -9027,8 +9054,9 @@ function ExportTab({ data, year }) {
                     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                       {hookStats.map(({ hook, avg, count }) => {
                         const open = expandedHook === hook;
+                        const hookOf = (v) => detectHookType(hookTextFor(hookTextMap, 'yt', v.id) || v.title) || 'Standard';
                         const examples = vids
-                          .filter(v => (detectHookType(v.title) || 'Standard') === hook)
+                          .filter(v => hookOf(v) === hook)
                           .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
                           .slice(0, 5);
                         return (
@@ -9048,9 +9076,14 @@ function ExportTab({ data, year }) {
                               <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:6 }}>
                                 {examples.map((v, i) => (
                                   <div key={v.id || i} style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline', background:`${OCEAN}22`, borderRadius:8, padding:'8px 10px' }}>
-                                    <div style={{ fontSize:11, color:'#4A6080', flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                    <div style={{ fontSize:11, color:'#4A6080', flex:1, minWidth:0 }}>
                                       {i === 0 && <span style={{ color:'#E1306C', fontWeight:800, marginRight:6 }}>★</span>}
-                                      {(v.title || '(untitled)').slice(0, 70)}{(v.title || '').length > 70 ? '…' : ''}
+                                      {(() => { const spoken = hookTextFor(hookTextMap, 'yt', v.id); return spoken ? (
+                                        <span><span style={{ fontStyle:'italic' }}>"{(spoken.length>80?spoken.slice(0,80)+'…':spoken)}"</span>
+                                        <span style={{ color:SLATE, fontSize:10 }}> — in-video hook</span></span>
+                                      ) : (
+                                        <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'inline-block', maxWidth:'100%', verticalAlign:'bottom' }}>{(v.title || '(untitled)').slice(0, 70)}{(v.title || '').length > 70 ? '…' : ''}<span style={{ color:SLATE, fontSize:10 }}> — title (no transcript yet)</span></span>
+                                      ); })()}
                                     </div>
                                     <div style={{ fontSize:10, color:SLATE, whiteSpace:'nowrap' }}>{fmtViews(v.viewCount)} views · {v.engagementRate}% eng</div>
                                   </div>
