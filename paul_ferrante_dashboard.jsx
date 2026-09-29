@@ -7038,7 +7038,7 @@ function ExportTab({ data, year }) {
                 {/* Posts this week — auto-counted across IG + TikTok + YouTube, deduped by day (cross-posts = 1) */}
                 {(() => {
                   const ringLen  = 94.2;
-                  const wkPct    = Math.min(100, Math.round((weeklyAutoCount / 5) * 100));
+                  const wkPct    = Math.min(100, Math.round((weeklyAutoCount / 4) * 100));
                   const ringFill = (wkPct / 100) * ringLen;
                   return (
                     <div style={{
@@ -7053,7 +7053,7 @@ function ExportTab({ data, year }) {
                         <div style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1 }}>
                           {weeklyAutoCount}
                         </div>
-                        <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal 5 · auto-tracked</div>
+                        <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal 4 · auto-tracked</div>
                       </div>
                       <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
                         <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
