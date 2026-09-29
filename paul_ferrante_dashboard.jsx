@@ -504,19 +504,34 @@ function FollowerModal({ label, current, onSave, onClose, isMobile }) {
 // ── Hook tag with hover tooltip ───────────────────────────────
 function HookTag({ hook }) {
   const [show, setShow] = useState(false);
+  const [pos, setPos] = useState(null);
+  const wrapRef = useRef(null);
   const color = HOOK_COLORS[hook] || '#6E6E6E';
   const def   = HOOK_DEFS[hook];
+  const onEnter = () => {
+    if (!def) return;
+    // Position fixed + clamped to the viewport so the tooltip can never be
+    // clipped by the sidebar or any overflow:hidden ancestor.
+    const r = wrapRef.current ? wrapRef.current.getBoundingClientRect() : null;
+    if (r) {
+      const w = 240;
+      const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+      if (r.top > 230) setPos({ left, bottom: window.innerHeight - r.top + 8 });
+      else setPos({ left, top: r.bottom + 8 });
+    }
+    setShow(true);
+  };
   return (
-    <span style={{ position:'relative', display:'inline-block' }}
-      onMouseEnter={() => setShow(true)}
+    <span ref={wrapRef} style={{ position:'relative', display:'inline-block' }}
+      onMouseEnter={onEnter}
       onMouseLeave={() => setShow(false)}>
       <Tag color={color}>{hook}</Tag>
-      {show && def && (
+      {show && def && pos && (
         <div style={{
-          position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+          position:'fixed', left:pos.left, top:pos.top, bottom:pos.bottom,
           background:'#0e1c28', border:`1px solid ${color}55`, borderRadius:10,
           padding:'10px 13px', fontSize:11, color:'#4A6080', lineHeight:1.6,
-          width:230, zIndex:99999, pointerEvents:'none', whiteSpace:'normal', textAlign:'left',
+          width:240, zIndex:99999, pointerEvents:'none', whiteSpace:'normal', textAlign:'left',
           boxShadow:'0 4px 20px rgba(0,0,0,0.6)',
         }}>
           <div style={{ fontWeight:800, color, marginBottom:4 }}>{hook} hook</div>
@@ -4042,6 +4057,7 @@ export default function App() {
 
   // ── Feature 1: Analytics sort ──────────────────────────────
   const [ytSort, setYtSort] = useState('views'); // 'views' | 'engRate' | 'likes' | 'comments' | 'date'
+  const [expandedHook, setExpandedHook] = useState(null); // analytics: expanded hook-format row
 
   // ── Feature 2: Posting Cadence ─────────────────────────────
   const getWeekStart = () => {
@@ -8713,6 +8729,25 @@ function ExportTab({ data, year }) {
           const agg   = ytAnalytics?.aggregates || {};
           const ch    = ytAnalytics?.channel || {};
 
+          // ── Cumulative all-platform summary ──
+          const cumYtAud = ch.subscriberCount || ytSubs || 0;
+          const cumIgAud = igAnalytics?.profile?.followersCount || igFollowers || 0;
+          const cumTtAud = ttAnalytics?.profile?.followerCount || ttFollowers || 0;
+          const cumAud = cumYtAud + cumIgAud + cumTtAud;
+          const cumTtVids  = ttAnalytics?.videos || [];
+          const cumIgPosts = igAnalytics?.posts || [];
+          const cumViews = (ch.viewCount || 0)
+            + cumTtVids.reduce((s, v) => s + (v.viewCount || 0), 0)
+            + cumIgPosts.reduce((s, p) => s + (p.reach || 0), 0);
+          const cumYtN = agg.totalVids || 0;
+          const cumIgN = cumIgPosts.length;
+          const cumTtN = cumTtVids.length;
+          const cumN = cumYtN + cumIgN + cumTtN;
+          const cumEngW = (agg.avgEngRate || 0) * cumYtN
+            + (igAnalytics?.aggregates?.avgEngRate || 0) * cumIgN
+            + (ttAnalytics?.aggregates?.avgEngRate || 0) * cumTtN;
+          const cumEng = cumN > 0 ? `${(cumEngW / cumN).toFixed(2)}%` : '—';
+
           // Feature 1: Sorted videos
           const sortedVids = [...vids].sort((a, b) => {
             if (ytSort === 'engRate') return (b.engagementRate || 0) - (a.engagementRate || 0);
@@ -8725,7 +8760,7 @@ function ExportTab({ data, year }) {
           // Content pattern: avg views by hook type
           const hookMap = {};
           vids.forEach(v => {
-            const h = detectHookType(v.title);
+            const h = detectHookType(v.title) || 'Standard';
             if (!hookMap[h]) hookMap[h] = { total: 0, count: 0 };
             hookMap[h].total += v.viewCount;
             hookMap[h].count++;
@@ -8787,7 +8822,7 @@ function ExportTab({ data, year }) {
                 <div>
                   <div style={{ fontSize:isMobile?16:22, fontWeight:800, letterSpacing:'-0.5px' }}>Analytics</div>
                   <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>
-                    YouTube &amp; Instagram live · TikTok coming soon
+                    {[ytAnalytics && 'YouTube live', igAnalytics && 'Instagram live', ttAnalytics && 'TikTok live'].filter(Boolean).join(' · ') || 'connect a platform below'}
                     {ytAnalytics?._cachedAt && (
                       <span style={{ marginLeft:8, color:'#64748B' }}>
                         · cached {Math.round((Date.now() - ytAnalytics._cachedAt) / 60000)}m ago
@@ -8795,12 +8830,6 @@ function ExportTab({ data, year }) {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => { setYtAnalytics(null); loadYtAnalytics(true); }}
-                  disabled={ytAnalyticsLoading}
-                  style={{ background:'none', border:`1px solid ${OCEAN}`, borderRadius:8, color:BLUE, padding:'8px 16px', fontSize:11, fontWeight:700, cursor:ytAnalyticsLoading?'default':'pointer', fontFamily:'inherit', opacity:ytAnalyticsLoading?0.5:1 }}>
-                  {ytAnalyticsLoading ? '⟳ Loading…' : '↺ Refresh'}
-                </button>
               </div>
 
               {/* ── Loading / Error states ── */}
@@ -8819,65 +8848,59 @@ function ExportTab({ data, year }) {
 
               {ytAnalytics && (<>
 
-                {/* ── Channel overview stat cards ── */}
-                <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:12 }}>
-                  {[
-                    { label:'Subscribers',      value:fmtFull(ch.subscriberCount), sub:'YouTube channel' },
-                    { label:'Total Views',       value:fmtFull(ch.viewCount),       sub:'All-time' },
-                    { label:'Videos Analysed',   value:agg.totalVids,               sub:'Most recent 50' },
-                    { label:'Avg Views/Video',   value:fmtViews(agg.avgViews),      sub:'Across your library' },
-                  ].map(({ label, value, sub }) => (
-                    <Card key={label} style={{ textAlign:'center', padding:'18px 12px' }}>
-                      <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2.5px', marginBottom:8, fontWeight:700 }}>{label}</div>
-                      <div style={{ fontSize:isMobile?26:32, fontWeight:900, letterSpacing:'-1px', lineHeight:1 }}>{value}</div>
-                      <div style={{ fontSize:10, color:SLATE, marginTop:6 }}>{sub}</div>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* ── Cross-platform snapshot ── */}
+                {/* ── All-platforms cumulative summary ── */}
                 <Card>
-                  <Label>Cross-Platform Snapshot</Label>
-                  <div style={{ fontSize:11, color:SLATE, marginBottom:14 }}>One row, all three platforms · — means not connected yet</div>
-                  <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)', gap:12 }}>
+                  <Label>All Platforms</Label>
+                  <div style={{ fontSize:11, color:SLATE, marginBottom:14 }}>Combined totals across every connected platform · — means not connected yet</div>
+                  <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:10 }}>
                     {[
-                      { logo: <YTLogo size={18}/>, name:'YouTube',   color:'#FF0000',
-                        followers: ytAnalytics ? fmtFull(ch.subscriberCount) : (ytSubs ? fmtFull(ytSubs) : '—'),
-                        eng: ytAnalytics ? `${agg.avgEngRate}%` : '—',
-                        views: ytAnalytics ? fmtViews(agg.avgViews) : '—', viewsLabel:'avg views/video' },
-                      { logo: <IGLogo size={18}/>, name:'Instagram', color:'#E1306C',
-                        followers: igAnalytics?.profile ? fmtFull(igAnalytics.profile.followersCount) : (igFollowers ? fmtFull(igFollowers) : '—'),
-                        eng: igAnalytics && igAnalytics.aggregates ? `${igAnalytics.aggregates.avgEngRate || 0}%` : '—',
-                        views: igAnalytics && igAnalytics.aggregates ? fmtViews(igAnalytics.aggregates.avgReach || 0) : '—', viewsLabel:'avg reach/post' },
-                      { logo: <TTLogo size={18}/>, name:'TikTok',    color:'#69C9D0',
-                        followers: ttAnalytics?.profile ? fmtFull(ttAnalytics.profile.followerCount) : (ttFollowers ? fmtFull(ttFollowers) : '—'),
-                        eng: ttAnalytics && ttAnalytics.aggregates ? `${ttAnalytics.aggregates.avgEngRate || 0}%` : '—',
-                        views: ttAnalytics && ttAnalytics.aggregates ? fmtViews(ttAnalytics.aggregates.avgViews || 0) : '—', viewsLabel:'avg views/video' },
-                    ].map(({ logo, name, color, followers, eng, views, viewsLabel }) => (
-                      <div key={name} style={{ background:`${OCEAN}18`, borderRadius:10, padding:'14px 16px', border:`1px solid ${OCEAN}44` }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-                          {logo}
-                          <div style={{ fontSize:12, fontWeight:800 }}>{name}</div>
-                          <Tag color={color}>{followers} followers</Tag>
-                        </div>
-                        <div style={{ display:'flex', gap:16 }}>
-                          <div>
-                            <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>eng rate</div>
-                            <div style={{ fontSize:16, fontWeight:900 }}>{eng}</div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:9, color:SLATE, textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>{viewsLabel}</div>
-                            <div style={{ fontSize:16, fontWeight:900 }}>{views}</div>
-                          </div>
-                        </div>
+                      { label:'Total Audience',      value: cumAud > 0 ? fmtFull(cumAud) : '—',     sub:'subs + followers' },
+                      { label:'Total Views & Reach', value: cumViews > 0 ? fmtViews(cumViews) : '—', sub:'YT all-time + recent TT/IG' },
+                      { label:'Content Analyzed',    value: cumN > 0 ? cumN : '—',                   sub:'videos + posts' },
+                      { label:'Avg Engagement',      value: cumEng,                                   sub:'weighted by content' },
+                    ].map(({ label, value, sub }) => (
+                      <div key={label} style={{ background:`${OCEAN}22`, borderRadius:10, padding:'14px 12px', textAlign:'center' }}>
+                        <div style={{ fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>{label}</div>
+                        <div style={{ fontSize:22, fontWeight:900, letterSpacing:'-0.5px' }}>{value}</div>
+                        <div style={{ fontSize:9, color:SLATE, marginTop:4 }}>{sub}</div>
                       </div>
                     ))}
                   </div>
                 </Card>
 
-                {/* ── Benchmark comparison ── */}
+                {/* ── YouTube section ── */}
                 <Card>
-                  <Label>Performance vs Benchmark — creators your size</Label>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                      <YTLogo size={22}/>
+                      <Label style={{ margin:0 }}>YouTube</Label>
+                      {ytAnalytics && <Tag color='#FF0000'>Live</Tag>}
+                      {!ytAnalytics && !ytAnalyticsLoading && <Tag color={SLATE}>Not connected</Tag>}
+                    </div>
+                    <button onClick={() => { setYtAnalytics(null); loadYtAnalytics(true); }} disabled={ytAnalyticsLoading} style={{ background:'none', border:`1px solid ${OCEAN}`, borderRadius:8, color:BLUE, padding:'6px 12px', fontSize:11, fontWeight:700, cursor:ytAnalyticsLoading?'default':'pointer', fontFamily:'inherit', opacity:ytAnalyticsLoading?0.5:1 }}>
+                      {ytAnalyticsLoading ? '⟳ Loading…' : '↺ Refresh'}
+                    </button>
+                  </div>
+
+                  <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr 1fr':'repeat(4,1fr)', gap:10, marginBottom:16 }}>
+                    {[
+                      { label:'Subscribers',  value:fmtFull(ch.subscriberCount) },
+                      { label:'Videos',       value:agg.totalVids },
+                      { label:'Avg Views',    value:fmtViews(agg.avgViews) },
+                      { label:'Avg Eng Rate', value:`${agg.avgEngRate}%` },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{ background:`${OCEAN}22`, borderRadius:10, padding:'12px', textAlign:'center' }}>
+                        <div style={{ fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>{label}</div>
+                        <div style={{ fontSize:20, fontWeight:900 }}>{value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                {/* ── Benchmark comparison ── */}
+                <div style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', marginBottom:16, border:`1px solid ${OCEAN}44` }}>
+                  <div style={{ fontSize:10, color:'#FF0000', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:14 }}>
+                    vs. Creators Your Size ({fmtFull(ch.subscriberCount)} subscribers)
+                  </div>
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)', gap:isMobile?16:24 }}>
                     {[
                       { label:'Like Rate',          val:agg.avgLikeRate,    score:likeScore,    bench:bench.likeRate,   unit:'%', tip:'likes ÷ views' },
@@ -8900,7 +8923,7 @@ function ExportTab({ data, year }) {
                       </div>
                     ))}
                   </div>
-                </Card>
+                </div>
 
                 {/* ── Top performing videos ── */}
                 {/* Sort control bar */}
@@ -8928,9 +8951,9 @@ function ExportTab({ data, year }) {
                     ))}
                   </div>
                 )}
-                <Card>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-                    <Label style={{ margin:0 }}>Top Performing Videos</Label>
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                    <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Top Performing Videos</div>
                     <span style={{ fontSize:10, color:SLATE }}>sort by →</span>
                   </div>
                   {isMobile ? (
@@ -8992,36 +9015,59 @@ function ExportTab({ data, year }) {
                       {showAllYtVids ? 'show less' : `show more (${Math.min(sortedVids.length, isMobile ? 10 : 15) - 5} more)`}
                     </button>
                   )}
-                </Card>
+                </div>
 
                 {/* ── Content patterns + insights ── */}
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:12 }}>
 
                   {/* Hook type performance */}
-                  <Card>
-                    <Label>Hook Format Performance</Label>
+                  <div style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', border:`1px solid ${OCEAN}44` }}>
+                    <div style={{ fontSize:10, color:'#FF0000', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:4 }}>Hook Format Performance</div>
+                    <div style={{ fontSize:10, color:SLATE, marginBottom:14, fontStyle:'italic' }}>tap a hook to see your videos using it, ranked by views</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                      {hookStats.map(({ hook, avg, count }) => (
-                        <div key={hook}>
-                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                              <HookTag hook={hook}/>
-                              <span style={{ fontSize:10, color:SLATE }}>{count} video{count !== 1 ? 's' : ''}</span>
+                      {hookStats.map(({ hook, avg, count }) => {
+                        const open = expandedHook === hook;
+                        const examples = vids
+                          .filter(v => (detectHookType(v.title) || 'Standard') === hook)
+                          .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+                          .slice(0, 5);
+                        return (
+                          <div key={hook}>
+                            <div onClick={() => setExpandedHook(open ? null : hook)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5, cursor:'pointer' }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                                <HookTag hook={hook}/>
+                                <span style={{ fontSize:10, color:SLATE }}>{count} video{count !== 1 ? 's' : ''}</span>
+                                <span style={{ fontSize:10, color:SLATE }}>{open ? '▾' : '▸'}</span>
+                              </div>
+                              <span style={{ fontSize:12, fontWeight:700, color: avg > agg.avgViews ? '#96C9AA' : SLATE }}>{fmtViews(avg)} avg</span>
                             </div>
-                            <span style={{ fontSize:12, fontWeight:700, color: avg > agg.avgViews ? '#96C9AA' : SLATE }}>{fmtViews(avg)} avg</span>
+                            <div style={{ background:`${OCEAN}44`, borderRadius:4, height:5, overflow:'hidden' }}>
+                              <div style={{ height:'100%', borderRadius:4, background:HOOK_COLORS[hook] || SLATE, width:`${Math.round((avg / maxHookAvg) * 100)}%`, transition:'width 0.6s ease' }} />
+                            </div>
+                            {open && (
+                              <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:6 }}>
+                                {examples.map((v, i) => (
+                                  <div key={v.id || i} style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline', background:`${OCEAN}22`, borderRadius:8, padding:'8px 10px' }}>
+                                    <div style={{ fontSize:11, color:'#4A6080', flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                                      {i === 0 && <span style={{ color:'#E1306C', fontWeight:800, marginRight:6 }}>★</span>}
+                                      {(v.title || '(untitled)').slice(0, 70)}{(v.title || '').length > 70 ? '…' : ''}
+                                    </div>
+                                    <div style={{ fontSize:10, color:SLATE, whiteSpace:'nowrap' }}>{fmtViews(v.viewCount)} views · {v.engagementRate}% eng</div>
+                                  </div>
+                                ))}
+                                {examples.length === 0 && <div style={{ fontSize:11, color:SLATE }}>No videos found for this hook.</div>}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ background:`${OCEAN}44`, borderRadius:4, height:5, overflow:'hidden' }}>
-                            <div style={{ height:'100%', borderRadius:4, background:HOOK_COLORS[hook] || SLATE, width:`${Math.round((avg / maxHookAvg) * 100)}%`, transition:'width 0.6s ease' }} />
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {hookStats.length === 0 && <div style={{ fontSize:12, color:SLATE }}>No pattern data yet — needs at least a few videos</div>}
                     </div>
-                  </Card>
+                  </div>
 
                   {/* Key insights */}
-                  <Card>
-                    <Label>Key Insights</Label>
+                  <div style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', border:`1px solid ${OCEAN}44` }}>
+                    <div style={{ fontSize:10, color:'#FF0000', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:14 }}>Key Insights</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                       {bestHook && (
                         <div style={{ background:`${OCEAN}33`, borderRadius:10, padding:'12px 14px', borderLeft:`3px solid ${BLUE}` }}>
@@ -9052,12 +9098,12 @@ function ExportTab({ data, year }) {
                         </div>
                       )}
                     </div>
-                  </Card>
+                  </div>
                 </div>
 
                 {/* ── Recommendations ── */}
-                <Card>
-                  <Label>Content Recommendations — based on your data</Label>
+                <div style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', border:`1px solid ${OCEAN}44` }}>
+                  <div style={{ fontSize:10, color:'#FF0000', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:4 }}>Content Recommendations — based on your data</div>
                   <div style={{ fontSize:10, color:SLATE, marginBottom:12, fontStyle:'italic' }}>
                     why you're seeing this: these fired from your hook-format averages across {vids.length} video{vids.length !== 1 ? 's' : ''}{bestHook ? ` · ${bestHook.hook} leads (n=${bestHook.count})` : ''}
                   </div>
@@ -9077,6 +9123,7 @@ function ExportTab({ data, year }) {
                       </div>
                     ))}
                   </div>
+                </div>
                 </Card>
 
                 {/* ── Instagram section ── */}
