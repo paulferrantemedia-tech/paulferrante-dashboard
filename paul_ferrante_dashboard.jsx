@@ -168,6 +168,7 @@ const INIT_DEALS = [
   { id:18, b:'Lord of The Rings', s:'Declined',          v:1200,   d:'TBC',    del:'1x UGC',              p:'UGC',          col:'#AAAAAA' },
 ];
 
+// ── CRM outreach scoring (all 4 signals) ──────────────────────
 const INIT_REVENUE = [
   { m:'Nov', r:2600   },
   { m:'Dec', r:0      },
@@ -178,8 +179,6 @@ const INIT_REVENUE = [
 ];
 
 const INIT_MILESTONES = [
-  { id:1, e:'✈️', t:'First brand deal: American Airlines!',  done:true  },
-  { id:2, e:'💊', t:'ZBiotics deal closed',                  done:true  },
   { id:3, e:'💸', t:'Revenue: $45K',           done:false, pct:9,  cur:'$4,055',  goal:'$45K',  cat:'Revenue'  },
   { id:4, e:'🤝', t:'Deals: 24',               done:false, pct:21, cur:'5',       goal:'24',    cat:'Deals'    },
   { id:5, e:'👥', t:'Total Audience: 90K',     done:false, pct:73, cur:'65,320',  goal:'90K',   cat:'Audience' },
@@ -187,6 +186,12 @@ const INIT_MILESTONES = [
   { id:7, e:'📱', t:'TikTok: 100K followers',  done:false, pct:51, cur:'50,900',  goal:'100K',  cat:'Audience' },
   { id:8, e:'📸', t:'Instagram: 20K followers',done:false, pct:65, cur:'12,900',  goal:'20K',   cat:'Audience' },
 ];
+
+// Milestone ids Paul asked to remove 2026-09-29 (never requested as milestones:
+// 'First brand deal: American Airlines!' and 'ZBiotics deal closed'). Stripped
+// from cached localStorage AND cloud state on load, so they stay gone. Do not
+// reuse ids 1-2 for new milestones.
+const RETIRED_MILESTONE_IDS = [1, 2];
 
 // ── CRM outreach scoring (all 4 signals) ──────────────────────
 function crmScore(c, now = Date.now()) {
@@ -3910,7 +3915,9 @@ export default function App() {
   const [deals,      setDeals]      = useState(() => (load('pf_deals', INIT_DEALS) || []).map(d => ({ ...d, s: canonStage(d.s) })));
   const [crm,        setCrm]        = useState(INIT_CRM);
   const [delivs,     setDelivs]     = useState(() => load('pf_delivs',     INIT_DELIVS));
-  const [milestones, setMilestones] = useState(() => load('pf_milestones', INIT_MILESTONES));
+  // Retired milestone ids (removed at Paul's request) are stripped from cached
+  // localStorage too, so they disappear on his devices as well as fresh loads.
+  const [milestones, setMilestones] = useState(() => load('pf_milestones', INIT_MILESTONES).filter(m => !RETIRED_MILESTONE_IDS.includes(m.id)));
   const [revenue,    setRevenue]    = useState(() => load('pf_revenue',    INIT_REVENUE));
   const [igFollowers, setIgFollowers] = useState(() => load('pf_ig_followers', 12900));
   const [ttFollowers, setTtFollowers] = useState(() => load('pf_tt_followers', 50900));
@@ -4085,7 +4092,7 @@ export default function App() {
       localStorage.setItem('pf_crm', JSON.stringify(merged));
     }
     if (state.delivs)      { setDelivs(state.delivs);           localStorage.setItem('pf_delivs',       JSON.stringify(state.delivs)); }
-    if (state.milestones)  { setMilestones(state.milestones);   localStorage.setItem('pf_milestones',   JSON.stringify(state.milestones)); }
+    if (state.milestones)  { const _ms = (state.milestones||[]).filter(m => !RETIRED_MILESTONE_IDS.includes(m.id)); setMilestones(_ms); localStorage.setItem('pf_milestones', JSON.stringify(_ms)); }
     if (state.revenue)     { setRevenue(state.revenue);         localStorage.setItem('pf_revenue',      JSON.stringify(state.revenue)); }
     if (state.igFollowers) { setIgFollowers(state.igFollowers); localStorage.setItem('pf_ig_followers', JSON.stringify(state.igFollowers)); }
     if (state.ttFollowers) { setTtFollowers(state.ttFollowers); localStorage.setItem('pf_tt_followers', JSON.stringify(state.ttFollowers)); }
