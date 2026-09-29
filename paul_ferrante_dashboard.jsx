@@ -1975,6 +1975,8 @@ const SEED_CASTINGS = [
   makeCasting({ id:'c9', showName:'Race Across the World — Series 7', network:'BBC', formatType:'race-travel', market:'INTL', deadline:'2026-07-06', pipelineStatus:'researching', applyLink:'', oneLineWhy:'S7 application round closed Jul 2026; filming Sep–Nov 2026. Re-apply when the next series opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
   makeCasting({ id:'c11', showName:'Pressure Cooker', network:'Netflix', formatType:'hybrid-physical-social', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'One season (2023); a second season was never ordered. Not currently casting.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
   makeCasting({ id:'c12', showName:'The Quiz With Balls', network:'Fox', formatType:'one-off-game', market:'US', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'S3 aired Apr 2026; no S4 announced. Low-time one-off — confirm DQ implications before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
+  makeCasting({ id:'c14', showName:'Big Brother Canada — Season 13', network:'CTV / Crave (Bell Media)', formatType:'social-strategy', market:'CA', deadline:null, pipelineStatus:'researching', applyLink:'https://BigBrotherCanadaCasting.ca', oneLineWhy:'Casting announced Sep 22, 2026 — nationwide applications now OPEN for the CTV/Crave revival (production Spring 2027, Montreal). HARD GATE: applicants must be a Canadian citizen or permanent resident, 19+. Confirm eligibility before taping.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:70, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
+  makeCasting({ id:'c15', showName:'The Amazing Race Canada — Season 13', network:'CTV', formatType:'race-travel', market:'CA', deadline:null, pipelineStatus:'researching', applyLink:'', oneLineWhy:'S12 airing now; S13 casting expected to open early Oct 2026 (prior cycles ran ~10 weeks, deadline mid-Dec). Duo format — apply with Dan. Confirm Canadian eligibility requirements when the portal opens.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:28, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
 ]; // c10 (Deal or No Deal Island) removed 2026-09-28: NBC canceled the show Dec 2025, no S3. c13 (The Challenge: Global Championship) removed 2026-09-28: not a real series.
 // ── Apply Now link resolution ───────────────────────────────────────────────
 // The seed applyLink values were AI-generated deep links and many 404 (verified:
@@ -1984,7 +1986,7 @@ const SEED_CASTINGS = [
 //   1. a curated, verified per-show application portal
 //   2. the network's official casting hub (verified, stable)
 //   3. a Google search for the show's casting application (always resolves)
-const CASTING_LINKS_CHECKED = '2026-09-28';
+const CASTING_LINKS_CHECKED = '2026-09-29';
 // Human-readable "last updated" label for the casting board header.
 const CASTING_CHECKED_LABEL = new Date(CASTING_LINKS_CHECKED + 'T00:00:00')
   .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -2001,6 +2003,7 @@ const SHOW_APPLY_PORTALS = {
   c2: 'https://www.theamazingracecasting.com/home',  // The Amazing Race US — official site, cited in Sep 2026 press
   c3: 'https://beastgames.com/compete',              // Beast Games S3 — verified live 2026-09-28 (old /apply URL 404s)
   c7: 'https://www.bigbrothercasting.tv/',            // Big Brother US S29 — verified live 2026-09-28
+  c14: 'https://BigBrotherCanadaCasting.ca',           // Big Brother Canada S13 — verified live 2026-09-29 (Bell Media press release Sep 22, 2026)
 };
 const castingSearchUrl = (name) =>
   `https://www.google.com/search?q=${encodeURIComponent((name || 'reality tv') + ' casting application apply')}`;
