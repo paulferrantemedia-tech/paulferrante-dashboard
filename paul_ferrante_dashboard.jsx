@@ -8506,7 +8506,7 @@ function ExportTab({ data, year }) {
               <div style={{ fontSize:10, color:SLATE, fontWeight:700, textTransform:'uppercase', letterSpacing:'2px', padding:'4px 0 2px' }}>Platform Breakdowns <span style={{ fontWeight:400, letterSpacing:'0', textTransform:'none' }}>(per-platform splits, not weighted)</span></div>
 
               <PlatformDemoCard logo={YTLogo}  name="YouTube"   color='#FF0000' ageData={YT_AGE}  geoData={YT_GEO}  maleP={56} femaleP={44} followers={ytSubs||51000}    />
-              <PlatformDemoCard logo={IGLogo}  name="Instagram" color='#E1306C' ageData={IG_AGE}  geoData={IG_GEO}  maleP={51} femaleP={49} followers={igFollowers||50100} note="token refresh needed" />
+              <PlatformDemoCard logo={IGLogo}  name="Instagram" color='#E1306C' ageData={IG_AGE}  geoData={IG_GEO}  maleP={51} femaleP={49} followers={igFollowers||50100} note={igAnalytics?'Live':'token refresh needed'} />
               <PlatformDemoCard logo={TTLogo}  name="TikTok"    color='#69C9D0' ageData={TIKTOK_AGE} geoData={TIKTOK_GEO} maleP={53} femaleP={47} followers={ttFollowers||50900} note={ttAnalytics?'Live':'PDF data'} />
 
               {/* ── What They're Watching ── */}
