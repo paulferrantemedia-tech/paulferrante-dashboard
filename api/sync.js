@@ -521,6 +521,15 @@ function normalizePaymentMethod(value, currency) {
   return PAYMENT_METHOD_CANON[7];
 }
 
+// Canonical currency codes (mirrors the UI CURRENCIES dropdown). Uppercases
+// and trims; unknown/empty values fall back to USD so a bad value can never
+// silently inflate a foreign amount as dollars.
+const CURRENCY_CANON = ['USD','KRW','JPY','AUD','EUR','GBP','CAD'];
+function normalizeCurrency(value) {
+  const c = String(value || 'USD').toUpperCase().trim();
+  return CURRENCY_CANON.includes(c) ? c : 'USD';
+}
+
 function uuid() {
   // RFC 4122 v4-ish; not cryptographically perfect but fine for IDs here
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -1055,6 +1064,9 @@ async function handleUpdateExpense(req, res) {
     // Coerce any incoming payment_method to the canonical taxonomy so edits
     // can't reintroduce free-text labels.
     if (patch.payment_method !== undefined) merged.payment_method = normalizePaymentMethod(patch.payment_method, merged.currency);
+    // Coerce currency to the canonical set so a bad value can't silently
+    // inflate a foreign amount as dollars.
+    if (patch.currency !== undefined) merged.currency = normalizeCurrency(patch.currency);
     // Strip helpers
     delete merged._rowIndex; delete merged.flags_computed;
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
@@ -1135,7 +1147,7 @@ async function handleManualExpense(req, res) {
     date: exp.date || '',
     vendor: exp.vendor || '',
     amount: exp.amount || '',
-    currency: exp.currency || 'USD',
+    currency: normalizeCurrency(exp.currency),
     category_auto: '',
     category: exp.category || 'Other',
     category_reasoning: 'manual entry',

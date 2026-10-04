@@ -4792,6 +4792,11 @@ const PAYMENT_METHODS = [
   'Other',
 ];
 
+// Fixed currency taxonomy for the Books add/edit forms (2026-10-04).
+// Foreign-currency amounts saved without a currency used to default to USD,
+// which broke the YTD total (e.g. JPY/KRW saved as USD).
+const CURRENCIES = ['USD','KRW','JPY','AUD','EUR','GBP','CAD'];
+
 // ── Canonical deal stages — ONE taxonomy shared by the Deals tab and Books. ──
 // Legacy labels ("In Discussions", "Sold In") are mapped onto these on read so
 // any old data coerces cleanly. There is no other stage vocabulary anywhere.
@@ -6012,7 +6017,11 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
           <Field label="Vendor"><input style={inputStyle} value={edit.vendor || ''} onChange={(e) => setEdit({ ...edit, vendor: e.target.value })} /></Field>
           <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:8 }}>
             <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={edit.amount || ''} onChange={(e) => setEdit({ ...edit, amount: e.target.value })} /></Field>
-            <Field label="Currency"><input style={inputStyle} value={edit.currency || ''} onChange={(e) => setEdit({ ...edit, currency: e.target.value })} /></Field>
+            <Field label="Currency">
+            <select style={inputStyle} value={String(edit.currency || 'USD').toUpperCase()} onChange={(e) => setEdit({ ...edit, currency: e.target.value })}>
+              {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </Field>
           </div>
           <Field label="Category">
             <select style={inputStyle} value={edit.category || ''} onChange={(e) => {
@@ -6155,9 +6164,14 @@ function ManualExpenseModal({ deals, expenses, onClose, reload, showToast }) {
         <div style={{ fontSize:16, fontWeight:800, color:BOOKS.ink, marginBottom:16 }}>Add expense manually</div>
         <div style={{ display:'grid', gap:10 }}>
           <Field label="Vendor"><input style={inputStyle} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} /></Field>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
             <Field label="Date"><input type="date" style={inputStyle} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
             <Field label="Amount"><input type="number" step="0.01" style={inputStyle} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+            <Field label="Currency">
+              <select style={inputStyle} value={form.currency || 'USD'} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
           </div>
           <Field label="Category">
             <select style={inputStyle} value={form.category} onChange={(e) => {
