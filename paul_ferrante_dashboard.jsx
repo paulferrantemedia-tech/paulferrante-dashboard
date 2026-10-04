@@ -4758,6 +4758,19 @@ const CATEGORIES = [
   'Bank & Payment Fees','Office Supplies','Other',
 ];
 
+// Fixed payment-method taxonomy for the Books add/edit forms (2026-10-04).
+// Replaces the old free-text field that produced 8+ inconsistent labels.
+const PAYMENT_METHODS = [
+  'Amex Business (…1016)',
+  'Amex Personal (…4012)',
+  'Relay Business Checking (…3869)',
+  'Chase Checking (…5971)',
+  'Chase Savings (…6385)',
+  'Foreign card',
+  'Cash',
+  'Other',
+];
+
 // ── Canonical deal stages — ONE taxonomy shared by the Deals tab and Books. ──
 // Legacy labels ("In Discussions", "Sold In") are mapped onto these on read so
 // any old data coerces cleanly. There is no other stage vocabulary anywhere.
@@ -4902,6 +4915,16 @@ function toUSD(amount, currency) {
   const a = Number(amount) || 0;
   const r = FX_TO_USD[String(currency || 'USD').toUpperCase().trim()];
   return r != null ? a * r : a;
+}
+
+// Duplicate-detection key: normalized vendor + numeric amount + date (2026-10-04).
+// Two expenses sharing a key are vendor+amount+date twins ("possible duplicates").
+function expenseDupKey(r) {
+  const v = String(r.vendor || '').trim().toLowerCase();
+  const a = Number(r.amount);
+  const d = String(r.date || '').slice(0, 10);
+  if (!v || !d || isNaN(a)) return '';
+  return v + '|' + a.toFixed(2) + '|' + d;
 }
 function withinYear(row, year) { return String(row.date || '').startsWith(String(year)); }
 
@@ -5750,6 +5773,13 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
   const [showManual, setShowManual]       = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
 
+  // Duplicate detection (2026-10-04): count expenses sharing a vendor+amount+date key.
+  const dupCounts = useMemo(() => {
+    const m = {};
+    (data.expenses || []).forEach((r) => { const k = expenseDupKey(r); if (k) m[k] = (m[k] || 0) + 1; });
+    return m;
+  }, [data.expenses]);
+
   const filtered = data.expenses.filter((r) => {
     if (filterCat && r.category !== filterCat) return false;
     if (filterFlagged && (r.flags_computed || []).length === 0) return false;
@@ -5821,7 +5851,10 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
               <tr key={r.expense_id} onClick={() => setSelected(r)}
                 style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent' }}>
                 <td style={tdStyle}>{fmtDate(r.date)}</td>
-                <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}</td>
+                <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}{dupCounts[expenseDupKey(r)] > 1 && (
+                  <span title="Another expense has the same vendor, amount, and date"
+                    style={{ marginLeft:6, fontSize:10, fontWeight:700, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>possible duplicate</span>
+                )}</td>
                 <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
                 <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
                 <td style={tdStyle}>{linkedDealLabel(r.linked_deal_id, data.deals)}</td>
@@ -5838,7 +5871,7 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
       </div>
 
       {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
-      {showManual && <ManualExpenseModal deals={data.deals} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
+      {showManual && <ManualExpenseModal deals={data.deals} expenses={data.expenses} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
       {showCsvImport && <CsvImportModal year={year} onClose={() => setShowCsvImport(false)} reload={reload} showToast={showToast} />}
     </div>
   );
@@ -5896,6 +5929,18 @@ function ReceiptPhotoField({ expenseId }) {
 function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   const [edit, setEdit] = useState({ ...row });
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      await booksApi('delete-expense', { method:'POST', body: { expense_id: row.expense_id } });
+      showToast && showToast('Deleted');
+      reload(); onClose();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+    setDeleting(false);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -5979,7 +6024,16 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
               {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
             </select>
           </Field>
-          <Field label="Payment method"><input style={inputStyle} value={edit.payment_method || ''} onChange={(e) => setEdit({ ...edit, payment_method: e.target.value })} /></Field>
+          <Field label="Payment method">
+            <select style={inputStyle}
+              value={PAYMENT_METHODS.includes(edit.payment_method) ? (edit.payment_method || '') : (edit.payment_method ? '__raw__' : '')}
+              onChange={(e) => setEdit({ ...edit, payment_method: e.target.value === '__raw__' ? edit.payment_method : e.target.value })}>
+              <option value="">— Select —</option>
+              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+              {!PAYMENT_METHODS.includes(edit.payment_method) && edit.payment_method
+                ? <option value="__raw__">{edit.payment_method} (unmapped)</option> : null}
+            </select>
+          </Field>
           <Field label="Notes">
             <textarea style={{ ...inputStyle, minHeight:50, fontFamily:'inherit' }} value={edit.notes || ''} onChange={(e) => setEdit({ ...edit, notes: e.target.value })} />
           </Field>
@@ -6000,6 +6054,29 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
           </button>
         </div>
 
+        <div style={{ marginTop:24, borderTop:`1px solid ${BOOKS.border}`, paddingTop:16 }}>
+          {!confirmDelete ? (
+            <button onClick={() => setConfirmDelete(true)}
+              style={{ background:'none', border:'1px solid #DC262644', color:'#DC2626', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+              Delete expense
+            </button>
+          ) : (
+            <div>
+              <div style={{ fontSize:12, color:'#DC2626', fontWeight:700, marginBottom:8 }}>Delete this expense? This cannot be undone.</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={doDelete} disabled={deleting}
+                  style={{ background:'#DC2626', color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:deleting?'wait':'pointer', fontFamily:'inherit', opacity:deleting?0.6:1 }}>
+                  {deleting ? 'Deleting…' : 'Yes, delete'}
+                </button>
+                <button onClick={() => setConfirmDelete(false)}
+                  style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>
+                  Keep
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         {row.extracted_text && (
           <details style={{ marginTop:18, fontSize:11, color:BOOKS.muted }}>
             <summary style={{ cursor:'pointer', fontWeight:600 }}>Raw OCR text (debug)</summary>
@@ -6011,7 +6088,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   );
 }
 
-function ManualExpenseModal({ deals, onClose, reload, showToast }) {
+function ManualExpenseModal({ deals, expenses, onClose, reload, showToast }) {
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     vendor: '', amount: '', currency: 'USD', category: 'Other',
@@ -6019,9 +6096,19 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
     entered_by: 'paul', tax_category: 'other',
   });
   const [saving, setSaving] = useState(false);
+  // Duplicate detection state: null = not checked yet; array = checked, non-empty
+  // means a vendor+amount+date twin exists and the user must confirm to proceed.
+  const [dupMatches, setDupMatches] = useState(null);
+  const [dupConfirmed, setDupConfirmed] = useState(false);
 
   const save = async () => {
     if (!form.vendor || !form.amount || !form.date) { alert('Vendor, amount, and date are required.'); return; }
+    // Duplicate check against existing expenses (vendor + amount + date).
+    if (!dupConfirmed) {
+      const key = expenseDupKey({ vendor: form.vendor, amount: form.amount, date: form.date });
+      const matches = key ? (expenses || []).filter((r) => expenseDupKey(r) === key) : [];
+      if (matches.length > 0) { setDupMatches(matches); return; }
+    }
     setSaving(true);
     try {
       const j = await booksApi('manual-expense', { method:'POST', body: form });
@@ -6032,6 +6119,7 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
         appendReviewLog({ expense_id: j.expense_id, vendor: form.vendor, amount: form.amount, date: form.date });
       }
       showToast && showToast('Added');
+      setDupConfirmed(false); setDupMatches(null);
       reload(); onClose();
     } catch (e) { alert('Save failed: ' + e.message); }
     setSaving(false);
@@ -6072,17 +6160,48 @@ function ManualExpenseModal({ deals, onClose, reload, showToast }) {
               {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
             </select>
           </Field>
-          <Field label="Payment method (optional)"><input style={inputStyle} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })} /></Field>
+          <Field label="Payment method (optional)">
+            <select style={inputStyle} value={form.payment_method} onChange={(e) => setForm({ ...form, payment_method: e.target.value })}>
+              <option value="">— Select —</option>
+              {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+          {dupMatches && dupMatches.length > 0 && (
+            <div style={{ background:'#FFFBEB', border:'1px solid #FCD34D', borderRadius:8, padding:12 }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#92400E', marginBottom:6 }}>This looks like a duplicate of:</div>
+              {dupMatches.map((m) => (
+                <div key={m.expense_id} style={{ fontSize:12, color:'#92400E', padding:'3px 0' }}>
+                  {m.vendor} · {m.date} · {fmtMoney(m.amount, m.currency)}{m.payment_method ? ` · ${m.payment_method}` : ''}
+                </div>
+              ))}
+              <div style={{ fontSize:11, color:'#92400E', marginTop:6 }}>If it is genuinely a separate charge, you can add it anyway.</div>
+            </div>
+          )}
         </div>
         <div style={{ marginTop:16, display:'flex', gap:8 }}>
-          <button onClick={save} disabled={saving}
-            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
-            {saving ? 'Saving…' : 'Add expense'}
-          </button>
-          <button onClick={onClose}
-            style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
-            Cancel
-          </button>
+          {dupMatches && dupMatches.length > 0 ? (
+            <>
+              <button onClick={async () => { setDupConfirmed(true); setDupMatches(null); await save(); }} disabled={saving}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+                {saving ? 'Saving…' : 'Add anyway'}
+              </button>
+              <button onClick={() => setDupMatches(null)}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Go back
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={save} disabled={saving}
+                style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+                {saving ? 'Saving…' : 'Add expense'}
+              </button>
+              <button onClick={onClose}
+                style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 16px', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                Cancel
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -6677,8 +6796,10 @@ function ExportTab({ data, year }) {
     if (!w) return;
     let toc = '<ul style="font-size:13px; line-height:1.9;">';
     Object.keys(byCat).sort().forEach((c) => {
-      const total = byCat[c].reduce((s, r) => s + Number(r.amount || 0), 0);
-      toc += `<li><strong>${c}</strong> — ${byCat[c].length} expense${byCat[c].length===1?'':'s'} · ${fmtMoney(total)}</li>`;
+      // Convert each expense to USD before summing — foreign-currency amounts
+      // must not be added as raw dollars (2026-10-04 fix).
+      const total = byCat[c].reduce((s, r) => s + toUSD(r.amount, r.currency), 0);
+      toc += `<li><strong>${c}</strong> — ${byCat[c].length} expense${byCat[c].length===1?'':'s'} · ${fmtMoney(total)} USD</li>`;
     });
     toc += '</ul>';
 
@@ -6720,7 +6841,7 @@ function ExportTab({ data, year }) {
         .deal { margin-top: 10px; padding: 10px; background: #F7F9FC; border-radius: 6px; font-size: 11px; }
       </style></head><body>
       <h1>RGG Media LLC — ${year} Audit Binder</h1>
-      <div style="color:#94A3B8; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px;">Generated ${new Date().toISOString().slice(0,10)} · Total: ${fmtMoney(expenses.reduce((s,r)=>s+Number(r.amount||0),0))}</div>
+      <div style="color:#94A3B8; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:24px;">Generated ${new Date().toISOString().slice(0,10)} · Total: ${fmtMoney(expenses.reduce((s,r)=>s+toUSD(r.amount,r.currency),0))} USD</div>
       <h2>Contents</h2>${toc}${cards}
       </body></html>
     `);
