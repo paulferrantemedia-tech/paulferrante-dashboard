@@ -471,6 +471,7 @@ const EXPENSE_HEADERS = [
   'receipt_url','auto_linked_deal_id','linked_deal_id','linked_deal_id_2',
   'extraction_confidence','confidence_notes','extracted_text',
   'entered_by','extracted_at','flags','reviewed','notes','personal_suspect',
+  'linked_videos',
 ];
 const DEAL_HEADERS = [
   'deal_id','brand','deal_value','status','platform',
@@ -528,6 +529,37 @@ const CURRENCY_CANON = ['USD','KRW','JPY','AUD','EUR','GBP','CAD'];
 function normalizeCurrency(value) {
   const c = String(value || 'USD').toUpperCase().trim();
   return CURRENCY_CANON.includes(c) ? c : 'USD';
+}
+
+// linked_videos: JSON array of {platform, video_id, url, title, thumbnail,
+// linked_at}. Snapshots are taken at link time so links survive catalog
+// refreshes. Never throws: malformed input → '[]'; entries missing
+// platform/video_id/url are dropped.
+function normalizeLinkedVideos(value) {
+  let arr;
+  if (typeof value === 'string') {
+    try { arr = JSON.parse(value); } catch (_) { return '[]'; }
+  } else {
+    arr = value;
+  }
+  if (!Array.isArray(arr)) return '[]';
+  const clean = [];
+  for (const v of arr) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const platform = String(v.platform || '').toLowerCase().trim();
+    const video_id = String(v.video_id || v.postId || '').trim();
+    const url = String(v.url || '').trim();
+    if (!platform || !video_id || !url) continue;
+    clean.push({
+      platform,
+      video_id,
+      url,
+      title: String(v.title || v.text || '').slice(0, 200),
+      thumbnail: String(v.thumbnail || '').slice(0, 500),
+      linked_at: String(v.linked_at || new Date().toISOString()),
+    });
+  }
+  return JSON.stringify(clean);
 }
 
 function uuid() {
@@ -726,7 +758,7 @@ async function handleProcessReceipt(req, res) {
   // FAIL CLOSED: if we cannot read existing expenses to compare, do NOT book the
   // receipt (that would let dups slip in during an outage); hold it for review.
   let existingRows = [], existingReadOk = true;
-  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) { existingReadOk = false; }
+  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:X')).filter((r) => r.expense_id); } catch (_) { existingReadOk = false; }
   const probable = existingReadOk ? strictDupMatch(existingRows, p.vendor, p.date, p.amount_total) : null;
   if (probable || !existingReadOk) {
     // Probable dup OR un-verifiable -> surface for Paul (Skip / Add anyway); never auto-book.
@@ -805,7 +837,7 @@ async function handleProcessInbox(req, res) {
   const slice = files.slice(offset, offset + limit);
 
   let existing = [];
-  try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W')).filter((r) => r.expense_id); } catch (_) {}
+  try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:X')).filter((r) => r.expense_id); } catch (_) {}
   const linkedFileIds = new Set(existing.map((r) => driveFileIdFromUrl(r.receipt_url)).filter(Boolean));
 
   // ── Tolerant matching ──
@@ -848,7 +880,7 @@ async function handleProcessInbox(req, res) {
         try {
           const merged = { ...match, receipt_url: url };
           delete merged._rowIndex; delete merged.flags_computed;
-          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:W${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
+          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:X${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
           match.receipt_url = url;
         } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
         try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) { /* move optional */ }
@@ -961,7 +993,7 @@ async function handleBooksDiag(req, res) {
     const sheetId = process.env.GOOGLE_SHEETS_ID;
     const [logVals, eVals] = await Promise.all([
       sheetsGet(token, sheetId, 'ProcessingLog!A1:H').catch(() => null),
-      sheetsGet(token, sheetId, 'Expenses!A1:W').catch(() => null),
+      sheetsGet(token, sheetId, 'Expenses!A1:X').catch(() => null),
     ]);
     if (logVals) { const lg = rowsToObjects(logVals); const last = lg[lg.length - 1]; out.lastSync = { logRows: lg.length, mostRecent: last ? { started_at: last.started_at, completed_at: last.completed_at, status: last.status, file_name: last.file_name, error_message: last.error_message } : 'no rows' }; }
     else out.lastSync = { note: 'ProcessingLog sheet not readable' };
@@ -1022,7 +1054,7 @@ async function handleBooksData(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const [eVals, dVals, vVals] = await sheetsBatchGet(token, sheetId, ['Expenses!A1:W', 'Deals!A1:L', 'VendorMemory!A1:E']);
+    const [eVals, dVals, vVals] = await sheetsBatchGet(token, sheetId, ['Expenses!A1:X', 'Deals!A1:L', 'VendorMemory!A1:E']);
     // Filter out deleted (blank) rows AND rows outside the requested year
     const expenses = rowsToObjects(eVals).filter((r) => {
       if (!r.expense_id) return false; // blank/deleted row
@@ -1055,7 +1087,7 @@ async function handleUpdateExpense(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:W');
+    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:X');
     const objs = rowsToObjects(vals);
     const target = objs.find((r) => r.expense_id === expense_id);
     if (!target) return res.status(404).json({ error: 'expense not found' });
@@ -1067,10 +1099,16 @@ async function handleUpdateExpense(req, res) {
     // Coerce currency to the canonical set so a bad value can't silently
     // inflate a foreign amount as dollars.
     if (patch.currency !== undefined) merged.currency = normalizeCurrency(patch.currency);
+    // Coerce linked_videos to a clean JSON array string; never throws.
+    if (patch.linked_videos !== undefined) {
+      merged.linked_videos = normalizeLinkedVideos(patch.linked_videos);
+      // Ensure the X1 header exists so rowsToObjects maps the column on read.
+      try { await sheetsUpdate(token, sheetId, 'Expenses!X1', [['linked_videos']]); } catch (_) {}
+    }
     // Strip helpers
     delete merged._rowIndex; delete merged.flags_computed;
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
-    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:W${target._rowIndex}`, [rowArr]);
+    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:X${target._rowIndex}`, [rowArr]);
 
     // VendorMemory learning loop — saves both category AND business purpose for this vendor
     if (confirm_vendor_category && merged.vendor && merged.category) {
@@ -1165,6 +1203,7 @@ async function handleManualExpense(req, res) {
     flags: '',
     reviewed: 'TRUE',
     notes: exp.notes || '',
+    linked_videos: normalizeLinkedVideos(exp.linked_videos || '[]'),
   };
   try {
     await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
@@ -1194,7 +1233,7 @@ async function handleYearExport(req, res) {
   try { token = await getGoogleAccessToken(); }
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
-  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W'))
+  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:X'))
     .filter((r) => String(r.date || '').startsWith(String(year)));
 
   if (kind === 'csv') {
@@ -1348,7 +1387,7 @@ async function handleBulkImportCsv(req, res) {
   let dealsByDate = [];
   try {
     [existing, vendorMemoryObjs, dealsByDate] = await Promise.all([
-      sheetsGet(token, sheetId, 'Expenses!A1:W').then(rowsToObjects),
+      sheetsGet(token, sheetId, 'Expenses!A1:X').then(rowsToObjects),
       sheetsGet(token, sheetId, 'VendorMemory!A1:E').then(rowsToObjects),
       sheetsGet(token, sheetId, 'Deals!A1:L').then(rowsToObjects),
     ]);
@@ -1462,7 +1501,7 @@ async function handleDeleteExpense(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:W'));
+    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:X'));
     const idSet = new Set(ids);
     const targets = objs.filter((r) => idSet.has(r.expense_id));
     if (targets.length === 0) return res.status(404).json({ error: 'no matching expense ids' });
@@ -1470,7 +1509,7 @@ async function handleDeleteExpense(req, res) {
     // Clear each target row by writing an empty row in its place
     const blankRow = EXPENSE_HEADERS.map(() => '');
     for (const target of targets) {
-      await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:W${target._rowIndex}`, [blankRow]);
+      await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:X${target._rowIndex}`, [blankRow]);
     }
     return res.status(200).json({ ok: true, deleted: targets.length });
   } catch (e) {

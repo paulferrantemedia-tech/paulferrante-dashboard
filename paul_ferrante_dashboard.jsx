@@ -4930,6 +4930,17 @@ function booksApi(action, opts = {}) {
 }
 
 function fmtDate(d) { return d ? String(d) : '—'; }
+// linked_videos is stored as a JSON array string on the expense row.
+// Parse defensively: malformed input → [].
+function parseLinkedVideos(row) {
+  try {
+    const v = row && row.linked_videos;
+    if (!v) return [];
+    const arr = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr.filter((x) => x && x.video_id && x.url) : [];
+  } catch (_) { return []; }
+}
+function linkedVideoCount(r) { return parseLinkedVideos(r).length; }
 function fmtMoney(n, ccy = 'USD') {
   if (n === '' || n == null || isNaN(Number(n))) return '—';
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: ccy || 'USD' }).format(Number(n));
@@ -5881,6 +5892,9 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
                 <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}{dupCounts[expenseDupKey(r)] > 1 && (
                   <span title="Another expense has the same vendor, amount, and date"
                     style={{ marginLeft:6, fontSize:10, fontWeight:700, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>possible duplicate</span>
+                )}{linkedVideoCount(r) > 0 && (
+                  <span title="Videos linked to this expense"
+                    style={{ marginLeft:6, fontSize:10, fontWeight:700, color:'#1E40AF', background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>▶ {linkedVideoCount(r)} video{linkedVideoCount(r) === 1 ? '' : 's'}</span>
                 )}</td>
                 <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
                 <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
@@ -5958,6 +5972,56 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [linkedVids, setLinkedVids] = useState(() => parseLinkedVideos(row));
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [catPosts, setCatPosts] = useState(null); // null = not yet loaded
+  const [catLoading, setCatLoading] = useState(false);
+  const [catFailed, setCatFailed] = useState(false);
+  const [vidSearch, setVidSearch] = useState('');
+
+  // Lazy-load his posted-video catalog for the tap-to-link picker.
+  // catalog-data is a public discovery action (same call the catalog UI makes).
+  async function loadCatalogForPicker() {
+    if (catPosts !== null || catLoading) return;
+    setCatLoading(true);
+    try {
+      const r = await fetch(`/api/sync?action=catalog-data&t=${Date.now()}`, { cache: 'no-store' });
+      const j = await r.json();
+      if (j.ok) setCatPosts(j.catalog.posts || []);
+      else { setCatPosts([]); setCatFailed(true); }
+    } catch { setCatPosts([]); setCatFailed(true); }
+    setCatLoading(false);
+  }
+
+  function addVideo(p) {
+    setLinkedVids((prev) => {
+      if (prev.some((v) => v.platform === p.platform && v.video_id === p.postId)) return prev;
+      return [...prev, {
+        platform: p.platform,
+        video_id: p.postId,
+        url: p.url || '',
+        title: (p.text || '').slice(0, 200),
+        thumbnail: p.thumbnail || '',
+        linked_at: new Date().toISOString(),
+      }];
+    });
+  }
+  function removeVideo(v) {
+    setLinkedVids((prev) => prev.filter((x) => !(x.platform === v.platform && x.video_id === v.video_id)));
+  }
+
+  // Picker results: text search over captions, sorted by date proximity to the
+  // expense date so videos posted near the trip bubble up first.
+  const pickerResults = (() => {
+    if (!catPosts) return [];
+    const expTime = edit.date ? new Date(edit.date + 'T12:00:00').getTime() : 0;
+    const q = vidSearch.trim().toLowerCase();
+    return catPosts
+      .filter((p) => !q || (p.text || '').toLowerCase().includes(q))
+      .map((p) => ({ p, d: expTime && p.date ? Math.abs(new Date(p.date).getTime() - expTime) : Infinity }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 40);
+  })();
 
   const doDelete = async () => {
     setDeleting(true);
@@ -5975,6 +6039,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
       const patch = {};
       ['date','vendor','amount','currency','category','tax_category','business_purpose','payment_method',
        'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
+      patch.linked_videos = JSON.stringify(linkedVids);
       await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
       // Tax tag is stored locally (the sheet has no column for it); log a
       // review only on the transition from unreviewed to reviewed.
@@ -6054,6 +6119,62 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
               <option value="">— No second link —</option>
               {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
             </select>
+          </Field>
+          <Field label={`Linked videos${linkedVids.length ? ` (${linkedVids.length})` : ''}`}>
+            <div>
+              {linkedVids.map((v) => (
+                <div key={v.platform + ':' + v.video_id}
+                  style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:6 }}>
+                  {v.thumbnail ? <img src={v.thumbnail} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:6, flexShrink:0 }} /> : null}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.title || '(untitled)'}</div>
+                    <div style={{ fontSize:10, color:BOOKS.muted }}>{v.platform}</div>
+                  </div>
+                  {v.url ? <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>open ↗</a> : null}
+                  <button onClick={() => removeVideo(v)} title="remove"
+                    style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
+                </div>
+              ))}
+              {!pickerOpen ? (
+                <button onClick={() => { setPickerOpen(true); loadCatalogForPicker(); }}
+                  style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                  link videos
+                </button>
+              ) : (
+                <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:8, marginTop:4, background:BOOKS.surface }}>
+                  <input placeholder="search your videos…" value={vidSearch} onChange={(e) => setVidSearch(e.target.value)}
+                    style={{ ...inputStyle, marginBottom:8 }} />
+                  {catLoading && <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>loading videos…</div>}
+                  {catFailed && <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>couldn't load videos right now.</div>}
+                  {catPosts && catPosts.length === 0 && !catFailed && !catLoading && (
+                    <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>no videos found.</div>
+                  )}
+                  <div style={{ maxHeight:260, overflowY:'auto' }}>
+                    {pickerResults.map(({ p }) => {
+                      const already = linkedVids.some((v) => v.platform === p.platform && v.video_id === p.postId);
+                      return (
+                        <div key={p.key || (p.platform + ':' + p.postId)}
+                          onClick={() => { if (!already) addVideo(p); }}
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:6, borderRadius:6, cursor:already ? 'default' : 'pointer', opacity:already ? 0.55 : 1 }}
+                          onMouseEnter={(e) => { if (!already) e.currentTarget.style.background = BOOKS.parchment; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                          {p.thumbnail ? <img src={p.thumbnail} alt="" style={{ width:40, height:40, objectFit:'cover', borderRadius:6, flexShrink:0 }} /> : null}
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(p.text || '').slice(0, 80) || '(untitled)'}</div>
+                            <div style={{ fontSize:10, color:BOOKS.muted }}>{p.platform}{p.date ? ' · ' + String(p.date).slice(0, 10) : ''}</div>
+                          </div>
+                          <div style={{ fontSize:11, fontWeight:700, color:already ? BOOKS.muted : SLATE, flexShrink:0 }}>{already ? 'linked ✓' : '+ link'}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button onClick={() => setPickerOpen(false)}
+                    style={{ marginTop:8, background:'none', border:'none', fontSize:12, color:BOOKS.muted, cursor:'pointer', fontFamily:'inherit' }}>
+                    done
+                  </button>
+                </div>
+              )}
+            </div>
           </Field>
           <Field label="Payment method">
             <select style={inputStyle}
