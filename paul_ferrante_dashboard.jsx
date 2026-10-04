@@ -4127,8 +4127,11 @@ export default function App() {
     const fetchCloud = (isMount = false) => {
       if (isMount) setSyncStatus('syncing');
       // ?t= cache-buster ensures browser never serves a cached GET response
-      fetch(`/api/sync?t=${Date.now()}`, { cache: 'no-store' })
-        .then(r => r.json())
+      fetch(`/api/sync?t=${Date.now()}`, { cache: 'no-store', headers: { ...authHeaders() } })
+        .then(r => {
+          if (r.status === 401) { handleAuthFailure(); throw new Error('unauthorized'); }
+          return r.json();
+        })
         .then(({ state }) => {
           applyCloudState(state, !isMount);
           if (isMount) { cloudReady.current = true; setSyncStatus('saved'); setTimeout(() => setSyncStatus('idle'), 2000); }
@@ -4165,10 +4168,13 @@ export default function App() {
       setSyncStatus('syncing');
       fetch('/api/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(patch),
       })
-        .then(() => { setSyncStatus('saved'); setTimeout(() => setSyncStatus('idle'), 2000); })
+        .then(r => {
+          if (r.status === 401) { handleAuthFailure(); throw new Error('unauthorized'); }
+          setSyncStatus('saved'); setTimeout(() => setSyncStatus('idle'), 2000);
+        })
         .catch(() => setSyncStatus('error'));
     }, 1500);
   };
@@ -4740,6 +4746,21 @@ const BOOKS = {
 
 const BOOKS_API = '/api/sync';
 
+// Session token for authenticated API calls (set at login via /api/auth,
+// stored in localStorage.pf_session). Read at call time so a fresh login
+// is picked up without a reload.
+function authHeaders() {
+  try {
+    const t = localStorage.getItem('pf_session');
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
+  } catch (_) { return {}; }
+}
+// If the session died (bad/rotated credentials), drop it and force re-login.
+function handleAuthFailure() {
+  try { localStorage.removeItem('pf_session'); } catch (_) {}
+  window.location.reload();
+}
+
 const FLAG_META = {
   extraction_failed:        { color: '#DC2626', label: 'Extraction failed', tip: 'AI could not read this receipt. Manual entry required.' },
   low_confidence_extraction:{ color: '#D97706', label: 'Low confidence',    tip: 'AI flagged this extraction as uncertain — verify the fields.' },
@@ -4891,9 +4912,10 @@ function booksApi(action, opts = {}) {
   const params = new URLSearchParams({ action, ...query }).toString();
   return fetch(`${BOOKS_API}?${params}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   }).then(async (r) => {
+    if (r.status === 401) { handleAuthFailure(); throw new Error('Session expired — please log in again.'); }
     const text = await r.text();
     let json = {};
     try { json = JSON.parse(text); } catch (_) {}
@@ -6720,7 +6742,8 @@ function ExportTab({ data, year }) {
   const downloadCsv = async () => {
     setBusy('csv');
     try {
-      const r = await fetch(`${BOOKS_API}?action=year-export&kind=csv&year=${year}`);
+      const r = await fetch(`${BOOKS_API}?action=year-export&kind=csv&year=${year}`, { headers: { ...authHeaders() } });
+      if (r.status === 401) { handleAuthFailure(); throw new Error('Session expired — please log in again.'); }
       const text = await r.text();
       const blob = new Blob([text], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);

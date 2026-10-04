@@ -1467,18 +1467,68 @@ async function handleDeleteExpense(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Books auth gate (2026-10-04): every books read/write endpoint — plus the
+// base dashboard-state sync — requires the login session token.
+// The token is issued by POST /api/auth (api/auth.js) as
+// base64("<DASHBOARD_EMAIL>:<DASHBOARD_SECRET>") and stored by the UI in
+// localStorage.pf_session. Verification is stateless: decode the Bearer
+// token and compare against the env vars. Automation can mint a token via
+// POST /api/auth with the dashboard credentials.
+// Endpoints with their own machine-to-machine secrets keep them and are
+// exempt here:
+//   process-receipt → X-Books-Secret header (Apps Script)
+//   process-inbox, books-diag, catalog-sync/classify/override → ?secret=
+// ─────────────────────────────────────────────────────────────
+function booksAuthOk(req) {
+  const h = (req.headers['authorization'] || '').toString();
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  if (!m) return false;
+  let decoded;
+  try {
+    decoded = Buffer.from(m[1].trim(), 'base64').toString('utf8');
+  } catch { return false; }
+  const idx = decoded.indexOf(':');
+  if (idx < 0) return false;
+  const email = decoded.slice(0, idx);
+  const secret = decoded.slice(idx + 1);
+  const validEmail = process.env.DASHBOARD_EMAIL;
+  const validSecret = process.env.DASHBOARD_SECRET || 'pf_secret_2026';
+  return !!validEmail && email === validEmail && secret === validSecret;
+}
+
+function requireBooksAuth(req, res) {
+  if (booksAuthOk(req)) return true;
+  res.status(401).json({ error: 'unauthorized: dashboard login required' });
+  return false;
+}
+
+// Actions that require the login session token (everything books-related).
+const BOOKS_AUTH_ACTIONS = new Set([
+  'books-data', 'resolve-dup', 'update-expense', 'upsert-deal',
+  'manual-expense', 'year-export', 'bulk-import-csv',
+  'delete-expense', 'bulk-delete-expenses',
+]);
+
+// ─────────────────────────────────────────────────────────────
 // Main handler — dispatches based on action query param
 // ─────────────────────────────────────────────────────────────
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Books-Secret');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Books-Secret, Authorization');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const action = (req.query.action || '').toString();
+
+  // Auth gate: books endpoints + base dashboard-state sync require the login
+  // session token. (Machine-to-machine actions with their own secrets are
+  // checked inside their handlers and are exempt here.)
+  if (BOOKS_AUTH_ACTIONS.has(action) || !action) {
+    if (!requireBooksAuth(req, res)) return;
+  }
 
   // Discovery catalog actions
   if (action === 'catalog-data')     return handleCatalogData(req, res);
