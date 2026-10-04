@@ -488,6 +488,39 @@ const CATEGORIES = [
 ];
 const TRAVEL_CATEGORIES = ['Travel - Lodging','Travel - Transportation','Travel - Meals'];
 
+// ─────────────────────────────────────────────────────────────
+// Canonical payment-method taxonomy for Books (2026-10-04).
+// Mirrors the PAYMENT_METHODS dropdown in the UI form. Every expense-write
+// endpoint coerces free-text payment_method through normalizePaymentMethod
+// so API-added rows can't re-dirty the data with free-text labels.
+// Never rejects, never drops the expense: unrecognized → 'Other'.
+// ─────────────────────────────────────────────────────────────
+const PAYMENT_METHOD_CANON = [
+  'Amex Business (…1016)',
+  'Amex Personal (…4012)',
+  'Relay Business Checking (…3869)',
+  'Chase Checking (…5971)',
+  'Chase Savings (…6385)',
+  'Foreign card',
+  'Cash',
+  'Other',
+];
+function normalizePaymentMethod(value, currency) {
+  const v = String(value || '');
+  if (v.includes('1016')) return PAYMENT_METHOD_CANON[0];
+  if (v.includes('4012')) return PAYMENT_METHOD_CANON[1];
+  if (v.includes('3869')) return PAYMENT_METHOD_CANON[2];
+  if (v.includes('5971')) return PAYMENT_METHOD_CANON[3];
+  if (v.includes('6385')) return PAYMENT_METHOD_CANON[4];
+  const low = v.toLowerCase();
+  if (low.includes('foreign') || low.includes('jcb') || low.includes('ksnet') ||
+      low.includes('samsung') || low.includes('windcave')) return PAYMENT_METHOD_CANON[5];
+  const cur = String(currency || 'USD').toUpperCase();
+  if (cur && cur !== 'USD') return PAYMENT_METHOD_CANON[5];
+  if (low.includes('cash')) return PAYMENT_METHOD_CANON[6];
+  return PAYMENT_METHOD_CANON[7];
+}
+
 function uuid() {
   // RFC 4122 v4-ish; not cryptographically perfect but fine for IDs here
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -816,7 +849,7 @@ async function handleProcessInbox(req, res) {
       const rr = { file: file.name, fileId: file.id, action: 'ADD new (allowAdd)', extracted: { vendor: p.vendor, amount: p.amount_total, date: p.date }, receipt_url_written: url };
       results.push(rr);
       if (!dryRun) {
-        const row = { expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD', category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '', payment_method: p.payment_method || '', business_purpose: p.suggested_business_purpose || '', receipt_url: url, auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '', extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '', entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog' };
+        const row = { expense_id: uuid(), date: p.date || '', vendor: p.vendor || '', amount: p.amount_total ?? '', currency: p.currency || 'USD', category_auto: p.category_suggestion || 'Other', category: p.category_suggestion || 'Other', category_reasoning: p.category_reasoning || '', payment_method: normalizePaymentMethod(p.payment_method, p.currency), business_purpose: p.suggested_business_purpose || '', receipt_url: url, auto_linked_deal_id: '', linked_deal_id: '', linked_deal_id_2: '', extraction_confidence: p.confidence || 'medium', confidence_notes: p.confidence_notes || '', extracted_text: p.raw_text || '', entered_by: 'ai-backlog', extracted_at: nowIso(), flags: '', reviewed: 'FALSE', notes: 'Imported from inbox backlog' };
         try { await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]); existing.push({ ...row }); } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
       }
     } else {
@@ -848,7 +881,7 @@ async function handleResolveDup(req, res) {
   if (action === 'add') {
     const sheetId = process.env.GOOGLE_SHEETS_ID;
     let token;
-    try { token = await getGoogleAccessToken(); await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(item.row, EXPENSE_HEADERS)]); }
+    try { token = await getGoogleAccessToken(); item.row.payment_method = normalizePaymentMethod(item.row.payment_method, item.row.currency); await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(item.row, EXPENSE_HEADERS)]); }
     catch (e) { return res.status(500).json({ error: 'add failed: ' + e.message }); }
     if (item.hash) dedup.hashes[item.hash] = { expense_id: item.row && item.row.expense_id, vendor: item.incoming.vendor, date: item.incoming.date, amount: item.incoming.amount, file_id: item.file_id, at: nowIso() };
   } else {
@@ -1019,6 +1052,9 @@ async function handleUpdateExpense(req, res) {
     if (!target) return res.status(404).json({ error: 'expense not found' });
 
     const merged = { ...target, ...patch };
+    // Coerce any incoming payment_method to the canonical taxonomy so edits
+    // can't reintroduce free-text labels.
+    if (patch.payment_method !== undefined) merged.payment_method = normalizePaymentMethod(patch.payment_method, merged.currency);
     // Strip helpers
     delete merged._rowIndex; delete merged.flags_computed;
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
@@ -1103,7 +1139,7 @@ async function handleManualExpense(req, res) {
     category_auto: '',
     category: exp.category || 'Other',
     category_reasoning: 'manual entry',
-    payment_method: exp.payment_method || '',
+    payment_method: normalizePaymentMethod(exp.payment_method, exp.currency),
     business_purpose: exp.business_purpose || '',
     receipt_url: exp.receipt_url || '',
     auto_linked_deal_id: '',
@@ -1365,7 +1401,7 @@ async function handleBulkImportCsv(req, res) {
       category_auto: item.category_suggestion || 'Other',
       category: categoryFinal,
       category_reasoning: item.category_reasoning || '',
-      payment_method: 'Card statement',
+      payment_method: normalizePaymentMethod('Card statement', item.currency),
       business_purpose: purposeFinal,
       receipt_url: '',
       auto_linked_deal_id: autoDeal,
