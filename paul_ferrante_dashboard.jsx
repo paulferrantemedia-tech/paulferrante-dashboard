@@ -3268,8 +3268,7 @@ function RevenuePulseChart({ revenueByMonth, revenueMonths, isMobile, setTab }) 
           <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
           <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555', fontSize:10 }}
             label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#6E6E6E' }} />
-          <YAxis stroke="#333" tick={{ fill:'#555', fontSize:10 }} tickFormatter={v => `$${v}`} width={48}
-            label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#6E6E6E' }} />
+          <YAxis stroke="#333" tick={{ fill:'#555', fontSize:10 }} tickFormatter={v => `$${v}`} width={44} />
           <Tooltip contentStyle={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, fontSize:12 }}
             formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period' : '2026']} />
           <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
@@ -5381,7 +5380,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
 // ─────────────────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, tone, onClick, clickable, hint }) {
   const toneColor = {
-    ink: TEXT, deepOcean: SLATE, brightSky: BLUE, green: '#16A34A', red: '#DC2626',
+    ink: TEXT, deepOcean: SLATE, brightSky: '#2A4A5E', green: '#16A34A', red: '#DC2626',
   }[tone] || TEXT;
   return (
     <div
@@ -8134,7 +8133,7 @@ function ExportTab({ data, year }) {
                 <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
                   <DeepCard tab="revenue" setTab={setTab} title="open revenue breakdown" onOpen={() => openRevenueDrill('paid')} style={{ borderLeft:`3px solid ${BLUE}` }}>
                     <div style={{ fontSize:10,color:'#2A4A5E',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned (2026)</div>
-                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#2A4A5E' }}>{usd(totalRevenue2026)}</div>
+                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:TEXT }}>{usd(totalRevenue2026)}</div>
                     <div style={{ fontSize:11,color:'#6E6E6E',marginTop:6 }}>{paidDeals2026.length} deals</div>
                     {momAbs != null && (
                       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, flexWrap:'wrap' }}>
@@ -8147,15 +8146,15 @@ function ExportTab({ data, year }) {
                     )}
                   </DeepCard>
                   <DeepCard tab="revenue" setTab={setTab} title="open pipeline breakdown" onOpen={() => openRevenueDrill('pipeline')} style={{ borderLeft:`3px solid ${YELL}` }}>
-                    <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
-                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
+                    <div style={{ fontSize:10,color:'#2A4A5E',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
+                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:TEXT }}>{usd(pipelineValue)}</div>
                     <div style={{ fontSize:11,color:'#6E6E6E',marginTop:6 }}>{pipelineDeals.length} open deals</div>
                   </DeepCard>
                   {!isMobile && (
                     <DeepCard tab="deals" setTab={setTab} title="open deal" onOpen={() => { if (biggestDeal) setDealModal({ ...biggestDeal }); }} style={{ borderLeft:'3px solid #5DBF8A' }}>
-                      <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
+                      <div style={{ fontSize:10,color:'#2A4A5E',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
                       <div style={{ fontSize:36,fontWeight:800,color:'#0A0A0A' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
-                      <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
+                      <div style={{ fontSize:11,color:SLATE,marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
                     </DeepCard>
                   )}
                 </div>
@@ -8296,7 +8295,7 @@ function ExportTab({ data, year }) {
                   <div key={d.id} onClick={() => setDealModal({ ...d })}
                     style={{ background:`${OCEAN}33`,borderRadius:10,padding:isMobile?'12px':14,border:`1px solid ${BDR}`,borderTop:`3px solid ${d.col}`,cursor:'pointer' }}>
                     <div style={{ fontSize:12,fontWeight:700,marginBottom:6 }}>{d.b}</div>
-                    <div style={{ fontSize:isMobile?18:24,fontWeight:800,color:BLUE,marginBottom:4 }}>{usd(d.v)}</div>
+                    <div style={{ fontSize:isMobile?18:24,fontWeight:800,color:TEXT,marginBottom:4 }}>{usd(d.v)}</div>
                     <Tag color={statusColor(d.s)}>{d.s}</Tag>
                   </div>
                 ))}
@@ -8722,8 +8721,8 @@ function ExportTab({ data, year }) {
                   onClick:() => setRevDrill({ view:'list', scope:'paid', mode:'month', key:bestMonthKey, label:bestMonthLabel, entry:'cards' }), hint:'tap to see deals' },
               ].map(({ lbl, val, color, sub, onClick, hint }) => (
                 <Card key={lbl} onClick={onClick} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
-                  <div style={{ fontSize:9,color,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
-                  <div style={{ fontSize:isMobile?20:26,fontWeight:800,color }}>{val}</div>
+                  <div style={{ fontSize:9,color:'#2A4A5E',textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
+                  <div style={{ fontSize:isMobile?20:26,fontWeight:800,color:TEXT }}>{val}</div>
                   {sub && <div style={{ fontSize:11,color:SLATE,marginTop:6 }}>{sub}</div>}
                   {hint && <div style={{ fontSize:10,color:'#6E6E6E',marginTop:4 }}>{hint}</div>}
                 </Card>
@@ -8748,8 +8747,7 @@ function ExportTab({ data, year }) {
                   <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
                   <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555',fontSize:11 }}
                     label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#6E6E6E' }} />
-                  <YAxis stroke="#333" tick={{ fill:'#555',fontSize:11 }} tickFormatter={v=>`$${v}`} width={48}
-                    label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#6E6E6E' }} />
+                  <YAxis stroke="#333" tick={{ fill:'#555',fontSize:11 }} tickFormatter={v=>`$${v}`} width={44} />
                   <Tooltip contentStyle={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:8,fontSize:12 }}
                     formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period (nov 2025 – feb 2026)' : '2026']} />
                   <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
@@ -8761,7 +8759,7 @@ function ExportTab({ data, year }) {
             <Card>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8 }}>
                 <Label>accounts receivable</Label>
-                <div style={{ fontSize:18, fontWeight:800, color:YELL, marginBottom:14 }}>{usd(arTotal)}</div>
+                <div style={{ fontSize:18, fontWeight:800, color:TEXT, marginBottom:14 }}>{usd(arTotal)}</div>
               </div>
               <div style={{ fontSize:11, color:SLATE, marginTop:-8, marginBottom:10 }}>delivered or awaiting approval · not yet paid</div>
               {arDeals.length === 0 && <div style={{ fontSize:12, color:'#6E6E6E' }}>nothing outstanding — nice.</div>}
@@ -8775,7 +8773,7 @@ function ExportTab({ data, year }) {
                       {d.invoiceUrl && <a href={d.invoiceUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ fontSize:10,color:'#E1D9AE',textDecoration:'none',fontWeight:600 }}>🧾 invoice</a>}
                     </div>
                   </div>
-                  <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:YELL,flexShrink:0,marginLeft:12 }}>{usd(dealAmount(d.v))}</div>
+                  <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:TEXT,flexShrink:0,marginLeft:12 }}>{usd(dealAmount(d.v))}</div>
                 </div>
               ))}
             </Card>
@@ -9434,8 +9432,8 @@ function ExportTab({ data, year }) {
                         <div style={{ fontSize:12,color:'#6E6E6E',marginBottom:6 }}>{d.sc}</div>
                         {d.src === 'deal' && <div style={{ fontSize:10, color:SLATE, marginBottom:6 }}>edit this on the deals board</div>}
                         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-                          <div style={{ fontSize:12,color:YELL }}>{d.d !== 'TBC' ? `Due: ${d.d}` : 'TBC'}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <span style={{ color:'#C9A0A0', fontWeight:700 }}> · OVERDUE</span> : null}</div>
-                          <div style={{ fontSize:16,fontWeight:800,color:BLUE }}>{d.pay}</div>
+                          <div style={{ fontSize:12,color:'#8A6A10' }}>{d.d !== 'TBC' ? `Due: ${d.d}` : 'TBC'}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <span style={{ color:'#C9A0A0', fontWeight:700 }}> · OVERDUE</span> : null}</div>
+                          <div style={{ fontSize:16,fontWeight:800,color:TEXT }}>{d.pay}</div>
                         </div>
                       </Card>
                       {expandedDeliv === d.key && filesPanel(d)}
@@ -9474,7 +9472,7 @@ function ExportTab({ data, year }) {
                           <div style={{ marginTop:4 }}><Tag color={d.src === 'deal' ? OCEAN : SLATE}>{d.src === 'deal' ? 'from deal' : 'manual'}</Tag></div>
                         </div>
                         <div style={{ fontSize:11,color:'#6E6E6E' }}>{d.sc}{d.src === 'deal' && <div style={{ fontSize:9, color:SLATE, marginTop:2 }}>edit on the deals board</div>}</div>
-                        <div style={{ fontSize:12,color:YELL,fontWeight:600 }}>{d.d}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <div style={{ marginTop:3 }}><Tag color="#C9A0A0">overdue</Tag></div> : null}</div>
+                        <div style={{ fontSize:12,color:'#8A6A10',fontWeight:600 }}>{d.d}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <div style={{ marginTop:3 }}><Tag color="#C9A0A0">overdue</Tag></div> : null}</div>
                         <Tag color={statusColor(d.s)}>{d.s}</Tag>
                         <div style={{ fontSize:12,color:'#6E6E6E' }}>{d.pl}</div>
                         <div style={{ fontSize:12,color:BLUE,fontWeight:700 }}>{d.pay}</div>
