@@ -6629,7 +6629,10 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
                       {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
-                      <button onClick={() => removeDeal(x)} title="remove"
+                      {/* stopPropagation: the row itself opens the profit panel — without
+                          it, tapping × both unlinks the campaign AND opens the
+                          panel, silently wiping the local linked list (2026-10-04). */}
+                      <button onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="remove"
                         style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
                     </div>
                     {(live.paid_date || live.deliverable_url || status === 'Paid') && (
