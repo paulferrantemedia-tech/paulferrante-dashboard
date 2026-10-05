@@ -6326,6 +6326,12 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   const [dealSearch, setDealSearch] = useState('');
   // Campaign profitability drill-down (opens DealProfitPanel for a linked deal).
   const [profitDealId, setProfitDealId] = useState(null);
+  // Two-step unlink (2026-10-04, fix round 7): a single tap only ARMS the
+  // button ("confirm unlink"); only a deliberate second tap writes the
+  // unlink delta. A stray/ghost tap can never silently stage an unlink that
+  // a later unrelated Save would persist (data-loss vector).
+  const [confirmUnlinkDeal, setConfirmUnlinkDeal] = useState(null);
+  const [confirmUnlinkVideo, setConfirmUnlinkVideo] = useState(null);
 
   // Lazy-load his posted-video catalog for the tap-to-link picker.
   // catalog-data is a public discovery action (same call the catalog UI makes).
@@ -6601,8 +6607,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                   {/* explicit "unlink" label (not ×): the × glyph was too easy
                       to confuse with the drawer's close ×, and a mistap silently
                       unlinks (2026-10-04). */}
-                  <button type="button" onClick={() => removeVideo(v)} title="unlink video"
-                    style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>unlink</button>
+                  <button type="button" onClick={() => { const k = v.platform + ':' + v.video_id; if (confirmUnlinkVideo === k) { removeVideo(v); setConfirmUnlinkVideo(null); } else { setConfirmUnlinkVideo(k); } }} title="unlink video"
+                    style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:confirmUnlinkVideo === (v.platform + ':' + v.video_id) ? '#DC2626' : BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>{confirmUnlinkVideo === (v.platform + ':' + v.video_id) ? 'confirm unlink' : 'unlink'}</button>
                 </div>
               ))}
               {!pickerOpen ? (
@@ -6676,8 +6682,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                           unlinks. stopPropagation keeps the tap from bubbling to
                           the row and opening the profit panel (2026-10-04). */}
                       <button type="button" aria-label="unlink campaign"
-                        onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="unlink campaign"
-                        style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>unlink</button>
+                        onClick={(e) => { e.stopPropagation(); if (confirmUnlinkDeal === x.deal_id) { removeDeal(x); setConfirmUnlinkDeal(null); } else { setConfirmUnlinkDeal(x.deal_id); } }} title="unlink campaign"
+                        style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:confirmUnlinkDeal === x.deal_id ? '#DC2626' : BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>{confirmUnlinkDeal === x.deal_id ? 'confirm unlink' : 'unlink'}</button>
                     </div>
                     {(live.paid_date || live.deliverable_url || status === 'Paid') && (
                       <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>
@@ -6781,7 +6787,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
           </details>
         )}
         {profitDeal && (
-          <DealProfitPanel deal={profitDeal} expenses={expenses} deals={deals}
+          <DealProfitPanel deal={profitDeal} expenses={expenses} deals={deals} sourceExpenseId={row.expense_id}
             onClose={() => setProfitDealId(null)} reload={reload} showToast={showToast} />
         )}
       </div>
@@ -6798,7 +6804,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
 // regular expense drawer nested on top; tapping a linked campaign inside an
 // expense drawer opens this panel — the two drill directions connect.
 // ─────────────────────────────────────────────────────────────────────────────
-function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast }) {
+function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast, sourceExpenseId = null }) {
   const [selectedId, setSelectedId] = useState(null);
   useEffect(() => { setBooksUiBusy(true, 'profit-drawer'); return () => setBooksUiBusy(false, 'profit-drawer'); }, []);
   const linked = useMemo(() => expensesForDeal(expenses, deal.deal_id), [expenses, deal]);
@@ -6845,7 +6851,14 @@ function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast }) 
         )}
         <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
           {linked.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((r) => (
-            <div key={r.expense_id} onClick={() => setSelectedId(r.expense_id)}
+            <div key={r.expense_id} onClick={() => {
+              // (2026-10-04, fix round 7): when this panel was opened from an
+              // expense drawer, tapping the SAME expense just returns to that
+              // drawer instead of stacking a redundant third-layer nested
+              // drawer of the identical expense.
+              if (sourceExpenseId && r.expense_id === sourceExpenseId) { onClose(); }
+              else { setSelectedId(r.expense_id); }
+            }}
               style={{ display:'flex', alignItems:'center', gap:8, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:12, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.vendor || '—'}</div>
