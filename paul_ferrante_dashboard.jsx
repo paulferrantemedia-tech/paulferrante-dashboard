@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import html2canvas from "html2canvas";
 
 // ─────────────────────────────────────────────────────────────
@@ -5301,6 +5301,9 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
         />
       </div>
 
+      {/* ── Expense category donut ─────────────────────────────────── */}
+      {!loading && <CategoryPieChart expenses={data.expenses} isMobile={isMobile} />}
+
       {/* ── Sub-nav ──────────────────────────────────────────────── */}
       <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${BOOKS.border}`, marginBottom:16, overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
         {SUB_TABS.map(([id, lbl]) => (
@@ -5402,6 +5405,70 @@ function KpiCard({ label, value, tone, onClick, clickable, hint }) {
       <div style={{ fontSize:22, fontWeight:800, color:toneColor, letterSpacing:'-0.5px' }}>{value}</div>
       {hint && <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>{hint}</div>}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CategoryPieChart — donut breakdown of expenses by display category for the
+// Books tab. Aggregates data.expenses (already year-filtered by the reload)
+// with the same toUSD conversion as the Expenses YTD KPI.
+// ─────────────────────────────────────────────────────────────────────────────
+const PIE_COLORS = ['#1F6E8C', '#2A9DB8', '#5FB8C9', '#7FC9D8', '#9BBFCF', '#E1D9AE', '#C9A96A', '#8FAE9B', '#6E8E9E', '#3D5A66', '#A8D8E0', '#D9CFA8'];
+function CategoryPieChart({ expenses, isMobile }) {
+  const catData = useMemo(() => {
+    const m = {};
+    for (const r of (expenses || [])) {
+      const c = String(r.category || 'uncategorized').trim() || 'uncategorized';
+      m[c] = (m[c] || 0) + toUSD(r.amount, r.currency);
+    }
+    return Object.entries(m)
+      .map(([name, value]) => ({ name, value }))
+      .filter((d) => d.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [expenses]);
+  const total = catData.reduce((s, d) => s + d.value, 0);
+  if (!catData.length) return null;
+  const PieTip = ({ active, payload }) => {
+    if (!active || !payload || !payload.length) return null;
+    const d = payload[0].payload || {};
+    const pct = total > 0 ? (d.value / total * 100) : 0;
+    return (
+      <div style={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 12px', fontSize:12 }}>
+        <div style={{ fontWeight:700, color:TEXT, marginBottom:2 }}>{String(d.name || '').toLowerCase()}</div>
+        <div style={{ color:SLATE }}>{fmtMoney(d.value)} · {pct.toFixed(1)}%</div>
+      </div>
+    );
+  };
+  const size = isMobile ? 210 : 230;
+  return (
+    <Card style={{ marginBottom:18 }}>
+      <Label>spend by category</Label>
+      <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', alignItems:'center', gap: isMobile ? 12 : 24 }}>
+        <div style={{ position:'relative', width:size, height:size, flexShrink:0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={catData} dataKey="value" nameKey="name" innerRadius={size * 0.31} outerRadius={size * 0.46} paddingAngle={2} strokeWidth={0}>
+                {catData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+              </Pie>
+              <Tooltip content={<PieTip />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', pointerEvents:'none' }}>
+            <div style={{ fontSize:20, fontWeight:800, color:TEXT, letterSpacing:'-0.5px' }}>{fmtMoney(total)}</div>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', marginTop:2 }}>total</div>
+          </div>
+        </div>
+        <div style={{ flex:1, width:'100%', display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:'8px 20px', alignContent:'center' }}>
+          {catData.map((d, i) => (
+            <div key={d.name} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12, minWidth:0 }}>
+              <span style={{ width:10, height:10, borderRadius:'50%', background:PIE_COLORS[i % PIE_COLORS.length], flexShrink:0 }} />
+              <span style={{ color:TEXT, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.name.toLowerCase()}</span>
+              <span style={{ marginLeft:'auto', color:SLATE, whiteSpace:'nowrap', paddingLeft:8 }}>{fmtMoney(d.value)} · {(total > 0 ? (d.value / total * 100) : 0).toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
   );
 }
 
