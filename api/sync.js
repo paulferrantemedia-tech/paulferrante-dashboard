@@ -1676,6 +1676,53 @@ export default async function handler(req, res) {
   if (action === 'bulk-import-csv')  return handleBulkImportCsv(req, res);
   if (action === 'delete-expense')   return handleDeleteExpense(req, res);
   if (action === 'bulk-delete-expenses') return handleDeleteExpense(req, res);
+  // TEMPORARY one-time actions. Remove after use.
+  if (action === 'bulk-set-purpose' || action === 'bulk-del-expense') {
+    const { token, mappings, expense_ids } = req.body || {};
+    if (token !== 'purpose-oct5-2026') return res.status(403).json({ error: 'bad token' });
+    let gtoken;
+    try { gtoken = await getGoogleAccessToken(); }
+    catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+    const sheetId = process.env.GOOGLE_SHEETS_ID;
+    const results = [];
+    if (action === 'bulk-set-purpose') {
+      if (!Array.isArray(mappings)) return res.status(400).json({ error: 'mappings array required' });
+      for (const m of mappings) {
+        try {
+          const vals = await sheetsGet(gtoken, sheetId, 'Expenses!A1:AA');
+          const headers = vals[0];
+          const idIdx = headers.indexOf('expense_id');
+          const purIdx = headers.indexOf('business_purpose');
+          let rowNum = -1;
+          for (let i = 1; i < vals.length; i++) {
+            if (String(vals[i][idIdx]).toLowerCase() === String(m.expense_id).toLowerCase()) { rowNum = i + 1; break; }
+          }
+          if (rowNum === -1) { results.push({ expense_id: m.expense_id, error: 'not found' }); continue; }
+          const col = String.fromCharCode(65 + purIdx);
+          await sheetsUpdate(gtoken, sheetId, `Expenses!${col}${rowNum}`, [[m.business_purpose]]);
+          results.push({ expense_id: m.expense_id, ok: true, row: rowNum });
+        } catch (e) { results.push({ expense_id: m.expense_id, error: e.message }); }
+      }
+    } else {
+      if (!Array.isArray(expense_ids)) return res.status(400).json({ error: 'expense_ids array required' });
+      const blankRow = EXPENSE_HEADERS.map(() => '');
+      for (const eid of expense_ids) {
+        try {
+          const vals = await sheetsGet(gtoken, sheetId, 'Expenses!A1:AA');
+          const headers = vals[0];
+          const idIdx = headers.indexOf('expense_id');
+          let rowNum = -1;
+          for (let i = 1; i < vals.length; i++) {
+            if (String(vals[i][idIdx]).toLowerCase() === String(eid).toLowerCase()) { rowNum = i + 1; break; }
+          }
+          if (rowNum === -1) { results.push({ expense_id: eid, error: 'not found' }); continue; }
+          await sheetsUpdate(gtoken, sheetId, `Expenses!A${rowNum}:AA${rowNum}`, [blankRow]);
+          results.push({ expense_id: eid, ok: true, row: rowNum });
+        } catch (e) { results.push({ expense_id: eid, error: e.message }); }
+      }
+    }
+    return res.status(200).json({ ok: true, results });
+  }
 
   // Original behavior: GET/POST dashboard state via Redis
   const baseUrl = process.env.KV_REST_API_URL;
