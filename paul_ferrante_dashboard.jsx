@@ -5079,7 +5079,7 @@ function expensesForDeal(expenses, dealId) {
 // 'other'), so "missing" means no explicit tag was ever set.
 function hasExplicitTaxCategory(row) {
   if (!row) return false;
-  const v = taxCatMap()[row.expense_id] || row.tax_category || '';
+  const v = row.tax_category || taxCatMap()[row.expense_id] || '';
   return TAX_CATEGORIES.includes(v);
 }
 function rowHasReceipt(r) { return !!((r && r.receipt_url) || getReceiptPhoto(r && r.expense_id)); }
@@ -5683,11 +5683,11 @@ function suggestTaxCategory(category) {
   if (/professional|legal|accounting|consult/.test(c)) return 'professional services';
   return 'other';
 }
-// tax_category lives in localStorage keyed by expense_id. The Expenses sheet
-// has no tax_category column (the API's objectToRow would silently drop an
-// unknown field), so this map is the source of truth until a column is added.
-// The value is ALSO included in update-expense patches so a future sheet
-// column starts persisting without a client change.
+// tax_category now has a real sheet column (Z) plus tax_description (AA),
+// written by the API on update-expense / manual-expense. The localStorage map
+// below stays as a fallback for rows tagged before the columns existed;
+// the sheet value wins on read (see hasExplicitTaxCategory/getTaxCategory,
+// which check the row first).
 const TAX_CAT_KEY = 'books_tax_category_v1';
 function taxCatMap() { const m = load(TAX_CAT_KEY, {}); return (m && typeof m === 'object') ? m : {}; }
 function persistTaxCategory(expenseId, value) {
@@ -5698,7 +5698,9 @@ function persistTaxCategory(expenseId, value) {
 }
 function getTaxCategory(row) {
   if (!row) return 'other';
-  const v = taxCatMap()[row.expense_id] || row.tax_category || '';
+  // Sheet column is the source of truth; the localStorage map is only a
+  // fallback for rows tagged before the columns existed.
+  const v = row.tax_category || taxCatMap()[row.expense_id] || '';
   return TAX_CATEGORIES.includes(v) ? v : 'other';
 }
 
@@ -6063,8 +6065,9 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
       });
       // Clear the saved draft once it's been committed to the Sheet
       try { if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(_draftKey); } catch (_) {}
-      // Persist the tax tag locally (the sheet has no column for it) and log
-      // this review for the "Recently reviewed" history.
+      // The tax tag now also persists to the sheet (tax_category column);
+      // keep the local copy as a fallback and log this review for the
+      // "Recently reviewed" history.
       persistTaxCategory(row.expense_id, edit.tax_category || getTaxCategory(row));
       appendReviewLog({ ...row, ...edit });
       showToast && showToast('Confirmed');
@@ -6198,6 +6201,11 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
               onChange={(e) => setEdit({ ...edit, tax_category: e.target.value })}>
               {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </Field>
+          <Field label="Tax description">
+            <input style={inputStyle} value={edit.tax_description ?? row.tax_description ?? ''}
+              placeholder="short description for the cpa"
+              onChange={(e) => setEdit({ ...edit, tax_description: e.target.value })} />
           </Field>
         </div>
 
@@ -6720,12 +6728,13 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
     setSaving(true);
     try {
       const patch = {};
-      ['date','vendor','amount','currency','category','tax_category','business_purpose','payment_method',
+      ['date','vendor','amount','currency','category','tax_category','tax_description','business_purpose','payment_method',
        'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
       patch.linked_videos = JSON.stringify(linkedVids);
       patch.linked_deals = JSON.stringify(linkedDeals);
       await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
-      // Tax tag is stored locally (the sheet has no column for it); log a
+      // The tax tag now also persists to the sheet (tax_category column);
+      // keep the local copy as a fallback. Log a
       // review only on the transition from unreviewed to reviewed.
       persistTaxCategory(row.expense_id, edit.tax_category || getTaxCategory(row));
       if (String(edit.reviewed).toLowerCase() === 'true' && String(row.reviewed).toLowerCase() !== 'true') {
@@ -6790,6 +6799,11 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
               onChange={(e) => setEdit({ ...edit, tax_category: e.target.value })}>
               {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </Field>
+          <Field label="Tax description">
+            <input style={inputStyle} value={edit.tax_description ?? row.tax_description ?? ''}
+              placeholder="short description for the cpa"
+              onChange={(e) => setEdit({ ...edit, tax_description: e.target.value })} />
           </Field>
           <Field label="Business purpose">
             <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={edit.business_purpose || ''} onChange={(e) => setEdit({ ...edit, business_purpose: e.target.value })} />
@@ -7134,7 +7148,7 @@ function ManualExpenseModal({ deals, expenses, onClose, reload, showToast }) {
     date: new Date().toISOString().slice(0, 10),
     vendor: '', amount: '', currency: 'USD', category: 'Other',
     business_purpose: '', payment_method: '', linked_deal_id: '', notes: '',
-    entered_by: 'paul', tax_category: 'other',
+    entered_by: 'paul', tax_category: 'other', tax_description: '',
   });
   const [saving, setSaving] = useState(false);
   // Duplicate detection state: null = not checked yet; array = checked, non-empty
@@ -7196,6 +7210,10 @@ function ManualExpenseModal({ deals, expenses, onClose, reload, showToast }) {
             <select style={inputStyle} value={form.tax_category || 'other'} onChange={(e) => setForm({ ...form, tax_category: e.target.value })}>
               {TAX_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </Field>
+          <Field label="Tax description">
+            <input style={inputStyle} value={form.tax_description || ''} placeholder="short description for the cpa"
+              onChange={(e) => setForm({ ...form, tax_description: e.target.value })} />
           </Field>
           <Field label="Business purpose">
             <textarea style={{ ...inputStyle, minHeight:60, fontFamily:'inherit' }} value={form.business_purpose} onChange={(e) => setForm({ ...form, business_purpose: e.target.value })} />

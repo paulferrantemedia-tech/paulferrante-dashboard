@@ -472,7 +472,10 @@ const EXPENSE_HEADERS = [
   'extraction_confidence','confidence_notes','extracted_text',
   'entered_by','extracted_at','flags','reviewed','notes','personal_suspect',
   'linked_videos','linked_deals',
+  'tax_category','tax_description',
 ];
+// Canonical tax-category taxonomy (mirrors the client's TAX_CATEGORIES).
+const TAX_CATEGORIES_SERVER = ['travel','meals','equipment','software','home office','professional services','other'];
 const DEAL_HEADERS = [
   'deal_id','brand','deal_value','status','platform',
   'deliverable_url','invoice_url','shoot_start_date','shoot_end_date',
@@ -788,7 +791,7 @@ async function handleProcessReceipt(req, res) {
   // FAIL CLOSED: if we cannot read existing expenses to compare, do NOT book the
   // receipt (that would let dups slip in during an outage); hold it for review.
   let existingRows = [], existingReadOk = true;
-  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:Y')).filter((r) => r.expense_id); } catch (_) { existingReadOk = false; }
+  try { existingRows = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:AA')).filter((r) => r.expense_id); } catch (_) { existingReadOk = false; }
   const probable = existingReadOk ? strictDupMatch(existingRows, p.vendor, p.date, p.amount_total) : null;
   if (probable || !existingReadOk) {
     // Probable dup OR un-verifiable -> surface for Paul (Skip / Add anyway); never auto-book.
@@ -867,7 +870,7 @@ async function handleProcessInbox(req, res) {
   const slice = files.slice(offset, offset + limit);
 
   let existing = [];
-  try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:Y')).filter((r) => r.expense_id); } catch (_) {}
+  try { existing = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:AA')).filter((r) => r.expense_id); } catch (_) {}
   const linkedFileIds = new Set(existing.map((r) => driveFileIdFromUrl(r.receipt_url)).filter(Boolean));
 
   // ── Tolerant matching ──
@@ -910,7 +913,7 @@ async function handleProcessInbox(req, res) {
         try {
           const merged = { ...match, receipt_url: url };
           delete merged._rowIndex; delete merged.flags_computed;
-          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:Y${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
+          await sheetsUpdate(token, sheetId, `Expenses!A${match._rowIndex}:AA${match._rowIndex}`, [objectToRow(merged, EXPENSE_HEADERS)]);
           match.receipt_url = url;
         } catch (e) { rr.writeError = String(e.message).slice(0, 120); }
         try { await driveMoveFile(token, file.id, processedId, inboxId); } catch (_) { /* move optional */ }
@@ -1023,7 +1026,7 @@ async function handleBooksDiag(req, res) {
     const sheetId = process.env.GOOGLE_SHEETS_ID;
     const [logVals, eVals] = await Promise.all([
       sheetsGet(token, sheetId, 'ProcessingLog!A1:H').catch(() => null),
-      sheetsGet(token, sheetId, 'Expenses!A1:Y').catch(() => null),
+      sheetsGet(token, sheetId, 'Expenses!A1:AA').catch(() => null),
     ]);
     if (logVals) { const lg = rowsToObjects(logVals); const last = lg[lg.length - 1]; out.lastSync = { logRows: lg.length, mostRecent: last ? { started_at: last.started_at, completed_at: last.completed_at, status: last.status, file_name: last.file_name, error_message: last.error_message } : 'no rows' }; }
     else out.lastSync = { note: 'ProcessingLog sheet not readable' };
@@ -1084,7 +1087,7 @@ async function handleBooksData(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const [eVals, dVals, vVals] = await sheetsBatchGet(token, sheetId, ['Expenses!A1:Y', 'Deals!A1:L', 'VendorMemory!A1:E']);
+    const [eVals, dVals, vVals] = await sheetsBatchGet(token, sheetId, ['Expenses!A1:AA', 'Deals!A1:L', 'VendorMemory!A1:E']);
     // Filter out deleted (blank) rows AND rows outside the requested year
     const expenses = rowsToObjects(eVals).filter((r) => {
       if (!r.expense_id) return false; // blank/deleted row
@@ -1117,7 +1120,7 @@ async function handleUpdateExpense(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:Y');
+    const vals = await sheetsGet(token, sheetId, 'Expenses!A1:AA');
     const objs = rowsToObjects(vals);
     const target = objs.find((r) => r.expense_id === expense_id);
     if (!target) return res.status(404).json({ error: 'expense not found' });
@@ -1141,10 +1144,24 @@ async function handleUpdateExpense(req, res) {
       // Ensure the Y1 header exists so rowsToObjects maps the column on read.
       try { await sheetsUpdate(token, sheetId, 'Expenses!Y1', [['linked_deals']]); } catch (_) {}
     }
+    // Coerce tax_category to the canonical taxonomy so a bad value can't
+    // silently misfile an expense for the CPA.
+    if (patch.tax_category !== undefined) {
+      const v = String(patch.tax_category || '').toLowerCase().trim();
+      merged.tax_category = TAX_CATEGORIES_SERVER.includes(v) ? v : 'other';
+      // Ensure the Z1 header exists so rowsToObjects maps the column on read.
+      try { await sheetsUpdate(token, sheetId, 'Expenses!Z1', [['tax_category']]); } catch (_) {}
+    }
+    // Tax description is free text (a short CPA-facing description of the expense).
+    if (patch.tax_description !== undefined) {
+      merged.tax_description = String(patch.tax_description || '').slice(0, 500);
+      // Ensure the AA1 header exists so rowsToObjects maps the column on read.
+      try { await sheetsUpdate(token, sheetId, 'Expenses!AA1', [['tax_description']]); } catch (_) {}
+    }
     // Strip helpers
     delete merged._rowIndex; delete merged.flags_computed;
     const rowArr = objectToRow(merged, EXPENSE_HEADERS);
-    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:Y${target._rowIndex}`, [rowArr]);
+    await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:AA${target._rowIndex}`, [rowArr]);
 
     // VendorMemory learning loop — saves both category AND business purpose for this vendor
     if (confirm_vendor_category && merged.vendor && merged.category) {
@@ -1241,8 +1258,12 @@ async function handleManualExpense(req, res) {
     notes: exp.notes || '',
     linked_videos: normalizeLinkedVideos(exp.linked_videos || '[]'),
     linked_deals: normalizeLinkedDeals(exp.linked_deals || '[]'),
+    tax_category: TAX_CATEGORIES_SERVER.includes(String(exp.tax_category || '').toLowerCase().trim()) ? String(exp.tax_category).toLowerCase().trim() : 'other',
+    tax_description: String(exp.tax_description || '').slice(0, 500),
   };
   try {
+    // Ensure the Z1/AA1 headers exist so rowsToObjects maps the new columns on read.
+    try { await sheetsUpdate(token, sheetId, 'Expenses!Z1:AA1', [['tax_category','tax_description']]); } catch (_) {}
     await sheetsAppend(token, sheetId, 'Expenses!A1', [objectToRow(row, EXPENSE_HEADERS)]);
     return res.status(200).json({ ok: true, expense_id: expenseId });
   } catch (e) {
@@ -1270,11 +1291,11 @@ async function handleYearExport(req, res) {
   try { token = await getGoogleAccessToken(); }
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
-  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:Y'))
+  const expenses = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:AA'))
     .filter((r) => String(r.date || '').startsWith(String(year)));
 
   if (kind === 'csv') {
-    const cols = ['date','vendor','amount','currency','category','business_purpose','payment_method','receipt_url','linked_deal_id','reviewed'];
+    const cols = ['date','vendor','amount','currency','category','tax_category','tax_description','business_purpose','payment_method','receipt_url','linked_deal_id','reviewed'];
     const lines = [cols.join(',')];
     // Sorted by category, then date
     expenses.sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.date || '').localeCompare(b.date || ''));
@@ -1424,7 +1445,7 @@ async function handleBulkImportCsv(req, res) {
   let dealsByDate = [];
   try {
     [existing, vendorMemoryObjs, dealsByDate] = await Promise.all([
-      sheetsGet(token, sheetId, 'Expenses!A1:Y').then(rowsToObjects),
+      sheetsGet(token, sheetId, 'Expenses!A1:AA').then(rowsToObjects),
       sheetsGet(token, sheetId, 'VendorMemory!A1:E').then(rowsToObjects),
       sheetsGet(token, sheetId, 'Deals!A1:L').then(rowsToObjects),
     ]);
@@ -1538,7 +1559,7 @@ async function handleDeleteExpense(req, res) {
   catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
 
   try {
-    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:Y'));
+    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:AA'));
     const idSet = new Set(ids);
     const targets = objs.filter((r) => idSet.has(r.expense_id));
     if (targets.length === 0) return res.status(404).json({ error: 'no matching expense ids' });
@@ -1546,7 +1567,7 @@ async function handleDeleteExpense(req, res) {
     // Clear each target row by writing an empty row in its place
     const blankRow = EXPENSE_HEADERS.map(() => '');
     for (const target of targets) {
-      await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:Y${target._rowIndex}`, [blankRow]);
+      await sheetsUpdate(token, sheetId, `Expenses!A${target._rowIndex}:AA${target._rowIndex}`, [blankRow]);
     }
     return res.status(200).json({ ok: true, deleted: targets.length });
   } catch (e) {
