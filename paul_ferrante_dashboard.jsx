@@ -13,14 +13,14 @@ const CONFIG = {
   TIKTOK_PROXY_URL: '/api/tiktok',
 };
 
-const BG    = '#FFFFFF';
-const CARD  = '#F7F9FC';
-const BDR   = '#CDD4E0';
+const BG    = '#FAF7EC';   // Sand wash — page background (deep end)
+const CARD  = '#FFFFFF';   // White cards (deep end)
+const BDR   = '#E3DCC3';   // Sand-tinted border (deep end)
 const BLUE  = '#88EAF6';   // Bright Sky — accent, CTAs
 const YELL  = '#E1D9AE';   // Sand — warm highlights
-const OCEAN = '#EEF9FD';   // Deep Ocean — secondary accent, depth
-const SLATE = '#2E4A66';   // Slate — body copy, metadata
-const TEXT  = '#1A2744';   // Dark charcoal — headings & body
+const OCEAN = '#F1ECDA';   // Light sand wash — subtle fills and tints (deep end)
+const SLATE = '#6E6E6E';   // Slate — secondary copy, metadata (deep end)
+const TEXT  = '#0A0A0A';   // Ink — headings & body (deep end)
 
 function fmtFull(n) {
   if (!n && n !== 0) return '—';
@@ -348,7 +348,7 @@ function Card({ children, style, onClick }) {
   return <div onClick={onClick} style={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, padding:20, boxShadow:'0 1px 3px rgba(26,39,68,0.06)', cursor: onClick ? 'pointer' : 'default', ...style }}>{children}</div>;
 }
 function Label({ children }) {
-  return <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', marginBottom:14, fontWeight:700 }}>{children}</div>;
+  return <div style={{ fontSize:10, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', marginBottom:14, fontWeight:700 }}>{children}</div>;
 }
 function Tag({ children, color = BLUE }) {
   return <span style={{ fontSize:9, fontWeight:700, color, border:`1px solid ${color}44`, padding:'2px 8px', borderRadius:20, background:`${color}18`, whiteSpace:'nowrap' }}>{children}</span>;
@@ -356,13 +356,13 @@ function Tag({ children, color = BLUE }) {
 function Inp({ value, onChange, type='text', placeholder='', style={} }) {
   return (
     <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-      style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', ...style }} />
+      style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', ...style }} />
   );
 }
 function Sel({ value, onChange, options, style={} }) {
   return (
     <select value={value} onChange={e => onChange(e.target.value)}
-      style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', ...style }}>
+      style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', ...style }}>
       {options.map(o => <option key={o} value={o}>{o}</option>)}
     </select>
   );
@@ -431,7 +431,7 @@ function DealModal({ initial, onSave, onDelete, onClose, isMobile }) {
         <div style={{ marginBottom:14 }}>
           <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:6 }}>Due Date</div>
           <input type="date" value={form.d && form.d !== 'TBC' ? form.d : ''} onChange={e => upd('d', e.target.value || 'TBC')}
-            style={{ width:'100%',background:'#F8FAFC',border:`1px solid ${BDR}`,borderRadius:8,padding:'9px 12px',color: form.d && form.d !== 'TBC' ? '#fff' : '#555',fontSize:13,fontFamily:'inherit',outline:'none',colorScheme:'light',cursor:'pointer' }} />
+            style={{ width:'100%',background:'#FAF7EC',border:`1px solid ${BDR}`,borderRadius:8,padding:'9px 12px',color: form.d && form.d !== 'TBC' ? '#fff' : '#555',fontSize:13,fontFamily:'inherit',outline:'none',colorScheme:'light',cursor:'pointer' }} />
         </div>
         <div style={{ marginBottom:14 }}>
           <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:6 }}>Stage</div>
@@ -479,7 +479,7 @@ function DealModal({ initial, onSave, onDelete, onClose, isMobile }) {
             </button>
           )}
           <button onClick={onClose}
-            style={{ flex:1,background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:10,padding:'13px',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>
+            style={{ flex:1,background:'#FFFFFF',color:TEXT,border:`1px solid ${BDR}`,borderRadius:10,padding:'13px',fontWeight:600,fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>
             Cancel
           </button>
         </div>
@@ -503,7 +503,7 @@ function FollowerModal({ label, current, onSave, onClose, isMobile }) {
           <button onClick={() => onSave(parseInt(val.replace(/[^0-9]/g,'')) || current)}
             style={{ flex:1,background:BLUE,color:TEXT,border:'none',borderRadius:10,padding:'14px',fontWeight:800,fontSize:14,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
           <button onClick={onClose}
-            style={{ flex:1,background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:10,padding:'14px',fontWeight:600,fontSize:14,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+            style={{ flex:1,background:'#FFFFFF',color:TEXT,border:`1px solid ${BDR}`,borderRadius:10,padding:'14px',fontWeight:600,fontSize:14,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -539,9 +539,9 @@ function HookTag({ hook }) {
         <div style={{
           position:'fixed', left:pos.left, top:pos.top, bottom:pos.bottom,
           background:'#0e1c28', border:`1px solid ${color}55`, borderRadius:10,
-          padding:'10px 13px', fontSize:11, color:'#4A6080', lineHeight:1.6,
+          padding:'10px 13px', fontSize:11, color:'#6E6E6E', lineHeight:1.6,
           width:240, zIndex:99999, pointerEvents:'none', whiteSpace:'normal', textAlign:'left',
-          boxShadow:'0 4px 20px rgba(0,0,0,0.6)',
+          boxShadow:'0 4px 12px rgba(0,0,0,0.25)',
         }}>
           <div style={{ fontWeight:800, color, marginBottom:4 }}>{hook} hook</div>
           {def}
@@ -578,7 +578,7 @@ function VideoModal({ video, avgViews, avgEngRate, onClose, isMobile }) {
         onClick={e => e.stopPropagation()}>
 
         {/* Close */}
-        <button onClick={onClose} style={{ position:'absolute',top:16,right:16,background:'none',border:`1px solid ${BDR}`,borderRadius:8,color:'#94A3B8',padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',zIndex:1 }}>✕ Close</button>
+        <button onClick={onClose} style={{ position:'absolute',top:16,right:16,background:'none',border:`1px solid ${BDR}`,borderRadius:8,color:'#6E6E6E',padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',zIndex:1 }}>✕ Close</button>
 
         {/* Title row */}
         <div style={{ paddingRight:60, marginBottom:16 }}>
@@ -608,7 +608,7 @@ function VideoModal({ video, avgViews, avgEngRate, onClose, isMobile }) {
             {/* Hook insight */}
             <div style={{ marginTop:14, background:`${OCEAN}33`, borderRadius:10, padding:'14px 16px', borderLeft:`3px solid ${hookColor}` }}>
               <div style={{ fontSize:10, color:hookColor, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:6 }}>Why this hook works</div>
-              <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6 }}>{hookInsights[hook]}</div>
+              <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6 }}>{hookInsights[hook]}</div>
             </div>
           </div>
 
@@ -699,7 +699,7 @@ function LoginScreen({ onAuth }) {
   };
 
   return (
-    <div style={{ minHeight:'100vh', background:'#0a0f14', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Inter', system-ui, sans-serif" }}>
+    <div style={{ minHeight:'100vh', background:'#0a0f14', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:"'Poppins', system-ui, -apple-system, sans-serif" }}>
       <div style={{ width:'100%', maxWidth:400, padding:'0 24px' }}>
         <div style={{ textAlign:'center', marginBottom:32 }}>
           <div style={{ fontSize:22, fontWeight:900, letterSpacing:'-0.5px', color:TEXT }}>paul_ferrante</div>
@@ -939,7 +939,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
               {a.pushback} Risk ⓘ
             </span>
             {riskTip && (
-              <div style={{ position:'absolute',right:0,top:'calc(100% + 6px)',width:220,background:'#FFFFFF',border:`1px solid ${riskClr[a.pushback]}66`,borderRadius:8,padding:'10px 12px',fontSize:11,color:'#4A6080',lineHeight:1.5,zIndex:999,boxShadow:'0 8px 24px #000a',pointerEvents:'none' }}>
+              <div style={{ position:'absolute',right:0,top:'calc(100% + 6px)',width:220,background:'#FFFFFF',border:`1px solid ${riskClr[a.pushback]}66`,borderRadius:8,padding:'10px 12px',fontSize:11,color:'#6E6E6E',lineHeight:1.5,zIndex:999,boxShadow:'0 4px 12px rgba(42,74,94,0.14)',pointerEvents:'none' }}>
                 <div style={{ fontWeight:700,color:riskClr[a.pushback],marginBottom:4 }}>{a.pushback} Risk</div>
                 {riskDesc[a.pushback]}
               </div>
@@ -958,10 +958,10 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
             <div style={{ background:`${OCEAN}33`,borderRadius:8,padding:10 }}>
               <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:5,fontWeight:700 }}>📊 Signal 1 — Your Deal History</div>
               {a.belowHist
-                ? <div style={{ fontSize:12,color:'#2E4A66',lineHeight:1.5 }}>
+                ? <div style={{ fontSize:12,color:'#6E6E6E',lineHeight:1.5 }}>
                     You've closed <strong>{a.platform}</strong> deals at an average of <strong style={{color:'#96C9AA'}}>${a.hist.toLocaleString()}</strong>. Your current rate of <strong style={{color:YELL}}>${a.curRate.toLocaleString()}</strong> is set <strong style={{color:'#f87171'}}>${(a.hist-a.curRate).toLocaleString()} below</strong> what brands have already paid you.
                   </div>
-                : <div style={{ fontSize:12,color:'#4A6080' }}>Historical close avg for {a.platform}: <strong style={{color:'#96C9AA'}}>${a.hist.toLocaleString()}</strong> — rate is consistent ✓</div>}
+                : <div style={{ fontSize:12,color:'#6E6E6E' }}>Historical close avg for {a.platform}: <strong style={{color:'#96C9AA'}}>${a.hist.toLocaleString()}</strong> — rate is consistent ✓</div>}
             </div>
           )}
 
@@ -969,7 +969,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
           {a.bmCPM && (
             <div style={{ background:`${OCEAN}33`,borderRadius:8,padding:10 }}>
               <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:5,fontWeight:700 }}>📡 Signal 2 — CPM Value Translation</div>
-              <div style={{ fontSize:12,color:'#2E4A66',lineHeight:1.6 }}>
+              <div style={{ fontSize:12,color:'#6E6E6E',lineHeight:1.6 }}>
                 At <strong style={{color:YELL}}>${a.curRate.toLocaleString()}</strong>, you're delivering an estimated CPM of <strong style={{color:a.impliedCPM<a.bmCPM.min?'#f87171':a.impliedCPM>a.bmCPM.max?'#96C9AA':YELL}}>${a.impliedCPM}</strong> — {a.impliedCPM<a.bmCPM.min?'below':'within'} paid media average (${a.bmCPM.min}–${a.bmCPM.max} for {a.platform}).
                 {a.impliedCPM < a.bmCPM.min && <strong style={{color:'#96C9AA'}}> You have room to raise your rate.</strong>}
                 <br/><span style={{color:SLATE,fontSize:11}}>At transition rate ${a.transRate.toLocaleString()}: implied CPM = ${a.transitionCPM}</span>
@@ -981,7 +981,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
           {a.nicheFloor && (
             <div style={{ background:`${OCEAN}33`,borderRadius:8,padding:10 }}>
               <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:5,fontWeight:700 }}>🌍 Signal 3 — Niche Adjustment</div>
-              <div style={{ fontSize:12,color:'#2E4A66',lineHeight:1.5 }}>
+              <div style={{ fontSize:12,color:'#6E6E6E',lineHeight:1.5 }}>
                 Travel/lifestyle creators index <strong style={{color:'#96C9AA'}}>+30%</strong> above generic benchmarks. Niche-adjusted range for your audience size: <strong style={{color:BLUE}}>${a.nicheFloor.toLocaleString()}–${a.nicheCeil.toLocaleString()}</strong>
                 <span style={{color:SLATE}}> (base benchmark adjusted for niche premium)</span>
               </div>
@@ -992,7 +992,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
           {a.coh && (
             <div style={{ background:`#f87171`, opacity:1, borderRadius:8, padding:10, background:`rgba(248,113,113,0.1)`, border:`1px solid rgba(248,113,113,0.3)` }}>
               <div style={{ fontSize:10,color:'#f87171',textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:5,fontWeight:700 }}>⚠️ Signal 4 — Rate Card Coherence</div>
-              <div style={{ fontSize:12,color:'#2E4A66',lineHeight:1.5 }}>
+              <div style={{ fontSize:12,color:'#6E6E6E',lineHeight:1.5 }}>
                 {a.coh.msg}. Suggested: <strong style={{color:BLUE}}>${a.coh.suggest.toLocaleString()}</strong>
               </div>
             </div>
@@ -1001,7 +1001,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
           {/* Signal 5 — Goal Pacing */}
           <div style={{ background:`${OCEAN}33`,borderRadius:8,padding:10 }}>
             <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:5,fontWeight:700 }}>🎯 Signal 5 — $45K Goal Pacing</div>
-            <div style={{ fontSize:12,color:'#2E4A66',lineHeight:1.6 }}>
+            <div style={{ fontSize:12,color:'#6E6E6E',lineHeight:1.6 }}>
               At your current rate of <strong style={{color:YELL}}>${a.curRate.toLocaleString()}</strong>, you need <strong style={{color:'#f87171'}}>{a.dealsAtCur} deals/month</strong> to hit $45K/year.
               {a.dealsDiff > 0 && <> Raising to <strong style={{color:BLUE}}>${a.transRate.toLocaleString()}</strong> reduces that to <strong style={{color:'#96C9AA'}}>{a.dealsAtTrans} deal{a.dealsAtTrans!==1?'s':''}/month</strong> — saving you {a.dealsDiff} deal{a.dealsDiff!==1?'s':''}/month in required volume.</>}
             </div>
@@ -1016,7 +1016,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
                 ['Transition',BLUE,a.transRate,'Test on next 2–3 pitches'],
                 ['Market',  '#96C9AA',a.nicheCeil||a.transRate,'Niche ceiling for your size'],
               ].map(([lbl,clr,val,sub]) => (
-                <div key={lbl} style={{ textAlign:'center',background:'#F8FAFC',borderRadius:8,padding:'10px 8px',border:`1px solid ${clr}33` }}>
+                <div key={lbl} style={{ textAlign:'center',background:'#FAF7EC',borderRadius:8,padding:'10px 8px',border:`1px solid ${clr}33` }}>
                   <div style={{ fontSize:9,color:clr,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:4,fontWeight:700 }}>{lbl}</div>
                   <div style={{ fontSize:18,fontWeight:900,color:clr }}>${(val||0).toLocaleString()}</div>
                   <div style={{ fontSize:9,color:SLATE,marginTop:3,lineHeight:1.3 }}>{sub}</div>
@@ -1035,7 +1035,7 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
             <button onClick={()=>onUpdate(a.id, a.transRate)} style={{ flex:1,background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'10px',fontWeight:800,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>
               Update to ${a.transRate.toLocaleString()} (transition)
             </button>
-            <button onClick={()=>onDismiss(a.id)} style={{ background:'#F7F9FC',color:'#94A3B8',border:`1px solid ${BDR}`,borderRadius:8,padding:'10px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>
+            <button onClick={()=>onDismiss(a.id)} style={{ background:'#FFFFFF',color:'#6E6E6E',border:`1px solid ${BDR}`,borderRadius:8,padding:'10px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>
               Dismiss
             </button>
           </div>
@@ -1347,10 +1347,10 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
   };
 
   // ── Styles ────────────────────────────────────────────────────
-  const INP = { width:'100%',background:'#F8FAFC',border:`1px solid ${BDR}`,borderRadius:8,padding:'9px 12px',color:TEXT,fontSize:13,fontFamily:'inherit',outline:'none' };
+  const INP = { width:'100%',background:'#FAF7EC',border:`1px solid ${BDR}`,borderRadius:8,padding:'9px 12px',color:TEXT,fontSize:13,fontFamily:'inherit',outline:'none' };
   const BTN_BLUE = { background:BLUE,color:TEXT,border:'none',borderRadius:10,padding:'12px 20px',fontWeight:800,fontSize:13,cursor:'pointer',fontFamily:'inherit' };
-  const BTN_GHOST = { background:'#F7F9FC',color:'#4A6080',border:`1px solid ${BDR}`,borderRadius:10,padding:'10px 16px',fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:'inherit' };
-  const SECTION_HDR = { fontSize:10,color:'#1A2744',textTransform:'uppercase',letterSpacing:'2.5px',marginBottom:14,fontWeight:700 };
+  const BTN_GHOST = { background:'#FFFFFF',color:'#6E6E6E',border:`1px solid ${BDR}`,borderRadius:10,padding:'10px 16px',fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:'inherit' };
+  const SECTION_HDR = { fontSize:10,color:'#0A0A0A',textTransform:'uppercase',letterSpacing:'2.5px',marginBottom:14,fontWeight:700 };
   const PLAT_COLORS = { TikTok:'#69C9D0', Instagram:'#C13584', YouTube:'#FF0000', UGC:YELL };
 
   const allBundles = [...PROPOSAL_BUNDLES, ...savedPkgs];
@@ -1453,7 +1453,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
             {checkedItems.length > 0 && <button onClick={()=>setShowSavePkg(true)} style={{ ...BTN_GHOST,fontSize:10,padding:'5px 10px' }}>💾 Save as Package</button>}
           </div>
           {showSavePkg && (
-            <div style={{ display:'flex',gap:8,marginBottom:14,padding:10,background:'#F8FAFC',borderRadius:8,border:`1px solid ${OCEAN}55` }}>
+            <div style={{ display:'flex',gap:8,marginBottom:14,padding:10,background:'#FAF7EC',borderRadius:8,border:`1px solid ${OCEAN}55` }}>
               <input value={pkgName} onChange={e=>setPkgName(e.target.value)} placeholder="Package name…" style={{ ...INP,flex:1 }} onKeyDown={e=>{ if(e.key==='Enter')savePackage(); }} />
               <button onClick={savePackage} style={{ ...BTN_BLUE,padding:'9px 14px' }}>Save</button>
               <button onClick={()=>{setShowSavePkg(false);setPkgName('');}} style={{ ...BTN_GHOST,padding:'9px 10px' }}>✕</button>
@@ -1482,7 +1482,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
         {/* Bundle suggestion banner */}
         {bundleHint && (
           <div style={{ background:`#96C9AA22`,border:`1px solid #96C9AA55`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10 }}>
-            <div style={{ fontSize:12,flex:1,color:'#2E4A66' }}>
+            <div style={{ fontSize:12,flex:1,color:'#6E6E6E' }}>
               💡 This looks like <strong style={{color:BLUE}}>{bundleHint.bundle.name}</strong> — switch to that package and save <strong style={{color:'#96C9AA'}}>${bundleHint.save.toLocaleString()}</strong>
             </div>
             <button onClick={()=>applyBundle(bundleHint.bundle)} style={{ ...BTN_BLUE,padding:'6px 12px',fontSize:11 }}>Switch</button>
@@ -1531,11 +1531,11 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                       <div style={{ display:'flex',alignItems:'center',gap:4 }}>
                         {checked ? (
                           <>
-                            <button onClick={()=>setQty(d.id,qty-1)} style={{ width:22,height:22,background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:4,color:TEXT,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,lineHeight:1 }}>−</button>
+                            <button onClick={()=>setQty(d.id,qty-1)} style={{ width:22,height:22,background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:4,color:TEXT,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,lineHeight:1 }}>−</button>
                             <span style={{ fontSize:12,width:16,textAlign:'center' }}>{qty}</span>
-                            <button onClick={()=>setQty(d.id,qty+1)} style={{ width:22,height:22,background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:4,color:TEXT,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,lineHeight:1 }}>+</button>
+                            <button onClick={()=>setQty(d.id,qty+1)} style={{ width:22,height:22,background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:4,color:TEXT,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,lineHeight:1 }}>+</button>
                           </>
-                        ) : <span style={{ fontSize:10,color:'#94A3B8',marginLeft:4 }}>qty</span>}
+                        ) : <span style={{ fontSize:10,color:'#6E6E6E',marginLeft:4 }}>qty</span>}
                       </div>
                     </div>
                   );
@@ -1614,9 +1614,9 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
         <Card>
           <div style={SECTION_HDR}>Discount</div>
           <div style={{ display:'flex',gap:10,alignItems:'center' }}>
-            <div style={{ display:'flex',background:'#F8FAFC',border:`1px solid ${BDR}`,borderRadius:8,overflow:'hidden' }}>
+            <div style={{ display:'flex',background:'#FAF7EC',border:`1px solid ${BDR}`,borderRadius:8,overflow:'hidden' }}>
               {[['percent','%'],['flat','$']].map(([t,lbl]) => (
-                <button key={t} onClick={()=>setDiscType(t)} style={{ padding:'9px 14px',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:12,background:discType===t?BLUE:'transparent',color:discType===t?BG:'#888',transition:'all 0.15s' }}>{lbl}</button>
+                <button key={t} onClick={()=>setDiscType(t)} style={{ padding:'9px 14px',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:12,background:discType===t?BLUE:'transparent',color:discType===t?'#FFFFFF':'#888',transition:'all 0.15s' }}>{lbl}</button>
               ))}
             </div>
             <input type="number" value={discVal} onChange={e=>setDiscVal(e.target.value)} placeholder={discType==='percent'?'e.g. 10':'e.g. 200'} style={{ ...INP,flex:1 }} />
@@ -1661,7 +1661,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                     const s=sel[d.id], rate=rates[d.id]||d.defaultRate;
                     return (
                       <div key={d.id} style={{ display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${BDR}22`,fontSize:12 }}>
-                        <span style={{ color:'#2E4A66' }}>{d.name}{s.qty>1?<span style={{color:SLATE}}> ×{s.qty}</span>:''}</span>
+                        <span style={{ color:'#6E6E6E' }}>{d.name}{s.qty>1?<span style={{color:SLATE}}> ×{s.qty}</span>:''}</span>
                         <div style={{ display:'flex',gap:16,textAlign:'right' }}>
                           <span style={{ color:SLATE }}>${rate.toLocaleString()}{s.qty>1?` ×${s.qty}`:''}</span>
                           <span style={{ color:YELL,fontWeight:700,minWidth:60 }}>${(rate*s.qty).toLocaleString()}</span>
@@ -1678,15 +1678,15 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <div style={{ marginBottom:16 }}>
                 <div style={{ fontSize:10,fontWeight:800,color:BLUE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:8 }}>Add-Ons</div>
                 {usageOn && <div style={{ display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${BDR}22`,fontSize:12 }}>
-                  <span style={{ color:'#2E4A66' }}>Usage Rights ({usageMode==='perpetuity'?'In Perpetuity':usageMode==='custom'?`${usageCustom} days`:usageMode+' days'}) · {Math.round(usagePct)}%</span>
+                  <span style={{ color:'#6E6E6E' }}>Usage Rights ({usageMode==='perpetuity'?'In Perpetuity':usageMode==='custom'?`${usageCustom} days`:usageMode+' days'}) · {Math.round(usagePct)}%</span>
                   <span style={{ color:YELL,fontWeight:700 }}>${usageFee.toLocaleString()}</span>
                 </div>}
                 {exclOn && <div style={{ display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:`1px solid ${BDR}22`,fontSize:12 }}>
-                  <span style={{ color:'#2E4A66' }}>Exclusivity ({exclMode==='custom'?`${exclCustom} days`:exclMode+' days'}) · {Math.round(exclPct)}%</span>
+                  <span style={{ color:'#6E6E6E' }}>Exclusivity ({exclMode==='custom'?`${exclCustom} days`:exclMode+' days'}) · {Math.round(exclPct)}%</span>
                   <span style={{ color:YELL,fontWeight:700 }}>${exclFee.toLocaleString()}</span>
                 </div>}
                 {libFlat && <div style={{ display:'flex',justifyContent:'space-between',padding:'6px 0',fontSize:12 }}>
-                  <span style={{ color:'#2E4A66' }}>Link in Bio – 24hr (flat)</span>
+                  <span style={{ color:'#6E6E6E' }}>Link in Bio – 24hr (flat)</span>
                   <span style={{ color:YELL,fontWeight:700 }}>$150</span>
                 </div>}
               </div>
@@ -1708,7 +1708,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <div style={{ display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`1px solid ${OCEAN}55`,marginTop:8 }}>
                 <div>
                   <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:2 }}>Standard Value</div>
-                  <div style={{ fontSize:16,color:'#94A3B8',textDecoration:'line-through' }}>${totalWithAddons.toLocaleString()}</div>
+                  <div style={{ fontSize:16,color:'#6E6E6E',textDecoration:'line-through' }}>${totalWithAddons.toLocaleString()}</div>
                 </div>
                 <div style={{ textAlign:'right' }}>
                   <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:2 }}>Your Investment</div>
@@ -1751,7 +1751,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'3px',marginBottom:6 }}>paulferrante · creator proposal</div>
               <div style={{ fontSize:18,fontWeight:900,marginBottom:4 }}>{hdr.campaign || 'Creator Partnership Proposal'}</div>
               <div style={{ fontSize:12,color:SLATE,marginBottom:16 }}>
-                prepared for <strong style={{ color:'#1A2744' }}>{hdr.brand || '—'}</strong>
+                prepared for <strong style={{ color:'#0A0A0A' }}>{hdr.brand || '—'}</strong>
                 {hdr.contact && <span> · {hdr.contact}</span>}
                 <span> · {new Date(hdr.date + 'T00:00:00').toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</span>
               </div>
@@ -1765,7 +1765,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                       const s = sel[d.id], rate = rates[d.id] || d.defaultRate;
                       return (
                         <div key={d.id} style={{ display:'flex',justifyContent:'space-between',fontSize:12,padding:'4px 0',borderBottom:`1px solid ${BDR}22` }}>
-                          <span style={{ color:'#1A2744' }}>{d.name}{s.qty > 1 ? <span style={{ color:SLATE }}> ×{s.qty}</span> : ''}</span>
+                          <span style={{ color:'#0A0A0A' }}>{d.name}{s.qty > 1 ? <span style={{ color:SLATE }}> ×{s.qty}</span> : ''}</span>
                           <span style={{ fontWeight:700 }}>${(rate * s.qty).toLocaleString()}</span>
                         </div>
                       );
@@ -1836,7 +1836,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
             )}
             {crmStatus === 'not_found' && !showCrmAdd && (
               <div style={{ marginTop:12,padding:'10px 14px',background:`${YELL}18`,border:`1px solid ${YELL}44`,borderRadius:8 }}>
-                <div style={{ fontSize:12,marginBottom:8,color:'#2E4A66' }}>
+                <div style={{ fontSize:12,marginBottom:8,color:'#6E6E6E' }}>
                   <strong>{hdr.brand}</strong> isn't in your CRM yet — add them?
                 </div>
                 <div style={{ display:'flex',gap:8 }}>
@@ -1846,7 +1846,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               </div>
             )}
             {showCrmAdd && (
-              <div style={{ marginTop:12,padding:14,background:'#F8FAFC',border:`1px solid ${BDR}`,borderRadius:10 }}>
+              <div style={{ marginTop:12,padding:14,background:'#FAF7EC',border:`1px solid ${BDR}`,borderRadius:10 }}>
                 <div style={{ fontSize:13,fontWeight:700,marginBottom:10,color:BLUE }}>Add to CRM</div>
                 <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10 }}>
                   {[['Status','s'],['Type','type'],['Country','country']].map(([lbl,k]) => (
@@ -1892,7 +1892,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <div style={{ borderTop:`1px solid ${OCEAN}88`,paddingTop:14 }}>
                 <div style={{ display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:12 }}>
                   <span style={{ color:SLATE }}>Standard value</span>
-                  <span style={{ color:'#94A3B8',textDecoration:discAmt?'line-through':'' }}>${totalWithAddons.toLocaleString()}</span>
+                  <span style={{ color:'#6E6E6E',textDecoration:discAmt?'line-through':'' }}>${totalWithAddons.toLocaleString()}</span>
                 </div>
                 <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline' }}>
                   <span style={{ fontSize:11,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',fontWeight:700 }}>Client cost</span>
@@ -1908,7 +1908,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                 <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:6,fontWeight:700 }}>Selected ({checkedItems.length})</div>
                 {checkedItems.map(d => {
                   const s=sel[d.id]; return (
-                    <div key={d.id} style={{ fontSize:11,color:'#4A6080',display:'flex',justifyContent:'space-between',padding:'2px 0' }}>
+                    <div key={d.id} style={{ fontSize:11,color:'#6E6E6E',display:'flex',justifyContent:'space-between',padding:'2px 0' }}>
                       <span>{d.name}{s.qty>1?` ×${s.qty}`:''}</span>
                       <span style={{ color:YELL }}>${((rates[d.id]||d.defaultRate)*s.qty).toLocaleString()}</span>
                     </div>
@@ -2077,11 +2077,11 @@ function castingDeadlineLabel(d) {
   return `Deadline ${d}`;
 }
 function castingScoreColor(s) {
-  if (s >= 8) return { bg:`${BLUE}33`, color:'#0E6A80', border:BLUE };
+  if (s >= 8) return { bg:`${BLUE}33`, color:'#2A4A5E', border:BLUE };
   if (s >= 7) return { bg:`${YELL}55`, color:'#8A6A10', border:YELL };
   if (s >= 6) return { bg:`${YELL}33`, color:'#8A6A10', border:`${YELL}AA` };
-  if (s >= 5) return { bg:'#F4F6F9',   color:SLATE,    border:BDR };
-  return        { bg:'#F4F6F9',         color:'#94A3B8', border:BDR };
+  if (s >= 5) return { bg:'#FAF7EC',   color:SLATE,    border:BDR };
+  return        { bg:'#FAF7EC',         color:'#6E6E6E', border:BDR };
 }
 
 // ══ DISCOVERY ════════════════════════════════════════════════════════════════
@@ -2365,7 +2365,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
 
   // ── Loading / empty states ──
   if (posts === null) {
-    return <div style={{ padding: 40, color: '#4A6080', fontSize: 14 }}>Loading catalog…</div>;
+    return <div style={{ padding: 40, color: '#6E6E6E', fontSize: 14 }}>Loading catalog…</div>;
   }
 
   // Read-only pitch view from a #pitch= hash (no backend, hash only)
@@ -2376,7 +2376,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>pitch selection</div>
-            <div style={{ fontSize: 12, color: '#4A6080', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#6E6E6E', marginTop: 2 }}>
               {pitchPosts.length} of {pitchView.length} posts{pitchPosts.length < pitchView.length ? ' found. build the catalog on the discovery tab to see the rest' : ''}
             </div>
           </div>
@@ -2387,7 +2387,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
           {pitchPosts.map(p => <DiscoCard key={p.key} p={p} CHIP={CHIP} readonly userTags={tags[p.key]} />)}
         </div>
         {pitchPosts.length === 0 && (
-          <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8', fontSize: 13 }}>no matching posts. the catalog may not be built on this device.</div>
+          <div style={{ textAlign: 'center', padding: 40, color: '#6E6E6E', fontSize: 13 }}>no matching posts. the catalog may not be built on this device.</div>
         )}
       </div>
     );
@@ -2402,7 +2402,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>Discovery</div>
-          <div style={{ fontSize: 12, color: '#4A6080', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: '#6E6E6E', marginTop: 2 }}>
             Search your own posts to pull examples for a brand. {hasCatalog ? `${posts.length} posts indexed · ${visionCount} visually tagged` : 'Catalog not built yet.'}
           </div>
         </div>
@@ -2421,7 +2421,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
 
       {!hasCatalog && !building && (
         <Card>
-          <div style={{ textAlign: 'center', padding: '24px 12px', color: '#4A6080' }}>
+          <div style={{ textAlign: 'center', padding: '24px 12px', color: '#6E6E6E' }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TEXT, marginBottom: 6 }}>Build your post catalog</div>
             <div style={{ fontSize: 12, maxWidth: 460, margin: '0 auto 14px' }}>
               Pulls your TikTok, Instagram and YouTube posts into one searchable index, tags sponsored vs organic from your disclosure hashtags, and visually tags the look of each post.
@@ -2436,7 +2436,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
           {/* Search + filters */}
           <Card>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search caption, title, hashtag, brand…"
-              style={{ width: '100%', background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 8, padding: '10px 12px', color: TEXT, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 12 }} />
+              style={{ width: '100%', background: '#FAF7EC', border: `1px solid ${BDR}`, borderRadius: 8, padding: '10px 12px', color: TEXT, fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 12 }} />
 
             <FilterRow label="Platform">
               {DISCO_PLATFORMS.map(([id, lbl, ic]) => (
@@ -2473,10 +2473,10 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
             </FilterRow>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 12, color: '#4A6080', fontWeight: 600 }}>{results.length} of {posts.length} posts</div>
+              <div style={{ fontSize: 12, color: '#6E6E6E', fontWeight: 600 }}>{results.length} of {posts.length} posts</div>
               {(fPlatform.size || fBrand.size || fCategory.size || fVisual.size || fBranded !== 'all' || search || similarTo) ? (
                 <button onClick={() => { setSearch(''); setFPlatform(new Set()); setFBranded('all'); setFBrand(new Set()); setFCategory(new Set()); setFVisual(new Set()); setSimilarTo(null); }}
-                  style={{ background: 'none', border: 'none', color: '#0E6A80', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
+                  style={{ background: 'none', border: 'none', color: '#2A4A5E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
               ) : null}
             </div>
           </Card>
@@ -2499,10 +2499,10 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: '#fff', border: `1px solid ${BDR}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14 }}>
               <span style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>{selected.size} selected</span>
               <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applyTag()} placeholder="tag name…"
-                style={{ background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, fontFamily: 'inherit', outline: 'none', width: 140 }} />
+                style={{ background: '#FAF7EC', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, fontFamily: 'inherit', outline: 'none', width: 140 }} />
               <button onClick={applyTag} style={{ background: BLUE, color: TEXT, border: 'none', borderRadius: 7, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>apply tag</button>
-              <button onClick={copyPitchLink} style={{ background: '#F7F9FC', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>copy pitch link</button>
-              <button onClick={() => setSelected(new Set())} style={{ background: 'none', border: 'none', color: '#64748B', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>clear</button>
+              <button onClick={copyPitchLink} style={{ background: '#FFFFFF', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>copy pitch link</button>
+              <button onClick={() => setSelected(new Set())} style={{ background: 'none', border: 'none', color: '#6E6E6E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>clear</button>
             </div>
           )}
 
@@ -2527,14 +2527,14 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
           {pageCount > 1 && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 14 }}>
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}
-                style={{ background: safePage <= 1 ? '#F1F5F9' : '#fff', color: safePage <= 1 ? '#94A3B8' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage <= 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>← prev</button>
-              <span style={{ fontSize: 12, color: '#4A6080', fontWeight: 600 }}>page {safePage} of {pageCount} · {ranked.length} posts</span>
+                style={{ background: safePage <= 1 ? '#FAF7EC' : '#fff', color: safePage <= 1 ? '#6E6E6E' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage <= 1 ? 'default' : 'pointer', fontFamily: 'inherit' }}>← prev</button>
+              <span style={{ fontSize: 12, color: '#6E6E6E', fontWeight: 600 }}>page {safePage} of {pageCount} · {ranked.length} posts</span>
               <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount}
-                style={{ background: safePage >= pageCount ? '#F1F5F9' : '#fff', color: safePage >= pageCount ? '#94A3B8' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage >= pageCount ? 'default' : 'pointer', fontFamily: 'inherit' }}>next →</button>
+                style={{ background: safePage >= pageCount ? '#FAF7EC' : '#fff', color: safePage >= pageCount ? '#6E6E6E' : TEXT, border: `1px solid ${BDR}`, borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: safePage >= pageCount ? 'default' : 'pointer', fontFamily: 'inherit' }}>next →</button>
             </div>
           )}
           {results.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 40, color: '#94A3B8', fontSize: 13 }}>No posts match these filters.</div>
+            <div style={{ textAlign: 'center', padding: 40, color: '#6E6E6E', fontSize: 13 }}>No posts match these filters.</div>
           )}
         </>
       )}
@@ -2545,7 +2545,7 @@ function DiscoveryTab({ crm, deals, showToast, isMobile }) {
 function FilterRow({ label, children }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-      <div style={{ fontSize: 10, color: '#0E6A80', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, minWidth: 92, paddingTop: 7 }}>{label}</div>
+      <div style={{ fontSize: 10, color: '#2A4A5E', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700, minWidth: 92, paddingTop: 7 }}>{label}</div>
       <div style={{ flex: 1 }}>{children}</div>
     </div>
   );
@@ -2559,23 +2559,23 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
       <div style={{ position: 'relative', width: '100%', paddingTop: '100%', background: '#EEF2F7' }}>
         {p.thumbnail ? <img src={p.thumbnail} alt="" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
         <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(255,255,255,0.92)', borderRadius: 6, padding: '2px 7px', fontSize: 13 }}>{DISCO_PLAT_ICON[p.platform]}</div>
-        {p.effBranded ? <div style={{ position: 'absolute', top: 8, right: 8, background: '#0E6A80', color: '#fff', borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>BRANDED</div> : null}
+        {p.effBranded ? <div style={{ position: 'absolute', top: 8, right: 8, background: '#2A4A5E', color: '#fff', borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>BRANDED</div> : null}
         {!p.effBranded && p.review ? <div style={{ position: 'absolute', top: 8, right: 8, background: '#D97706', color: '#fff', borderRadius: 6, padding: '2px 7px', fontSize: 10, fontWeight: 700 }}>⚠ REVIEW</div> : null}
       </div>
       <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
-        <div style={{ fontSize: 11, color: '#94A3B8' }}>{date} · {(p.metrics?.views || 0).toLocaleString()} views</div>
+        <div style={{ fontSize: 11, color: '#6E6E6E' }}>{date} · {(p.metrics?.views || 0).toLocaleString()} views</div>
         <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.35, minHeight: 32 }}>{snippet}{(p.text || '').length > 110 ? '…' : ''}</div>
         <div>
-          {p.brand && p.brand !== '(unknown brand)' ? <span style={{ ...CHIP, background: '#0E6A8018', color: '#0E6A80' }}>{p.brand}</span> : null}
+          {p.brand && p.brand !== '(unknown brand)' ? <span style={{ ...CHIP, background: '#0E6A8018', color: '#2A4A5E' }}>{p.brand}</span> : null}
           {(p.categories || []).map(c => <span key={c} style={{ ...CHIP, background: '#E1D9AE55', color: '#6B5E1A' }}>{c}</span>)}
-          {(p.visualTags || []).map(v => <span key={v} style={{ ...CHIP, background: '#88EAF633', color: '#0E6A80' }}>{DISCO_VISUAL_LABEL[v] || v}</span>)}
+          {(p.visualTags || []).map(v => <span key={v} style={{ ...CHIP, background: '#88EAF633', color: '#2A4A5E' }}>{DISCO_VISUAL_LABEL[v] || v}</span>)}
           {(userTags || []).map(t => (
             <span key={t} style={{ ...CHIP, background: '#EDE9FE', color: '#6D28D9' }}>{t}{readonly ? null : (
               <button onClick={() => onRemoveTag(t)} title="remove tag"
                 style={{ background: 'none', border: 'none', color: '#6D28D9', fontSize: 10, fontWeight: 800, cursor: 'pointer', padding: '0 0 0 4px', fontFamily: 'inherit' }}>×</button>
             )}</span>
           ))}
-          {p.overridden ? <span style={{ ...CHIP, background: '#F1F5F9', color: '#64748B' }}>✎ edited</span> : null}
+          {p.overridden ? <span style={{ ...CHIP, background: '#FAF7EC', color: '#6E6E6E' }}>✎ edited</span> : null}
         </div>
 
         {editing ? (
@@ -2584,7 +2584,7 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
               <input type="checkbox" checked={!!editBuf.branded} onChange={e => setEditBuf({ ...editBuf, branded: e.target.checked })} /> Branded (sponsored)
             </label>
             <input list="disco-brands" value={editBuf.brand} onChange={e => setEditBuf({ ...editBuf, brand: e.target.value })} placeholder="Brand name"
-              style={{ width: '100%', background: '#F8FAFC', border: `1px solid ${BDR}`, borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
+              style={{ width: '100%', background: '#FAF7EC', border: `1px solid ${BDR}`, borderRadius: 6, padding: '6px 8px', fontSize: 12, fontFamily: 'inherit', outline: 'none' }} />
             <datalist id="disco-brands">{(crmBrandNames || []).map(b => <option key={b} value={b} />)}</datalist>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {DISCO_VISUALS.map(([id, lbl]) => {
@@ -2596,23 +2596,23 @@ function DiscoCard({ p, CHIP, editing, onEdit, onCancel, editBuf, setEditBuf, on
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
               <button onClick={onSave} style={{ flex: 1, background: BLUE, color: TEXT, border: 'none', borderRadius: 7, padding: '7px', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Save</button>
-              <button onClick={onClearOverride} style={{ background: '#fff', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
-              <button onClick={onCancel} style={{ background: '#fff', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+              <button onClick={onClearOverride} style={{ background: '#fff', color: '#6E6E6E', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
+              <button onClick={onCancel} style={{ background: '#fff', color: '#6E6E6E', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 10px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
             </div>
           </div>
         ) : readonly ? (
           <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
-            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#F7F9FC', color: '#0E6A80', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
+            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#FFFFFF', color: '#2A4A5E', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 6, marginTop: 'auto', paddingTop: 4 }}>
             <button onClick={onToggleSelect} title="select for bulk actions"
-              style={{ background: checked ? `${BLUE}33` : '#F7F9FC', color: checked ? TEXT : '#64748B', border: `1px solid ${checked ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>{checked ? '☑' : '☐'}</button>
-            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#F7F9FC', color: '#0E6A80', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
-            <button onClick={onCopy} style={{ flex: 1, background: '#F7F9FC', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Copy link</button>
+              style={{ background: checked ? `${BLUE}33` : '#FFFFFF', color: checked ? TEXT : '#6E6E6E', border: `1px solid ${checked ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>{checked ? '☑' : '☐'}</button>
+            <a href={p.url || '#'} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#FFFFFF', color: '#2A4A5E', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, textDecoration: 'none', fontFamily: 'inherit' }}>Open ↗</a>
+            <button onClick={onCopy} style={{ flex: 1, background: '#FFFFFF', color: TEXT, border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Copy link</button>
             <button onClick={onFindSimilar} title="find posts like this one"
-              style={{ background: similarActive ? `${BLUE}33` : '#F7F9FC', color: similarActive ? TEXT : '#64748B', border: `1px solid ${similarActive ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>∼</button>
-            <button onClick={onEdit} title="Edit tags" style={{ background: '#F7F9FC', color: '#64748B', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✎</button>
+              style={{ background: similarActive ? `${BLUE}33` : '#FFFFFF', color: similarActive ? TEXT : '#6E6E6E', border: `1px solid ${similarActive ? BLUE : BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>∼</button>
+            <button onClick={onEdit} title="Edit tags" style={{ background: '#FFFFFF', color: '#6E6E6E', border: `1px solid ${BDR}`, borderRadius: 7, padding: '7px 9px', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✎</button>
           </div>
         )}
       </div>
@@ -2630,7 +2630,7 @@ const APP_STATUS_RULES = {
 };
 const APP_STATUS_META = {
   'in-process':      { label:'In Process',      tone:'#16A34A', order:0, blurb:'They’ve reached out. Keep this warm.' },
-  'waiting':         { label:'Waiting',         tone:'#0E6A80', order:1, blurb:'Still in play. Casting may still be reviewing.' },
+  'waiting':         { label:'Waiting',         tone:'#2A4A5E', order:1, blurb:'Still in play. Casting may still be reviewing.' },
   'likely-cold':     { label:'Likely Cold',     tone:'#B45309', order:2, blurb:'No word in a while. Probably not moving forward, but not confirmed.' },
   'probably-passed': { label:'Probably Passed', tone:'#DC2626', order:3, blurb:'Premiere is close/over and you haven’t heard — this season’s casting is likely locked.' },
 };
@@ -2707,7 +2707,7 @@ function ApplicationTracker({ applications, setApplications }) {
   const dateField = (app, key, label) => (
     <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>{label}
       <input type="date" value={app[key] || ''} onChange={e => patch(app.id, { [key]: e.target.value })}
-        style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', color:TEXT, outline:'none', colorScheme:'light' }} />
+        style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', color:TEXT, outline:'none', colorScheme:'light' }} />
     </label>
   );
 
@@ -2721,16 +2721,16 @@ function ApplicationTracker({ applications, setApplications }) {
       {adding && (
         <Card style={{ marginBottom:14 }}>
           <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:10 }}>
-            <input placeholder="Show name" value={form.show} onChange={e=>setForm({...form, show:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
-            <input placeholder="Network" value={form.network} onChange={e=>setForm({...form, network:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
-            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Applied date<input type="date" value={form.appliedDate} onChange={e=>setForm({...form, appliedDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
-            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Premiere date (optional)<input type="date" value={form.premiereDate} onChange={e=>setForm({...form, premiereDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
-            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Casting close (optional)<input type="date" value={form.castingCloseDate} onChange={e=>setForm({...form, castingCloseDate:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
-            <input placeholder="Apply URL used (optional)" value={form.applyUrlUsed} onChange={e=>setForm({...form, applyUrlUsed:e.target.value})} style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+            <input placeholder="Show name" value={form.show} onChange={e=>setForm({...form, show:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+            <input placeholder="Network" value={form.network} onChange={e=>setForm({...form, network:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Applied date<input type="date" value={form.appliedDate} onChange={e=>setForm({...form, appliedDate:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Premiere date (optional)<input type="date" value={form.premiereDate} onChange={e=>setForm({...form, premiereDate:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <label style={{ fontSize:10, color:SLATE, display:'flex', flexDirection:'column', gap:2 }}>Casting close (optional)<input type="date" value={form.castingCloseDate} onChange={e=>setForm({...form, castingCloseDate:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'5px 7px', fontSize:11, fontFamily:'inherit', colorScheme:'light' }} /></label>
+            <input placeholder="Apply URL used (optional)" value={form.applyUrlUsed} onChange={e=>setForm({...form, applyUrlUsed:e.target.value})} style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' }} />
           </div>
-          <textarea rows="2" placeholder="Notes (tape sent, contact name, etc.)" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} style={{ width:'100%', marginTop:10, background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+          <textarea rows="2" placeholder="Notes (tape sent, contact name, etc.)" value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} style={{ width:'100%', marginTop:10, background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'7px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:10 }}>
-            <button onClick={()=>{setAdding(false); setForm(blank);}} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+            <button onClick={()=>{setAdding(false); setForm(blank);}} style={{ background:'#FFFFFF', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
             <button onClick={addApp} style={{ background:TEXT, color:'#fff', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Add</button>
           </div>
         </Card>
@@ -2773,13 +2773,13 @@ function ApplicationTracker({ applications, setApplications }) {
                     {dateField(app, 'castingCloseDate', 'Casting close')}
                     {dateField(app, 'lastContactDate', 'Last contact')}
                   </div>
-                  <textarea rows="2" placeholder="Notes" value={app.notes || ''} onChange={e=>patch(app.id, { notes:e.target.value })} style={{ width:'100%', marginTop:8, background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:6, padding:'6px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+                  <textarea rows="2" placeholder="Notes" value={app.notes || ''} onChange={e=>patch(app.id, { notes:e.target.value })} style={{ width:'100%', marginTop:8, background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:6, padding:'6px 9px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
                   <div style={{ display:'flex', gap:8, marginTop:8, flexWrap:'wrap', alignItems:'center' }}>
-                    {app.applyUrlUsed && <a href={app.applyUrlUsed} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#0E6A80', fontWeight:700 }}>Apply link used ↗</a>}
+                    {app.applyUrlUsed && <a href={app.applyUrlUsed} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:'#2A4A5E', fontWeight:700 }}>Apply link used ↗</a>}
                     {app.premiereDate && (app.remindedFor === app.premiereDate
                       ? <span style={{ fontSize:11, color:'#16A34A' }}>🔔 Reminder set for ~3wk before premiere</span>
-                      : <button onClick={()=>scheduleReminder(app)} style={{ background:'none', border:`1px solid ${BLUE}`, color:'#0E6A80', borderRadius:7, padding:'5px 10px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>🔔 Remind me before premiere</button>)}
-                    <button onClick={()=>remove(app.id)} style={{ marginLeft:'auto', background:'none', border:`1px solid ${BDR}`, color:'#94A3B8', borderRadius:7, padding:'5px 10px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
+                      : <button onClick={()=>scheduleReminder(app)} style={{ background:'none', border:`1px solid ${BLUE}`, color:'#2A4A5E', borderRadius:7, padding:'5px 10px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>🔔 Remind me before premiere</button>)}
+                    <button onClick={()=>remove(app.id)} style={{ marginLeft:'auto', background:'none', border:`1px solid ${BDR}`, color:'#6E6E6E', borderRadius:7, padding:'5px 10px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>Remove</button>
                   </div>
                 </Card>
               ))}
@@ -2885,7 +2885,7 @@ function RealityCastingTab() {
 
       {/* Stat tiles */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px,1fr))', gap:12, marginBottom:18 }}>
-        <div style={{ background:`linear-gradient(135deg, #B6F2F9 0%, ${BLUE} 100%)`, borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
+        <div style={{ background:'#E4F8FC', borderRadius:8, padding:18, border:`1px solid ${BLUE}66` }}>
           <div style={{ fontSize:10, color:TEXT, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Top fit score</div>
           <div style={{ fontSize:30, fontWeight:800, color:TEXT, marginTop:4, lineHeight:1 }}>{topScore.toFixed(1)}</div>
           <div style={{ fontSize:11, color:TEXT, marginTop:4 }}>casting now</div>
@@ -2934,12 +2934,12 @@ function RealityCastingTab() {
         {pasteOpen && (
           <div style={{ marginTop:12 }}>
             <textarea rows="3" placeholder="Paste a casting URL, producer email, or copied brief here..." value={pasteText} onChange={e => setPasteText(e.target.value)}
-              style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
+              style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'10px 12px', fontSize:13, fontFamily:'inherit', color:TEXT, outline:'none', resize:'vertical' }} />
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-              <button onClick={() => { setPasteOpen(false); setPasteText(''); }} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
+              <button onClick={() => { setPasteOpen(false); setPasteText(''); }} style={{ background:'#FFFFFF', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>Cancel</button>
               <button onClick={() => { addQuickCasting(pasteText); setPasteText(''); setPasteOpen(false); }} style={{ background:TEXT, color:'#FFFFFF', border:'none', borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>Score &amp; add</button>
             </div>
-            <div style={{ fontSize:10, color:'#94A3B8', marginTop:6 }}>Phase 1: opens a quick-add stub. Phase 2 wires AI extraction so a URL auto-fills everything.</div>
+            <div style={{ fontSize:10, color:'#6E6E6E', marginTop:6 }}>Phase 1: opens a quick-add stub. Phase 2 wires AI extraction so a URL auto-fills everything.</div>
           </div>
         )}
       </Card>
@@ -2972,7 +2972,7 @@ function RealityCastingTab() {
       <Card style={{ marginBottom:14 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
           <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>Filters</div>
-          <div style={{ fontSize:10, color:'#94A3B8' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (format-archived hidden)</div>
+          <div style={{ fontSize:10, color:'#6E6E6E' }}>Showing {visible.length} of {cards.filter(c => c.bucket!=='no').length} (format-archived hidden)</div>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           <div>
@@ -3028,19 +3028,19 @@ function RealityCastingTab() {
                   </div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
                     <Tag color={SLATE}>{CASTING_FORMAT_LABELS[c.formatType]}</Tag>
-                    <Tag color={isOpen ? '#0E6A80' : SLATE}>{isOpen ? 'CASTING NOW' : 'NOT CASTING NOW'}</Tag>
+                    <Tag color={isOpen ? '#2A4A5E' : SLATE}>{isOpen ? 'CASTING NOW' : 'NOT CASTING NOW'}</Tag>
                     {c.flags.includes('apply-with-dan') && <Tag color={SLATE}>+ Dan</Tag>}
                     {c.flags.includes('annual') && <Tag color={SLATE}>Annual</Tag>}
                   </div>
                   <div style={{ fontSize:12, color:SLATE, marginTop:10, lineHeight:1.4 }}>{c.oneLineWhy}</div>
                   {isOpen ? (
                     (() => { const ap = resolveApply(c); return ap ? (
-                      <a href={ap.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ display:'inline-block', marginTop:8, fontSize:12, fontWeight:800, color: ap.source === 'verified-portal' ? '#0E6A80' : BLUE, textDecoration:'none' }}>{ap.label} →</a>
+                      <a href={ap.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ display:'inline-block', marginTop:8, fontSize:12, fontWeight:800, color: ap.source === 'verified-portal' ? '#2A4A5E' : BLUE, textDecoration:'none' }}>{ap.label} →</a>
                     ) : null; })()
                   ) : (c.typicalWindow ? (
-                    <div style={{ fontSize:11, color:'#94A3B8', marginTop:8 }}>Usual window: {c.typicalWindow}</div>
+                    <div style={{ fontSize:11, color:'#6E6E6E', marginTop:8 }}>Usual window: {c.typicalWindow}</div>
                   ) : null)}
-                  <div style={{ fontSize:10, color:'#94A3B8', marginTop:8, fontStyle:'italic' }}>{c.fitReasoning}</div>
+                  <div style={{ fontSize:10, color:'#6E6E6E', marginTop:8, fontStyle:'italic' }}>{c.fitReasoning}</div>
                 </div>
               </div>
             </Card>
@@ -3048,7 +3048,7 @@ function RealityCastingTab() {
         })}
       </div>
 
-      <div style={{ fontSize:10, color:'#94A3B8', marginTop:18, paddingBottom:8 }}>
+      <div style={{ fontSize:10, color:'#6E6E6E', marginTop:18, paddingBottom:8 }}>
         Phase 1 — feed, fit score, filters. Auto-archived shows (cooking / dating / athletic / etc.) hidden by default.
       </div>
       </>)}
@@ -3056,14 +3056,14 @@ function RealityCastingTab() {
       {/* Detail modal */}
       {selected && (
         <div onClick={() => setSelected(null)} style={{ position:'fixed', inset:0, background:'rgba(26,39,68,0.5)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', padding:'5vh 16px', overflowY:'auto' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#FFFFFF', borderRadius:12, maxWidth:620, width:'100%', boxShadow:'0 20px 50px -10px rgba(26,39,68,0.3)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#FFFFFF', borderRadius:12, maxWidth:620, width:'100%', boxShadow:'0 8px 20px -8px rgba(42,74,94,0.18)' }}>
             <div style={{ padding:24, borderBottom:`1px solid ${BDR}`, display:'flex', alignItems:'flex-start', gap:14 }}>
               <div style={{ width:42, height:42, borderRadius:'50%', background:castingScoreColor(selected.fitScore).bg, color:castingScoreColor(selected.fitScore).color, border:`2px solid ${castingScoreColor(selected.fitScore).border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, flexShrink:0 }}>{selected.fitScore}</div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:18, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{selected.showName}</div>
                 <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>{selected.network} · {selected.market}</div>
               </div>
-              <button onClick={() => setSelected(null)} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Close</button>
+              <button onClick={() => setSelected(null)} style={{ background:'#FFFFFF', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Close</button>
             </div>
             <div style={{ padding:24 }}>
               <div style={{ marginBottom:18 }}>
@@ -3101,7 +3101,7 @@ function RealityCastingTab() {
               <div style={{ marginBottom:14 }}>
                 <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Pipeline stage</div>
                 <select value={selected.pipelineStatus} onChange={e => updatePipeline(selected.id, e.target.value)}
-                  style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
+                  style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
                   {['researching','applied','first-tape','callback','producer-interview','booked','rejected','ghosted'].map(s => <option key={s} value={s}>{s.split('-').map(w => w[0].toUpperCase()+w.slice(1)).join(' ')}</option>)}
                 </select>
               </div>
@@ -3115,7 +3115,7 @@ function RealityCastingTab() {
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {ap && <a href={ap.url} target="_blank" rel="noopener noreferrer" style={{ display:'inline-block', background:TEXT, color:'#FFFFFF', textDecoration:'none', borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700 }}>{ap.label} →</a>}
                       <button onClick={() => { trackApplication(selected); setSelected(null); }} disabled={alreadyTracked}
-                        style={{ background: alreadyTracked ? '#F1F5F9' : '#fff', color: alreadyTracked ? '#94A3B8' : '#0E6A80', border:`1px solid ${alreadyTracked ? BDR : BLUE}`, borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700, cursor: alreadyTracked ? 'default' : 'pointer', fontFamily:'inherit' }}>
+                        style={{ background: alreadyTracked ? '#FAF7EC' : '#fff', color: alreadyTracked ? '#6E6E6E' : '#2A4A5E', border:`1px solid ${alreadyTracked ? BDR : BLUE}`, borderRadius:8, padding:'9px 16px', fontSize:13, fontWeight:700, cursor: alreadyTracked ? 'default' : 'pointer', fontFamily:'inherit' }}>
                         {alreadyTracked ? '✓ Tracked' : '+ Track this application'}</button>
                     </div>
                     {note && <div style={{ fontSize:10, color:SLATE, marginTop:6, lineHeight:1.5 }}>{note} · link checked {ap.checked}</div>}
@@ -3167,7 +3167,7 @@ function CrmEditForm({ c, crmBuf, setCrmBuf, saveCrm, onCancel, deleteCrm, isMob
       </div>
       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
         <button onClick={saveCrm} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
-        <button onClick={onCancel} style={{ background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+        <button onClick={onCancel} style={{ background:'#FFFFFF',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
         <button onClick={() => { if(window.confirm(`Remove ${c.b}?`)) deleteCrm(c.id); }} style={{ background:'none',color:'#f87171',border:`1px solid #f8717144`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Delete</button>
         <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12,color:SLATE,marginLeft:8,cursor:'pointer' }}>
           <input type="checkbox" checked={!!crmBuf.paidDeal} onChange={e=>setCrmBuf(p=>({...p,paidDeal:e.target.checked}))} />
@@ -3195,7 +3195,7 @@ const PLAT_NAME = { ig:'Instagram', tt:'TikTok', yt:'YouTube' };
 
 function Sparkline({ values, up }) {
   const pts = (values || []).filter(v => typeof v === 'number' && !isNaN(v));
-  if (pts.length < 2) return <span style={{ fontSize:9, color:'#94A3B8' }}>—</span>;
+  if (pts.length < 2) return <span style={{ fontSize:9, color:'#6E6E6E' }}>—</span>;
   const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
   const W = 56, H = 18;
   const d = pts.map((v, i) => `${(i / (pts.length - 1)) * W},${H - ((v - min) / span) * H}`).join(' ');
@@ -3229,7 +3229,7 @@ function SecCtl({ collapsed, onToggle, onMove, isFirst, isLast }) {
 }
 function DeepCard({ tab, setTab, title, style, children, onOpen }) {
   const [hov, setHov] = useState(false);
-  const hoverStyle = hov ? { boxShadow:'0 6px 20px rgba(26,39,68,0.14)', transform:'translateY(-1px)', borderColor: BLUE } : {};
+  const hoverStyle = hov ? { boxShadow:'0 4px 12px rgba(42,74,94,0.10)', transform:'translateY(-1px)', borderColor: BLUE } : {};
   const activate = () => { if (onOpen) onOpen(); else if (setTab && tab) setTab(tab); };
   return (
     <Card style={{ cursor:'pointer', transition:'box-shadow .18s ease, transform .18s ease, border-color .18s ease', ...hoverStyle, ...style }}>
@@ -3260,16 +3260,16 @@ function RevenuePulseChart({ revenueByMonth, revenueMonths, isMobile, setTab }) 
   return (
     <DeepCard tab="revenue" setTab={setTab} title="open revenue">
       <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom:6 }}>
-        <div style={{ fontSize:10, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>revenue pulse · 2026</div>
+        <div style={{ fontSize:10, color:'#2A4A5E', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700 }}>revenue pulse · 2026</div>
         <div style={{ fontSize:13, fontWeight:800, color:TEXT }}>{usd(total26)} <span style={{ fontSize:10, fontWeight:600, color:SLATE }}>ytd</span></div>
       </div>
       <ResponsiveContainer width="100%" height={isMobile ? 120 : 150}>
         <AreaChart data={rows} margin={{ top:4, right:8, bottom:20, left:4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
           <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555', fontSize:10 }}
-            label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#94A3B8' }} />
+            label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#6E6E6E' }} />
           <YAxis stroke="#333" tick={{ fill:'#555', fontSize:10 }} tickFormatter={v => `$${v}`} width={48}
-            label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#94A3B8' }} />
+            label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#6E6E6E' }} />
           <Tooltip contentStyle={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, fontSize:12 }}
             formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period' : '2026']} />
           <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
@@ -3360,14 +3360,14 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
   );
   const cell = (title, d, cur, fmtCur, metricKey, k) => (
     <div style={{ flex:1, minWidth:0 }}>
-      <div style={{ fontSize:9, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:3 }}>{title}</div>
+      <div style={{ fontSize:9, color:'#6E6E6E', textTransform:'uppercase', letterSpacing:'1px', marginBottom:3 }}>{title}</div>
       {d.state === 'ok' ? (
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <div><div style={{ fontSize:13, fontWeight:700, color:TEXT }}>{fmtCur(cur)}</div><div style={{ fontSize:10 }}><Arrow pct={d.pct} /></div></div>
           <Sparkline values={seriesFor(k, metricKey)} up={(d.pct || 0) >= 0} />
         </div>
       ) : (
-        <div style={{ fontSize:9.5, color:'#94A3B8' }}>{d.state === 'no-current' ? 'open Analytics to track' : coldMsg(title.toLowerCase())}</div>
+        <div style={{ fontSize:9.5, color:'#6E6E6E' }}>{d.state === 'no-current' ? 'open Analytics to track' : coldMsg(title.toLowerCase())}</div>
       )}
     </div>
   );
@@ -3375,7 +3375,7 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
   const headerEl = (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>trends</div>
+        <div style={{ fontSize:10, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>trends</div>
         {secCtl}
       </div>
       <div style={{ display:'flex', gap:6 }}>{['24h', '7d', '30d'].map(winBtn)}</div>
@@ -3392,12 +3392,12 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
 
       {/* Zone 1 — audience pulse */}
       <Card style={{ borderLeft:`3px solid ${BLUE}` }}>
-        <div style={{ fontSize:10, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'2px', marginBottom:8, fontWeight:700 }}>audience pulse · {analyticsWindow}</div>
+        <div style={{ fontSize:10, color:'#2A4A5E', textTransform:'uppercase', letterSpacing:'2px', marginBottom:8, fontWeight:700 }}>audience pulse · {analyticsWindow}</div>
         <div style={{ display:'flex', alignItems:'baseline', gap:14, flexWrap:'wrap' }}>
           <div style={{ fontSize: isMobile ? 30 : 40, fontWeight:900, color:TEXT, letterSpacing:'-1px' }}>{fmtFull(liveTotal)}</div>
           {totalDelta.state === 'ok'
             ? <div style={{ fontSize:15, fontWeight:800, color: totalDelta.abs >= 0 ? '#16A34A' : '#DC2626' }}>{totalDelta.abs >= 0 ? '▲ +' : '▼ '}{fmtFull(Math.abs(totalDelta.abs))} ({fmtPct(totalDelta.pct)})</div>
-            : <div style={{ fontSize:12, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
+            : <div style={{ fontSize:12, color:'#6E6E6E' }}>{coldMsg('follower')}</div>}
         </div>
         <div style={{ fontSize:11, color:SLATE, marginTop:6 }}>across all platforms · updates every 5 min</div>
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:10, marginTop:14 }}>
@@ -3406,13 +3406,13 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
               <Logo size={16} />
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <span style={{ fontSize:9, color:'#2E4A66', textTransform:'uppercase', letterSpacing:'1px', fontWeight:600 }}>{label}</span>
+                  <span style={{ fontSize:9, color:'#6E6E6E', textTransform:'uppercase', letterSpacing:'1px', fontWeight:600 }}>{label}</span>
                   <span title={conn ? 'live from API' : 'manual'} style={{ width:6, height:6, borderRadius:'50%', background: conn ? '#22c55e' : '#CBD5E1' }} />
                 </div>
                 <div style={{ fontSize:16, fontWeight:800, color: flash === k ? BLUE : TEXT, transition:'color 0.35s' }}>{fmtFull(curVals[k].f)}</div>
                 {d.state === 'ok'
-                  ? <div style={{ fontSize:11 }}><Arrow pct={d.pct} /> <span style={{ color:'#94A3B8' }}>({d.abs >= 0 ? '+' : ''}{fmtFull(d.abs)})</span></div>
-                  : <div style={{ fontSize:9.5, color:'#94A3B8' }}>{coldMsg('follower')}</div>}
+                  ? <div style={{ fontSize:11 }}><Arrow pct={d.pct} /> <span style={{ color:'#6E6E6E' }}>({d.abs >= 0 ? '+' : ''}{fmtFull(d.abs)})</span></div>
+                  : <div style={{ fontSize:9.5, color:'#6E6E6E' }}>{coldMsg('follower')}</div>}
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:4 }}>
                   <span style={{ fontSize:10, color: conn ? '#4ade80' : '#888' }}>{conn ? '● live from API' : '○ manual'}</span>
                   {!conn && <button onClick={() => setFollowerEdit({ key:k, label, val: curVals[k].f })} style={{ fontSize:9, color:BLUE, background:'none', border:`1px solid ${BLUE}44`, borderRadius:6, padding:'2px 8px', cursor:'pointer', fontFamily:'inherit' }}>update ✏</button>}
@@ -3681,7 +3681,7 @@ function BrandGuidelinesTab() {
   ];
 
   return (
-    <div style={{ background:B.sand, color:B.ink, borderRadius:20, padding:'clamp(20px,4vw,56px)', fontFamily:"'Inter', system-ui, sans-serif", textTransform:'none' }}>
+    <div style={{ background:B.sand, color:B.ink, borderRadius:20, padding:'clamp(20px,4vw,56px)', fontFamily:"'Poppins', system-ui, -apple-system, sans-serif", textTransform:'none' }}>
       <div style={{ maxWidth:1000, margin:'0 auto' }}>
 
         {!shareMode ? (
@@ -4364,7 +4364,7 @@ export default function App() {
   const getPillarTag = (text) => {
     const t = (text || '').toLowerCase();
     if (/pet|dog|cat|animal/.test(t)) return ['Pet', '#F5C6CB', '#8B3A3A'];
-    if (/how|tip|hack|guide|budget|cost|save|pack|book|flight|visa|cheap/.test(t)) return ['Educational', '#EEF9FD', '#0E6A80'];
+    if (/how|tip|hack|guide|budget|cost|save|pack|book|flight|visa|cheap/.test(t)) return ['Educational', '#F1ECDA', '#2A4A5E'];
     if (/my life|i did|i went|i spent|i moved|i quit|story|happened|honest/.test(t)) return ['Storytime', '#E1D9AE', '#6B5E2A'];
     return ['Relatable', '#E8F0E8', '#2A6B2A'];
   };
@@ -4784,15 +4784,15 @@ export default function App() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Books palette aliases (the spec's tokens mapped onto existing constants) ─
-// "Ink"          → TEXT  ('#1A2744')
-// "Parchment"    → BG    ('#FFFFFF')   plus CARD ('#F7F9FC') for surfaces
+// "Ink"          → TEXT  ('#0A0A0A')
+// "Sand wash"    → BG    ('#FFFFFF')   plus CARD ('#FFFFFF') for surfaces
 // "Bright Sky"   → BLUE  ('#88EAF6')   accent (use sparingly)
-// "Deep Ocean"   → SLATE ('#2E4A66')   secondary accent / accent on Sand
-// "Slate"        → '#94A3B8' for muted (the existing dashboard uses this directly)
+// "Deep Ocean"   → '#2A4A5E'   header/nav surfaces (deep end)
+// "Slate"        → SLATE ('#6E6E6E') for muted/secondary copy (deep end)
 // "Sand"         → YELL  ('#E1D9AE')   warm surface
 const BOOKS = {
   ink: TEXT, parchment: BG, surface: CARD, border: BDR,
-  brightSky: BLUE, deepOcean: SLATE, sand: YELL, muted: '#94A3B8',
+  brightSky: BLUE, deepOcean: SLATE, sand: YELL, muted: '#6E6E6E',
 };
 
 const BOOKS_API = '/api/sync';
@@ -4816,7 +4816,7 @@ const FLAG_META = {
   extraction_failed:        { color: '#DC2626', label: 'Extraction failed', tip: 'AI could not read this receipt. Manual entry required.' },
   low_confidence_extraction:{ color: '#D97706', label: 'Low confidence',    tip: 'AI flagged this extraction as uncertain — verify the fields.' },
   auto_link_pending:        { color: '#2563EB', label: 'Auto-link pending', tip: 'A deal was auto-suggested. Confirm or change before reviewing.' },
-  missing_purpose:          { color: '#64748B', label: 'No purpose',        tip: 'Add a business purpose (under 10 chars treated as missing).' },
+  missing_purpose:          { color: '#6E6E6E', label: 'No purpose',        tip: 'Add a business purpose (under 10 chars treated as missing).' },
   unlinked_high_value:      { color: '#7C3AED', label: 'Unlinked >$200',    tip: 'Travel category, over $200, no deal link, unreviewed.' },
   category_other:           { color: '#475569', label: 'Category: Other',   tip: 'AI fell back to "Other". Pick a more specific category.' },
   vendor_unknown:           { color: '#0891B2', label: 'New vendor',        tip: 'First time seeing this vendor. Confirm category to teach the system.' },
@@ -5566,7 +5566,7 @@ function DealBreakdown({ deals, title, headline, sub, onPick, onBack, backLabel,
         </div>
       </div>
       <div style={{ fontSize:12, color:SLATE, marginBottom:12 }}>
-        {headline} <span style={{ color:'#94A3B8' }}>· {grandCount} deal{grandCount === 1 ? '' : 's'}{sub ? ` · ${sub}` : ''}</span>
+        {headline} <span style={{ color:'#6E6E6E' }}>· {grandCount} deal{grandCount === 1 ? '' : 's'}{sub ? ` · ${sub}` : ''}</span>
       </div>
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:12 }}>
         {groups.map((g) => (
@@ -5583,7 +5583,7 @@ function DealBreakdown({ deals, title, headline, sub, onPick, onBack, backLabel,
           </div>
         ))}
         {groups.length === 0 && (
-          <div style={{ fontSize:12, color:'#94A3B8', padding:'12px 0' }}>no deals here.</div>
+          <div style={{ fontSize:12, color:'#6E6E6E', padding:'12px 0' }}>no deals here.</div>
         )}
       </div>
     </div>
@@ -5607,7 +5607,7 @@ function DealDrillList({ deals, mode, groupKey, label, onBack, onOpenDeal, isMob
       <div style={{ marginBottom:12, fontSize:12, display:'flex', alignItems:'center', gap:6 }}>
         <button onClick={onBack}
           style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← back</button>
-        <span style={{ color:'#94A3B8' }}>/</span>
+        <span style={{ color:'#6E6E6E' }}>/</span>
         <span style={{ fontWeight:700, color:TEXT }}>{label}</span>
       </div>
       <div style={{ fontSize:12, color:SLATE, marginBottom:12 }}>
@@ -5620,14 +5620,14 @@ function DealDrillList({ deals, mode, groupKey, label, onBack, onOpenDeal, isMob
             <div style={{ fontSize:isMobile ? 13 : 14, fontWeight:600, marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.b || 'unknown brand'}</div>
             <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
               <Tag color={statusColor(canonStage(d.s))}>{canonStage(d.s)}</Tag>
-              <span style={{ fontSize:11, color:'#64748B' }}>{d.p}{d.d ? ` · ${d.d}` : ''}</span>
+              <span style={{ fontSize:11, color:'#6E6E6E' }}>{d.p}{d.d ? ` · ${d.d}` : ''}</span>
             </div>
           </div>
           <div style={{ fontSize:isMobile ? 16 : 20, fontWeight:800, color:TEXT, flexShrink:0, marginLeft:12 }}>{usd(dealAmount(d.v))}</div>
         </div>
       ))}
       {rows.length === 0 && (
-        <div style={{ fontSize:12, color:'#94A3B8', padding:'12px 0' }}>no deals in this group.</div>
+        <div style={{ fontSize:12, color:'#6E6E6E', padding:'12px 0' }}>no deals in this group.</div>
       )}
     </div>
   );
@@ -6479,9 +6479,9 @@ const tdStyle = { padding:'10px 12px', color:BOOKS.ink, verticalAlign:'top' };
 const missingPillStyle = { marginLeft:6, fontSize:10, fontWeight:700, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' };
 
 function linkedDealLabel(dealId, deals) {
-  if (!dealId) return <span style={{ color:'#94A3B8' }}>—</span>;
+  if (!dealId) return <span style={{ color:'#6E6E6E' }}>—</span>;
   const d = deals.find((x) => x.deal_id === dealId);
-  return d ? <span style={{ color:SLATE, fontWeight:600 }}>{d.brand}</span> : <span style={{ color:'#94A3B8' }}>{dealId.slice(0, 8)}</span>;
+  return d ? <span style={{ color:SLATE, fontWeight:600 }}>{d.brand}</span> : <span style={{ color:'#6E6E6E' }}>{dealId.slice(0, 8)}</span>;
 }
 
 // Receipt photo attachment (child-3): thumbnail + attach/remove, stored as a
@@ -6752,7 +6752,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
 
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:200, display:'flex', justifyContent:'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 20px rgba(0,0,0,0.12)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 16px rgba(42,74,94,0.10)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
           <div>
             <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>Expense detail</div>
@@ -7073,7 +7073,7 @@ function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast, so
   const status = canonStage(deal.status);
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:210, display:'flex', justifyContent:'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 20px rgba(0,0,0,0.12)' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 16px rgba(42,74,94,0.10)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
           <div>
             <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:4 }}>campaign profit</div>
@@ -7965,11 +7965,11 @@ function ExportTab({ data, year }) {
   const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['discovery','Discovery'],['crm','CRM'],['deliverables','Deliverables'],['brand','Brand Guidelines'],['reality-casting','Reality TV Casting']];
 
   return (
-    <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Inter', system-ui, sans-serif" }}>
+    <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Poppins', system-ui, -apple-system, sans-serif" }}>
 
       {/* Toast */}
       {toast && (
-        <div style={{ position:'fixed',top:isMobile?'auto':20,bottom:isMobile?20:'auto',left:isMobile?16:'auto',right:isMobile?16:20,zIndex:9999,background:'#1A1A2E',color:'#FFFFFF',padding:'12px 20px',borderRadius:12,fontWeight:700,fontSize:13,boxShadow:'0 4px 20px rgba(0,0,0,0.10)',textAlign:'center' }}>
+        <div style={{ position:'fixed',top:isMobile?'auto':20,bottom:isMobile?20:'auto',left:isMobile?16:'auto',right:isMobile?16:20,zIndex:9999,background:'#1A1A2E',color:'#FFFFFF',padding:'12px 20px',borderRadius:12,fontWeight:700,fontSize:13,boxShadow:'0 2px 8px rgba(42,74,94,0.08)',textAlign:'center' }}>
           {toast}
         </div>
       )}
@@ -8000,7 +8000,7 @@ function ExportTab({ data, year }) {
                 ✓ Add to CRM
               </button>
               <button onClick={() => setPendingCrmBrand(null)}
-                style={{ background:'#F7F9FC',color:'#94A3B8',border:`1px solid ${BDR}`,borderRadius:10,padding:'12px 16px',fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>
+                style={{ background:'#FFFFFF',color:'#6E6E6E',border:`1px solid ${BDR}`,borderRadius:10,padding:'12px 16px',fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>
                 Skip
               </button>
             </div>
@@ -8014,9 +8014,9 @@ function ExportTab({ data, year }) {
       )}
 
       {/* Header */}
-      <div style={{ background:'#FFFFFF',borderBottom:'1px solid #E0E6EF',padding:isMobile?'12px 16px':'14px 28px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100,boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
+      <div style={{ background:'#2A4A5E',borderBottom:'1px solid #1F3A4D',padding:isMobile?'12px 16px':'14px 28px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100,boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
         <div>
-          <div style={{ fontSize:isMobile?15:18,fontWeight:800,letterSpacing:'-0.5px',color:'#1A1A2E' }}>paul_ferrante</div>
+          <div style={{ fontSize:isMobile?15:18,fontWeight:800,letterSpacing:'-0.5px',color:'#FFFFFF' }}>paul_ferrante</div>
           <div style={{ fontSize:9,color:BLUE,letterSpacing:'3px',textTransform:'uppercase',marginTop:1,fontWeight:700 }}>command center</div>
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:isMobile?10:16 }}>
@@ -8025,16 +8025,16 @@ function ExportTab({ data, year }) {
               {[['YouTube',ytConnected],['Instagram',igConnected],['TikTok',ttConnected]].map(([p,conn]) => (
                 <div key={p} style={{ display:'flex',alignItems:'center',gap:5,fontSize:10 }}>
                   <div style={{ width:5,height:5,borderRadius:'50%',background:conn?'#22c55e':'#CBD5E1' }} />
-                  <span style={{ color:conn?'#16a34a':'#94A3B8' }}>{p}</span>
+                  <span style={{ color:conn?'#4ade80':'#C9D6E2' }}>{p}</span>
                 </div>
               ))}
             </div>
           )}
-          <div style={{ display:'flex',alignItems:'center',gap:6,fontSize:11,color:'#16a34a' }}>
+          <div style={{ display:'flex',alignItems:'center',gap:6,fontSize:11,color:'#4ade80' }}>
             <div style={{ width:6,height:6,borderRadius:'50%',background:'#22c55e',animation:'livePulse 2s infinite' }} />
             {!isMobile && 'live'}
           </div>
-          <div style={{ fontSize:10,color:syncStatus==='saved'?'#16a34a':syncStatus==='syncing'?'#D97706':syncStatus==='error'?'#DC2626':'#94A3B8',display:'flex',alignItems:'center',gap:4 }}>
+          <div style={{ fontSize:10,color:syncStatus==='saved'?'#16a34a':syncStatus==='syncing'?'#D97706':syncStatus==='error'?'#f87171':'#C9D6E2',display:'flex',alignItems:'center',gap:4 }}>
             {syncStatus==='syncing' && <span style={{ animation:'livePulse 1s infinite' }}>↑</span>}
             {syncStatus==='saved'   && '✓ synced'}
             {syncStatus==='error'   && '⚠ offline'}
@@ -8047,21 +8047,21 @@ function ExportTab({ data, year }) {
 
         {/* Sidebar (desktop) */}
         {!isMobile && (
-          <div style={{ width:200,background:'#1A2744',padding:'24px 0',flexShrink:0,borderRight:'1px solid #243560',position:'sticky',top:56,height:'calc(100vh - 56px)',overflowY:'auto' }}>
+          <div style={{ width:200,background:'#2A4A5E',padding:'24px 0',flexShrink:0,borderRight:'1px solid #1F3A4D',position:'sticky',top:56,height:'calc(100vh - 56px)',overflowY:'auto' }}>
             <div style={{ padding:'0 20px 14px',fontSize:9,color:'#88EAF6',letterSpacing:'2.5px',textTransform:'uppercase',fontWeight:700 }}>Menu</div>
             {TABS.map(([id,lbl]) => (
               <button key={id} onClick={() => setTab(id)} style={{
                 display:'block',width:'100%',textAlign:'left',
                 background:tab===id?'#88EAF6':'none',
                 border:'none',cursor:'pointer',fontFamily:'inherit',
-                color:tab===id?'#1A2744':'#8CA0C8',
+                color:tab===id?'#0A0A0A':'#C9D6E2',
                 padding:'7px 16px',margin:'1px 8px',width:'calc(100% - 16px)',
                 fontSize:13,fontWeight:tab===id?600:400,
                 borderRadius:5,
                 transition:'all 0.12s',
               }}
-              onMouseEnter={e=>{if(tab!==id){e.target.style.background='rgba(136,234,246,0.1)';e.target.style.color='#B8D0E8';}}}
-              onMouseLeave={e=>{if(tab!==id){e.target.style.background='none';e.target.style.color='#8CA0C8';}}}
+              onMouseEnter={e=>{if(tab!==id){e.target.style.background='rgba(136,234,246,0.1)';e.target.style.color='#FFFFFF';}}}
+              onMouseLeave={e=>{if(tab!==id){e.target.style.background='none';e.target.style.color='#C9D6E2';}}}
               >{lbl}</button>
             ))}
           </div>
@@ -8069,11 +8069,11 @@ function ExportTab({ data, year }) {
 
         {/* Mobile bottom nav */}
         {isMobile && (
-          <div style={{ position:'fixed',bottom:0,left:0,right:0,background:'#1A2744',borderTop:'1px solid #243560',display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',zIndex:90,boxShadow:'0 -2px 8px rgba(0,0,0,0.15)' }}>
+          <div style={{ position:'fixed',bottom:0,left:0,right:0,background:'#2A4A5E',borderTop:'1px solid #1F3A4D',display:'flex',overflowX:'auto',WebkitOverflowScrolling:'touch',zIndex:90,boxShadow:'0 -2px 8px rgba(0,0,0,0.10)' }}>
             {TABS.map(([id,lbl]) => (
               <button key={id} onClick={() => setTab(id)} style={{
                 background:'none',border:'none',cursor:'pointer',fontFamily:'inherit',
-                color:tab===id?'#1A2744':'#8CA0C8',padding:'12px 14px',
+                color:tab===id?'#0A0A0A':'#C9D6E2',padding:'12px 14px',minHeight:48,
                 fontSize:10,fontWeight:tab===id?700:400,
                 background:tab===id?'#88EAF6':'none',
                 borderTop:'none',
@@ -8084,7 +8084,7 @@ function ExportTab({ data, year }) {
         )}
 
         {/* Content area */}
-        <div style={{ flex:1,padding:isMobile?'16px 16px 80px':'28px 32px',overflowY:'auto',background:'#FFFFFF' }}>
+        <div style={{ flex:1,padding:isMobile?'16px 16px 80px':'28px 32px',overflowY:'auto',background:'#FAF7EC' }}>
 
         {/* ══ OVERVIEW ══════════════════════════════════════════ */}
         {tab === 'overview' && (() => {
@@ -8127,21 +8127,21 @@ function ExportTab({ data, year }) {
             if (id === 'revenue') return (
               <div>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                  <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>revenue</div>
+                  <div style={{ fontSize:10, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700 }}>revenue</div>
                   {ctl}
                 </div>
                 {!ovC[id] && (
                 <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
                   <DeepCard tab="revenue" setTab={setTab} title="open revenue breakdown" onOpen={() => openRevenueDrill('paid')} style={{ borderLeft:`3px solid ${BLUE}` }}>
-                    <div style={{ fontSize:10,color:'#0E6A80',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned (2026)</div>
-                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#0E6A80' }}>{usd(totalRevenue2026)}</div>
-                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{paidDeals2026.length} deals</div>
+                    <div style={{ fontSize:10,color:'#2A4A5E',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned (2026)</div>
+                    <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#2A4A5E' }}>{usd(totalRevenue2026)}</div>
+                    <div style={{ fontSize:11,color:'#6E6E6E',marginTop:6 }}>{paidDeals2026.length} deals</div>
                     {momAbs != null && (
                       <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:8, flexWrap:'wrap' }}>
                         <span style={{ fontSize:11, fontWeight:800, color: momAbs >= 0 ? '#16A34A' : '#DC2626' }}>
                           {momAbs >= 0 ? '▲ +' : '▼ '}{usd(Math.abs(momAbs))}
                         </span>
-                        <span style={{ fontSize:10, color:'#94A3B8' }}>{momLbl} mom</span>
+                        <span style={{ fontSize:10, color:'#6E6E6E' }}>{momLbl} mom</span>
                         <Sparkline values={vals26} up={momAbs >= 0} />
                       </div>
                     )}
@@ -8149,12 +8149,12 @@ function ExportTab({ data, year }) {
                   <DeepCard tab="revenue" setTab={setTab} title="open pipeline breakdown" onOpen={() => openRevenueDrill('pipeline')} style={{ borderLeft:`3px solid ${YELL}` }}>
                     <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
                     <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
-                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{pipelineDeals.length} open deals</div>
+                    <div style={{ fontSize:11,color:'#6E6E6E',marginTop:6 }}>{pipelineDeals.length} open deals</div>
                   </DeepCard>
                   {!isMobile && (
                     <DeepCard tab="deals" setTab={setTab} title="open deal" onOpen={() => { if (biggestDeal) setDealModal({ ...biggestDeal }); }} style={{ borderLeft:'3px solid #5DBF8A' }}>
                       <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
-                      <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
+                      <div style={{ fontSize:36,fontWeight:800,color:'#0A0A0A' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
                       <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
                     </DeepCard>
                   )}
@@ -8210,7 +8210,7 @@ function ExportTab({ data, year }) {
                         display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
                       }}>
                         <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          <div style={{ fontSize:12, color:'#6E6E6E', fontWeight:500, marginBottom:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                             <span style={{ marginRight:5 }}>{m.e}</span>{label}
                           </div>
                           {editMsId === m.id ? (
@@ -8219,7 +8219,7 @@ function ExportTab({ data, year }) {
                                 onKeyDown={e => { if(e.key==='Enter') saveMs(); if(e.key==='Escape') setEditMsId(null); }}
                                 style={{ width:90, background:'#FFFFFF', border:`1px solid ${BLUE}`, borderRadius:5, padding:'3px 7px', color:TEXT, fontSize:18, fontWeight:500, fontFamily:'inherit', outline:'none' }} />
                               <button onClick={saveMs} style={{ fontSize:14, color:BLUE, background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✓</button>
-                              <button onClick={() => setEditMsId(null)} style={{ fontSize:14, color:'#94A3B8', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✕</button>
+                              <button onClick={() => setEditMsId(null)} style={{ fontSize:14, color:'#6E6E6E', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', padding:0 }}>✕</button>
                             </div>
                           ) : (
                             <div onClick={() => startEditMs(m)} title="Click to update"
@@ -8227,7 +8227,7 @@ function ExportTab({ data, year }) {
                               {m.cur}
                             </div>
                           )}
-                          <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal {m.goal}</div>
+                          <div style={{ fontSize:11, color:'#6E6E6E', marginTop:2 }}>goal {m.goal}</div>
                         </div>
                         <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
                           <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
@@ -8255,13 +8255,13 @@ function ExportTab({ data, year }) {
                       display:'flex', alignItems:'center', justifyContent:'space-between', gap:10,
                     }}>
                       <div style={{ display:'flex', flexDirection:'column', flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:12, color:'#64748B', fontWeight:500, marginBottom:2 }}>
+                        <div style={{ fontSize:12, color:'#6E6E6E', fontWeight:500, marginBottom:2 }}>
                           <span style={{ marginRight:5 }}>📅</span>Posts this week
                         </div>
                         <div style={{ fontSize:22, fontWeight:500, color:TEXT, lineHeight:1.1 }}>
                           {weeklyAutoCount}
                         </div>
-                        <div style={{ fontSize:11, color:'#64748B', marginTop:2 }}>goal 4 · auto-tracked</div>
+                        <div style={{ fontSize:11, color:'#6E6E6E', marginTop:2 }}>goal 4 · auto-tracked</div>
                       </div>
                       <svg viewBox="0 0 36 36" style={{ width:88, height:88, flexShrink:0 }}>
                         <circle cx={18} cy={18} r={15} fill="none" stroke="rgba(120,120,120,0.15)" strokeWidth={3} />
@@ -8283,7 +8283,7 @@ function ExportTab({ data, year }) {
               <Card>
                 <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                    <span onClick={() => setTab('deals')} title="open deals" style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, cursor:'pointer' }}>active deals</span>
+                    <span onClick={() => setTab('deals')} title="open deals" style={{ fontSize:10, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, cursor:'pointer' }}>active deals</span>
                     {ctl}
                   </div>
                   <button onClick={() => setDealModal({ ...EMPTY_DEAL })} style={{ background:'none',border:`1px solid ${BLUE}44`,color:BLUE,borderRadius:8,padding:'6px 14px',fontSize:11,cursor:'pointer',fontFamily:'inherit',fontWeight:600 }}>
@@ -8342,7 +8342,7 @@ function ExportTab({ data, year }) {
 
             {/* Board / Calendar toggle */}
             <div style={{ display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap' }}>
-              <div style={{ display:'flex',background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,overflow:'hidden' }}>
+              <div style={{ display:'flex',background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:8,overflow:'hidden' }}>
                 {[['board','board'],['calendar','calendar']].map(([v,lbl]) => (
                   <button key={v} onClick={() => setDealView(v)}
                     style={{ padding:'7px 14px',border:'none',cursor:'pointer',fontFamily:'inherit',fontWeight:700,fontSize:11,
@@ -8352,12 +8352,12 @@ function ExportTab({ data, year }) {
               {dealView === 'calendar' && (
                 <div style={{ display:'flex',gap:6,alignItems:'center' }}>
                   <button onClick={() => setCalCursor(c => c.m === 0 ? { y:c.y-1, m:11 } : { y:c.y, m:c.m-1 })}
-                    style={{ background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>‹</button>
+                    style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>‹</button>
                   <div style={{ fontSize:12,fontWeight:800,minWidth:130,textAlign:'center' }}>
                     {new Date(calCursor.y, calCursor.m, 1).toLocaleDateString('en-US',{month:'long',year:'numeric'})}
                   </div>
                   <button onClick={() => setCalCursor(c => c.m === 11 ? { y:c.y+1, m:0 } : { y:c.y, m:c.m+1 })}
-                    style={{ background:'#F7F9FC',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>›</button>
+                    style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>›</button>
                   <button onClick={() => { const d = new Date(); setCalCursor({ y:d.getFullYear(), m:d.getMonth() }); }}
                     style={{ background:'none',border:'none',fontSize:11,color:BLUE,cursor:'pointer',fontFamily:'inherit',fontWeight:700 }}>today</button>
                 </div>
@@ -8386,7 +8386,7 @@ function ExportTab({ data, year }) {
                     <div key={it.kind + '-' + (it.tid || it.deal.id) + '-' + i}
                       style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i ? '1px solid #f8717122' : 'none',fontSize:12 }}>
                       <span style={{ fontWeight:700 }}>{it.deal.b}</span>
-                      <span style={{ color:'#4A6080',flex:1 }}>{it.kind === 'reminder' && <span style={{ fontSize:9,color:'#8A6A10',fontWeight:700,marginRight:4 }}>reminder</span>}{it.text}</span>
+                      <span style={{ color:'#6E6E6E',flex:1 }}>{it.kind === 'reminder' && <span style={{ fontSize:9,color:'#8A6A10',fontWeight:700,marginRight:4 }}>reminder</span>}{it.text}</span>
                       <span style={{ color:'#A32D2D',fontSize:10,fontWeight:700,whiteSpace:'nowrap' }}>due {fmtDue(it.due)}</span>
                       {it.kind === 'task'
                         ? <button onClick={() => { setDeals(prev => prev.map(x => x.id === it.deal.id ? { ...x, tasks:(x.tasks || []).map(t => t.id === it.tid ? { ...t, done:true } : t) } : x)); showToast('Task done!'); }}
@@ -8409,11 +8409,11 @@ function ExportTab({ data, year }) {
                   {STAGE_COLS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <button disabled={!bulkStage} onClick={() => { setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, s:bulkStage } : d)); showToast(`Moved ${selDeals.length} to ${bulkStage}`); setSelDeals([]); setBulkStage(''); }}
-                  style={{ background:!bulkStage?'#F7F9FC':BLUE,color:!bulkStage?'#94A3B8':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkStage?'default':'pointer',fontFamily:'inherit' }}>move</button>
+                  style={{ background:!bulkStage?'#FFFFFF':BLUE,color:!bulkStage?'#6E6E6E':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkStage?'default':'pointer',fontFamily:'inherit' }}>move</button>
                 <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)}
                   style={{ background:'#fff',border:`1px solid ${BDR}`,borderRadius:8,padding:'6px 10px',fontSize:11,fontFamily:'inherit',color:TEXT,outline:'none',colorScheme:'light',cursor:'pointer' }} />
                 <button disabled={!bulkDate} onClick={() => { setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, remindDate:bulkDate } : d)); showToast(`Follow-up date set on ${selDeals.length}`); setSelDeals([]); setBulkDate(''); }}
-                  style={{ background:!bulkDate?'#F7F9FC':BLUE,color:!bulkDate?'#94A3B8':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkDate?'default':'pointer',fontFamily:'inherit' }}>set follow-up</button>
+                  style={{ background:!bulkDate?'#FFFFFF':BLUE,color:!bulkDate?'#6E6E6E':TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:!bulkDate?'default':'pointer',fontFamily:'inherit' }}>set follow-up</button>
                 <button onClick={() => { if (!window.confirm(`Archive ${selDeals.length} deal${selDeals.length > 1 ? 's' : ''} (move to Declined)?`)) return; setDeals(prev => prev.map(d => selDeals.includes(d.id) ? { ...d, s:'Declined' } : d)); showToast('Archived to Declined'); setSelDeals([]); }}
                   style={{ background:'#fff',border:`1px solid #f8717166`,borderRadius:8,padding:'7px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'#A32D2D' }}>archive</button>
                 <button onClick={() => setSelDeals([])}
@@ -8460,7 +8460,7 @@ function ExportTab({ data, year }) {
                                   style={{ display:'block',width:'100%',textAlign:'left',fontSize:9,fontWeight:700,padding:'2px 5px',marginBottom:3,
                                     borderRadius:5,cursor:'pointer',fontFamily:'inherit',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',
                                     background:overdue ? '#FDEAEA' : `${OCEAN}33`,border:`1px solid ${overdue ? '#f8717166' : OCEAN}`,
-                                    color:overdue ? '#A32D2D' : '#1A2744' }}>
+                                    color:overdue ? '#A32D2D' : '#0A0A0A' }}>
                                   {d.b}
                                 </button>
                               );
@@ -8480,7 +8480,7 @@ function ExportTab({ data, year }) {
                 <div style={{ display:'flex',gap:8,overflowX:'auto',paddingBottom:10,WebkitOverflowScrolling:'touch' }}>
                   {STAGE_COLS.map(s => (
                     <button key={s} onClick={() => setMobileStage(s)} style={{
-                      flexShrink:0,background:mobileStage===s?`${STAGE_COLORS[s]}22`:'#F7F9FC',
+                      flexShrink:0,background:mobileStage===s?`${STAGE_COLORS[s]}22`:'#FFFFFF',
                       border:`1px solid ${mobileStage===s?STAGE_COLORS[s]:BDR}`,
                       color:mobileStage===s?STAGE_COLORS[s]:'#888',
                       borderRadius:20,padding:'7px 16px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
@@ -8504,13 +8504,13 @@ function ExportTab({ data, year }) {
                             style={{ marginTop:3,cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
                           <div style={{ fontSize:15,fontWeight:700 }}>{d.b}</div>
                         </div>
-                        <button onClick={() => setDealModal({ ...d })} style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',color:'#64748B',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
+                        <button onClick={() => setDealModal({ ...d })} style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',color:'#6E6E6E',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
                       </div>
                       <div style={{ fontSize:22,fontWeight:800,color:d.s==='Paid'?'#4ade80':BLUE,marginBottom:8 }}>{d.v ? usd(d.v) : 'gifted'}</div>
                       <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
                         <Tag color="#666">{d.p}</Tag>
                         {d.d && d.d!=='TBC' && <Tag color={YELL}>{d.d}</Tag>}
-                        {d.del && <span style={{ fontSize:10,color:'#64748B' }}>{d.del}</span>}
+                        {d.del && <span style={{ fontSize:10,color:'#6E6E6E' }}>{d.del}</span>}
                       </div>
                       {/* per-deal tasks */}
                       <div style={{ marginTop:10,borderTop:`1px solid ${OCEAN}66`,paddingTop:8 }}>
@@ -8526,12 +8526,12 @@ function ExportTab({ data, year }) {
                                 <input type="checkbox" checked={!!t.done}
                                   onChange={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).map(y => y.id === t.id ? { ...y, done:!y.done } : y) } : x))}
                                   style={{ cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
-                                <span style={{ flex:1,fontSize:12,color:t.done ? '#94A3B8' : '#1A2744',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
+                                <span style={{ flex:1,fontSize:12,color:t.done ? '#6E6E6E' : '#0A0A0A',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
                                 {t.due && <span style={{ fontSize:10,whiteSpace:'nowrap',
                                   color:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? '#A32D2D' : '#888',
                                   fontWeight:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? 700 : 400 }}>{t.due}</span>}
                                 <button onClick={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).filter(y => y.id !== t.id) } : x))}
-                                  title="delete task" style={{ background:'none',border:'none',color:'#94A3B8',cursor:'pointer',fontSize:11,padding:0,flexShrink:0 }}>✕</button>
+                                  title="delete task" style={{ background:'none',border:'none',color:'#6E6E6E',cursor:'pointer',fontSize:11,padding:0,flexShrink:0 }}>✕</button>
                               </div>
                             ))}
                             <div style={{ display:'flex',gap:4,marginTop:4 }}>
@@ -8553,7 +8553,7 @@ function ExportTab({ data, year }) {
                     </div>
                   ))}
                   {mobileDeals.length === 0 && (
-                    <div style={{ padding:'30px',textAlign:'center',fontSize:13,color:'#94A3B8',borderRadius:10,border:`1px dashed ${BDR}` }}>{(dealSearch || dealPlatform !== 'All') ? 'No deals match the current filters' : 'No deals in this stage'}</div>
+                    <div style={{ padding:'30px',textAlign:'center',fontSize:13,color:'#6E6E6E',borderRadius:10,border:`1px dashed ${BDR}` }}>{(dealSearch || dealPlatform !== 'All') ? 'No deals match the current filters' : 'No deals in this stage'}</div>
                   )}
                 </div>
               </div>
@@ -8588,12 +8588,12 @@ function ExportTab({ data, year }) {
                             <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
                           </div>
                           <button onClick={e => { e.stopPropagation(); setDealModal({ ...d }); }}
-                            style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'3px 8px',color:'#64748B',fontSize:11,cursor:'pointer',fontFamily:'inherit',flexShrink:0,marginLeft:6 }}>✏</button>
+                            style={{ background:'none',border:`1px solid ${BDR}`,borderRadius:6,padding:'3px 8px',color:'#6E6E6E',fontSize:11,cursor:'pointer',fontFamily:'inherit',flexShrink:0,marginLeft:6 }}>✏</button>
                         </div>
-                        <div style={{ fontSize:10,color:'#4A6080',marginBottom:8 }}>{d.p}</div>
+                        <div style={{ fontSize:10,color:'#6E6E6E',marginBottom:8 }}>{d.p}</div>
                         <div style={{ fontSize:d.v?18:12,fontWeight:800,color:d.s==='Paid'?'#4ade80':d.v?BLUE:'#888',marginBottom:6 }}>{d.v ? usd(d.v) : 'gifted'}</div>
                         {d.d && d.d!=='TBC' && <div style={{ fontSize:11,color:'#8A6A10',marginBottom:4 }}>{d.d}</div>}
-                        {d.del && <div style={{ fontSize:10,color:'#4A6080' }}>{d.del}</div>}
+                        {d.del && <div style={{ fontSize:10,color:'#6E6E6E' }}>{d.del}</div>}
                         {canonStage(d.s) !== 'Paid' && d.nextStep && <div style={{ fontSize:10,color:BLUE,marginTop:6,borderTop:`1px solid ${OCEAN}66`,paddingTop:6 }}>→ {d.nextStep}</div>}
                         {canonStage(d.s) !== 'Paid' && d.remindDate && <div style={{ fontSize:9,color:YELL,marginTop:3 }}>🔔 {d.remindDate}</div>}
                         {(d.videoLink || d.invoiceUrl) && (
@@ -8616,12 +8616,12 @@ function ExportTab({ data, year }) {
                                   <input type="checkbox" checked={!!t.done}
                                     onChange={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).map(y => y.id === t.id ? { ...y, done:!y.done } : y) } : x))}
                                     style={{ cursor:'pointer',accentColor:BLUE,flexShrink:0 }} />
-                                  <span style={{ flex:1,fontSize:11,color:t.done ? '#94A3B8' : '#1A2744',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
+                                  <span style={{ flex:1,fontSize:11,color:t.done ? '#6E6E6E' : '#0A0A0A',textDecoration:t.done ? 'line-through' : 'none' }}>{t.text}</span>
                                   {t.due && <span style={{ fontSize:9,whiteSpace:'nowrap',
                                     color:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? '#A32D2D' : '#888',
                                     fontWeight:(!t.done && t.due < new Intl.DateTimeFormat('en-CA',{timeZone:'America/Los_Angeles'}).format(new Date())) ? 700 : 400 }}>{t.due}</span>}
                                   <button onClick={() => setDeals(prev => prev.map(x => x.id === d.id ? { ...x, tasks:(x.tasks || []).filter(y => y.id !== t.id) } : x))}
-                                    title="delete task" style={{ background:'none',border:'none',color:'#94A3B8',cursor:'pointer',fontSize:10,padding:0,flexShrink:0 }}>✕</button>
+                                    title="delete task" style={{ background:'none',border:'none',color:'#6E6E6E',cursor:'pointer',fontSize:10,padding:0,flexShrink:0 }}>✕</button>
                                 </div>
                               ))}
                               <div style={{ display:'flex',gap:4,marginTop:4 }}>
@@ -8644,11 +8644,11 @@ function ExportTab({ data, year }) {
                             </div>
                           )}
                         </div>
-                        <div style={{ marginTop:8,fontSize:9,color:'#94A3B8',textAlign:'right' }}>drag to move</div>
+                        <div style={{ marginTop:8,fontSize:9,color:'#6E6E6E',textAlign:'right' }}>drag to move</div>
                       </div>
                     ))}
                     {dealsForColumn(status).length === 0 && (
-                      <div style={{ padding:'20px 10px',textAlign:'center',fontSize:11,color:'#94A3B8',borderRadius:8,border:`1px dashed #222` }}>drop here</div>
+                      <div style={{ padding:'20px 10px',textAlign:'center',fontSize:11,color:'#6E6E6E',borderRadius:8,border:`1px dashed #222` }}>drop here</div>
                     )}
                   </div>
                 ))}
@@ -8725,7 +8725,7 @@ function ExportTab({ data, year }) {
                   <div style={{ fontSize:9,color,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
                   <div style={{ fontSize:isMobile?20:26,fontWeight:800,color }}>{val}</div>
                   {sub && <div style={{ fontSize:11,color:SLATE,marginTop:6 }}>{sub}</div>}
-                  {hint && <div style={{ fontSize:10,color:'#94A3B8',marginTop:4 }}>{hint}</div>}
+                  {hint && <div style={{ fontSize:10,color:'#6E6E6E',marginTop:4 }}>{hint}</div>}
                 </Card>
               ))}
             </div>
@@ -8747,16 +8747,16 @@ function ExportTab({ data, year }) {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={BDR} />
                   <XAxis dataKey="m" stroke="#333" tick={{ fill:'#555',fontSize:11 }}
-                    label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#94A3B8' }} />
+                    label={{ value:'month', position:'insideBottom', offset:-4, fontSize:10, fill:'#6E6E6E' }} />
                   <YAxis stroke="#333" tick={{ fill:'#555',fontSize:11 }} tickFormatter={v=>`$${v}`} width={48}
-                    label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#94A3B8' }} />
+                    label={{ value:'revenue ($)', angle:-90, position:'insideLeft', fontSize:10, fill:'#6E6E6E' }} />
                   <Tooltip contentStyle={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:8,fontSize:12 }}
                     formatter={(v, name) => [usd(v), name === 'prev' ? 'prior period (nov 2025 – feb 2026)' : '2026']} />
                   <Area type="monotone" dataKey="prev" name="prev" stroke={SLATE} strokeWidth={1.5} strokeDasharray="5 4" fill="none" />
                   <Area type="monotone" dataKey="r" name="r" stroke={BLUE} strokeWidth={2} fill="url(#rg)" />
                 </AreaChart>
               </ResponsiveContainer>
-              <div style={{ fontSize:10, color:'#94A3B8', marginTop:6 }}>dashed line: prior 4-month period (nov 2025 – feb 2026), aligned by month index</div>
+              <div style={{ fontSize:10, color:'#6E6E6E', marginTop:6 }}>dashed line: prior 4-month period (nov 2025 – feb 2026), aligned by month index</div>
             </Card>
             <Card>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:8 }}>
@@ -8764,7 +8764,7 @@ function ExportTab({ data, year }) {
                 <div style={{ fontSize:18, fontWeight:800, color:YELL, marginBottom:14 }}>{usd(arTotal)}</div>
               </div>
               <div style={{ fontSize:11, color:SLATE, marginTop:-8, marginBottom:10 }}>delivered or awaiting approval · not yet paid</div>
-              {arDeals.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>nothing outstanding — nice.</div>}
+              {arDeals.length === 0 && <div style={{ fontSize:12, color:'#6E6E6E' }}>nothing outstanding — nice.</div>}
               {arDeals.map(d => (
                 <div key={d.id} onClick={() => setDealModal({ ...d })}
                   style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
@@ -8791,13 +8791,13 @@ function ExportTab({ data, year }) {
                   </select>
                 </div>
               </div>
-              {compDeals.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>no completed deals match the current filters.</div>}
+              {compDeals.length === 0 && <div style={{ fontSize:12, color:'#6E6E6E' }}>no completed deals match the current filters.</div>}
               {compDeals.map(d => (
                 <div key={d.id} onClick={() => setDealModal({ ...d })}
                   style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'14px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
                   <div>
                     <div style={{ fontSize:isMobile?13:14,fontWeight:600,marginBottom:4 }}>{d.b}</div>
-                    <div style={{ fontSize:11,color:'#64748B' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
+                    <div style={{ fontSize:11,color:'#6E6E6E' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
                   </div>
                   <div style={{ textAlign:'right',flexShrink:0,marginLeft:12 }}>
                     <div style={{ fontSize:isMobile?16:20,fontWeight:800,color:'#4ade80' }}>{usd(d.v)}</div>
@@ -8806,16 +8806,16 @@ function ExportTab({ data, year }) {
                 </div>
               ))}
             </Card>
-            <Card style={{ background:'#F8FAFC' }}>
+            <Card style={{ background:'#FAF7EC' }}>
               <Label>prior-year context</Label>
               <div style={{ fontSize:11, color:SLATE, marginBottom:10 }}>nov 2025 income is shown here for context only — it is not counted in any 2026 total.</div>
               <div style={{ display:'flex', gap:24, flexWrap:'wrap', marginBottom: paid2025.length ? 10 : 0 }}>
                 <div>
-                  <div style={{ fontSize:10, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>nov 2025</div>
+                  <div style={{ fontSize:10, color:'#6E6E6E', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>nov 2025</div>
                   <div style={{ fontSize:18, fontWeight:800, color:TEXT }}>{usd(nov25)}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize:10, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>dec 2025</div>
+                  <div style={{ fontSize:10, color:'#6E6E6E', textTransform:'uppercase', letterSpacing:'1px', marginBottom:2 }}>dec 2025</div>
                   <div style={{ fontSize:18, fontWeight:800, color:TEXT }}>{usd(dec25)}</div>
                 </div>
               </div>
@@ -8824,7 +8824,7 @@ function ExportTab({ data, year }) {
                   style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 0',borderBottom:`1px solid ${BDR}`,cursor:'pointer' }}>
                   <div>
                     <div style={{ fontSize:13,fontWeight:600,marginBottom:2 }}>{d.b}</div>
-                    <div style={{ fontSize:11,color:'#64748B' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
+                    <div style={{ fontSize:11,color:'#6E6E6E' }}>{d.p}{d.d ? ` · paid ${d.d}` : ''}</div>
                   </div>
                   <div style={{ fontSize:16,fontWeight:800,color:'#4ade80',flexShrink:0,marginLeft:12 }}>{usd(d.v)}</div>
                 </div>
@@ -8991,7 +8991,7 @@ function ExportTab({ data, year }) {
                         <div style={lbl}>template</div>
                         <select value={draftComposer.template}
                           onChange={e => { const tpl = EMAIL_TEMPLATES.find(t => t.key === e.target.value); const f = fillTpl(tpl, c); setDraftComposer(p => ({ ...p, template: tpl.key, subject: f.subject, body: f.body })); }}
-                          style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
+                          style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none' }}>
                           {EMAIL_TEMPLATES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
                         </select>
                       </div>
@@ -9002,9 +9002,9 @@ function ExportTab({ data, year }) {
                       <div style={{ marginBottom:10 }}>
                         <div style={lbl}>body</div>
                         <textarea value={draftComposer.body||''} onChange={e => setDraftComposer(p => ({ ...p, body: e.target.value }))} rows={9}
-                          style={{ width:'100%', background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', resize:'vertical', lineHeight:1.6 }} />
+                          style={{ width:'100%', background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 12px', color:TEXT, fontSize:13, fontFamily:'inherit', outline:'none', resize:'vertical', lineHeight:1.6 }} />
                       </div>
-                      <div style={{ background:'#F8FAFC', border:`1px solid ${BDR}`, borderRadius:8, padding:'12px 14px', marginBottom:12 }}>
+                      <div style={{ background:'#FAF7EC', border:`1px solid ${BDR}`, borderRadius:8, padding:'12px 14px', marginBottom:12 }}>
                         <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', marginBottom:8, fontWeight:700 }}>preview - exact send copy</div>
                         <div style={{ fontSize:12, marginBottom:4 }}><span style={{ color:SLATE }}>to: </span>{usable ? c.e : 'no email on file'}</div>
                         <div style={{ fontSize:12, marginBottom:8 }}><span style={{ color:SLATE }}>subject: </span>{draftComposer.subject}</div>
@@ -9012,7 +9012,7 @@ function ExportTab({ data, year }) {
                       </div>
                       <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                         <button onClick={logDraft} style={{ background:BLUE, color:TEXT, border:'none', borderRadius:8, padding:'9px 18px', fontWeight:700, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>log draft</button>
-                        {href && <a href={href} style={{ background:'#F7F9FC', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 18px', fontSize:12, fontWeight:700, textDecoration:'none', fontFamily:'inherit' }}>open in email app →</a>}
+                        {href && <a href={href} style={{ background:'#FFFFFF', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 18px', fontSize:12, fontWeight:700, textDecoration:'none', fontFamily:'inherit' }}>open in email app →</a>}
                         {!href && <span style={{ fontSize:11, color:SLATE }}>add an email to the contact to use the mailto shortcut</span>}
                         <button onClick={() => setDraftComposer(null)} style={{ background:'none', border:`1px solid ${BDR}`, borderRadius:8, padding:'9px 14px', color:SLATE, fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>close</button>
                       </div>
@@ -9109,7 +9109,7 @@ function ExportTab({ data, year }) {
                   </select>
                 ))}
                 {(crmFilter.search||crmFilter.status!=='All'||crmFilter.type!=='All'||crmFilter.country!=='All'||crmFilter.niche!=='All') && (
-                  <button onClick={()=>setCrmFilter({search:'',status:'All',type:'All',country:'All',niche:'All'})} style={{ background:'none',border:`1px solid #555`,borderRadius:8,padding:'7px 12px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✕ Clear</button>
+                  <button onClick={()=>setCrmFilter({search:'',status:'All',type:'All',country:'All',niche:'All'})} style={{ background:'none',border:`1px solid #555`,borderRadius:8,padding:'7px 12px',color:'#6E6E6E',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✕ Clear</button>
                 )}
                 <div style={{ fontSize:11,color:SLATE,whiteSpace:'nowrap' }}>{filteredCrm.length} of {crm.length}</div>
               </div>
@@ -9131,17 +9131,17 @@ function ExportTab({ data, year }) {
                                 {c.paidDeal && <Tag color='#96C9AA'>💰 Paid</Tag>}
                               </div>
                             </div>
-                            <button onClick={() => startEditCrm(c)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit',flexShrink:0 }}>✏</button>
+                            <button onClick={() => startEditCrm(c)} style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 10px',color:'#6E6E6E',fontSize:12,cursor:'pointer',fontFamily:'inherit',flexShrink:0 }}>✏</button>
                           </div>
-                          {c.n && c.n !== '—' && <div style={{ fontSize:11,color:'#94A3B8',marginBottom:3 }}>👤 {c.n}</div>}
+                          {c.n && c.n !== '—' && <div style={{ fontSize:11,color:'#6E6E6E',marginBottom:3 }}>👤 {c.n}</div>}
                           {c.e && c.e !== '—' && c.e !== 'TikTok DM' && c.e !== 'n/a' && <div style={{ fontSize:11,color:BLUE,marginBottom:3 }}>{c.e}</div>}
                           {(hasUsableEmail(c) || emailFlaggedNote(c)) && <div style={{ marginBottom:6 }}>{emailCheckCtl(c)}</div>}
                           <div style={{ display:'flex',gap:10,flexWrap:'wrap',marginBottom:6 }}>
                             {(c.niche||[]).slice(0,3).map(n=><Tag key={n} color={SLATE}>{n}</Tag>)}
                             {c.dealValue > 0 && <Tag color='#D9D0A0'>${c.dealValue.toLocaleString()}</Tag>}
-                            <div style={{ fontSize:10,color:'#64748B' }}>{c.country}</div>
+                            <div style={{ fontSize:10,color:'#6E6E6E' }}>{c.country}</div>
                           </div>
-                          <div style={{ fontSize:11,color:'#94A3B8',lineHeight:1.5 }}>{c.last && `Last: ${c.last} · `}{c.note}</div>
+                          <div style={{ fontSize:11,color:'#6E6E6E',lineHeight:1.5 }}>{c.last && `Last: ${c.last} · `}{c.note}</div>
                           {(() => { const n = nudgeInfo(c); return n && n.due ? <div style={{ fontSize:10, color:'#C9A0A0', fontWeight:700, marginTop:4 }}>due for re-engagement</div> : null; })()}
                         </Card>
                       )
@@ -9149,7 +9149,7 @@ function ExportTab({ data, year }) {
                 </div>
               ) : (
                 <div style={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:14,overflow:'hidden' }}>
-                  <div style={{ display:'grid',gridTemplateColumns:'1.2fr 0.9fr 0.8fr 0.7fr 1fr 0.8fr 1.5fr 0.3fr',padding:'10px 16px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
+                  <div style={{ display:'grid',gridTemplateColumns:'1.2fr 0.9fr 0.8fr 0.7fr 1fr 0.8fr 1.5fr 0.3fr',padding:'10px 16px',fontSize:9,color:'#6E6E6E',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
                     {['Brand','Type','Status','Country','Niche','Last Contact','Notes / Email',''].map(h=><div key={h}>{h}</div>)}
                   </div>
                   {filteredCrm.map((c,i) => (
@@ -9176,17 +9176,17 @@ function ExportTab({ data, year }) {
                                   : null;
                                 return dot ? <div title={dot.msg} style={{ width:7, height:7, borderRadius:'50%', background:dot.bg, flexShrink:0, cursor:'help' }} /> : null;
                               })()}
-                              <div style={{ fontSize:10, color:'#94A3B8' }}>{c.last||'—'}</div>
+                              <div style={{ fontSize:10, color:'#6E6E6E' }}>{c.last||'—'}</div>
                             </div>
                             {(() => { const n = nudgeInfo(c); return n && n.due ? <div style={{ fontSize:9, color:'#C9A0A0', fontWeight:700, marginTop:2 }}>due for re-engagement</div> : null; })()}
                             {c.dealValue > 0 && <div style={{ fontSize:9,color:'#D9D0A0',marginTop:2 }}>${c.dealValue.toLocaleString()}</div>}
                           </div>
-                          <div style={{ fontSize:10,color:'#64748B',lineHeight:1.5,overflow:'hidden' }}>
+                          <div style={{ fontSize:10,color:'#6E6E6E',lineHeight:1.5,overflow:'hidden' }}>
                             {c.e && c.e !== '—' && c.e !== 'TikTok DM' && c.e !== 'n/a' && <div style={{ color:BLUE,marginBottom:2 }}>{c.e}</div>}
                             {(hasUsableEmail(c) || emailFlaggedNote(c)) && emailCheckCtl(c)}
                             <div style={{ overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>{c.note}</div>
                           </div>
-                          <button onClick={()=>startEditCrm(c)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 8px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
+                          <button onClick={()=>startEditCrm(c)} style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 8px',color:'#6E6E6E',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>
                         </div>
                       )
                   ))}
@@ -9303,7 +9303,7 @@ function ExportTab({ data, year }) {
                   </div>
                 ))}
                 {fs.length === 0 && <div style={{ fontSize:11, color:SLATE, marginBottom:6 }}>no files yet.</div>}
-                <label style={{ display:'inline-block', marginTop:4, background:'#F7F9FC', border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', color:TEXT, fontFamily:'inherit' }}>
+                <label style={{ display:'inline-block', marginTop:4, background:'#FFFFFF', border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 14px', fontSize:12, cursor:'pointer', color:TEXT, fontFamily:'inherit' }}>
                   + upload new version
                   <input type="file" style={{ display:'none' }} onChange={e => { addDelivFile(dd.key, e.target.files[0]); e.target.value = ''; }} />
                 </label>
@@ -9378,7 +9378,7 @@ function ExportTab({ data, year }) {
                                 </div>
                                 <div style={{ flex:1, minWidth:160 }}>
                                   <div style={{ fontSize:13, fontWeight:700 }}>{d.b}</div>
-                                  <div style={{ fontSize:11, color:'#94A3B8' }}>{d.sc}</div>
+                                  <div style={{ fontSize:11, color:'#6E6E6E' }}>{d.sc}</div>
                                   {n && <div style={{ fontSize:11, color:YELL, marginTop:3 }}>⚠ {n.text}</div>}
                                 </div>
                                 <Tag color={statusColor(d.s)}>{d.s}</Tag>
@@ -9410,7 +9410,7 @@ function ExportTab({ data, year }) {
                       </div>
                       <div style={{ display:'flex',gap:8 }}>
                         <button onClick={saveDeliv} style={{ flex:1,background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'10px',fontWeight:700,fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
-                        <button onClick={() => setEditDelivId(null)} style={{ background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'10px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+                        <button onClick={() => setEditDelivId(null)} style={{ background:'#FFFFFF',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'10px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
                         <button onClick={() => { if(window.confirm(`Remove?`)) deleteDeliv(d.id); }} style={{ background:'none',color:'#f87171',border:`1px solid #f8717144`,borderRadius:8,padding:'10px 14px',fontSize:13,cursor:'pointer',fontFamily:'inherit' }}>Del</button>
                       </div>
                     </Card>
@@ -9427,11 +9427,11 @@ function ExportTab({ data, year }) {
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                            <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
-                            {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 10px',color:'#94A3B8',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
+                            <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 10px',color:'#6E6E6E',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
+                            {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 10px',color:'#6E6E6E',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
                           </div>
                         </div>
-                        <div style={{ fontSize:12,color:'#94A3B8',marginBottom:6 }}>{d.sc}</div>
+                        <div style={{ fontSize:12,color:'#6E6E6E',marginBottom:6 }}>{d.sc}</div>
                         {d.src === 'deal' && <div style={{ fontSize:10, color:SLATE, marginBottom:6 }}>edit this on the deals board</div>}
                         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
                           <div style={{ fontSize:12,color:YELL }}>{d.d !== 'TBC' ? `Due: ${d.d}` : 'TBC'}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <span style={{ color:'#C9A0A0', fontWeight:700 }}> · OVERDUE</span> : null}</div>
@@ -9446,7 +9446,7 @@ function ExportTab({ data, year }) {
             ) : (
               /* Desktop: table */
               <div style={{ background:CARD,border:`1px solid ${BDR}`,borderRadius:14,overflow:'hidden' }}>
-                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.5fr',padding:'10px 20px',fontSize:9,color:'#2E4A66',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
+                <div style={{ display:'grid',gridTemplateColumns:'1fr 1.5fr 0.6fr 1.2fr 1.2fr 0.8fr 0.5fr',padding:'10px 20px',fontSize:9,color:'#6E6E6E',textTransform:'uppercase',letterSpacing:'2px',fontWeight:600,borderBottom:`1px solid ${BDR}`,background:'#F0F4F8' }}>
                   {['Brand','Notes / Script','Due','Status','Platform','Rate',''].map(h => <div key={h}>{h}</div>)}
                 </div>
                 {allDelivs.map((d, i) => (
@@ -9462,7 +9462,7 @@ function ExportTab({ data, year }) {
                       </div>
                       <div style={{ display:'flex',gap:8 }}>
                         <button onClick={saveDeliv} style={{ background:BLUE,color:TEXT,border:'none',borderRadius:8,padding:'8px 18px',fontWeight:700,fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Save</button>
-                        <button onClick={() => setEditDelivId(null)} style={{ background:'#F7F9FC',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
+                        <button onClick={() => setEditDelivId(null)} style={{ background:'#FFFFFF',color:TEXT,border:`1px solid ${BDR}`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Cancel</button>
                         <button onClick={() => { if(window.confirm(`Remove ${d.b}?`)) deleteDeliv(d.id); }} style={{ background:'none',color:'#f87171',border:`1px solid #f8717144`,borderRadius:8,padding:'8px 14px',fontSize:12,cursor:'pointer',fontFamily:'inherit' }}>Delete</button>
                       </div>
                     </div>
@@ -9473,14 +9473,14 @@ function ExportTab({ data, year }) {
                           <div style={{ fontSize:13,fontWeight:700 }}>{d.b}</div>
                           <div style={{ marginTop:4 }}><Tag color={d.src === 'deal' ? OCEAN : SLATE}>{d.src === 'deal' ? 'from deal' : 'manual'}</Tag></div>
                         </div>
-                        <div style={{ fontSize:11,color:'#94A3B8' }}>{d.sc}{d.src === 'deal' && <div style={{ fontSize:9, color:SLATE, marginTop:2 }}>edit on the deals board</div>}</div>
+                        <div style={{ fontSize:11,color:'#6E6E6E' }}>{d.sc}{d.src === 'deal' && <div style={{ fontSize:9, color:SLATE, marginTop:2 }}>edit on the deals board</div>}</div>
                         <div style={{ fontSize:12,color:YELL,fontWeight:600 }}>{d.d}{dueState(d).key === 'overdue' && !TERMINAL_D.includes(d.s) ? <div style={{ marginTop:3 }}><Tag color="#C9A0A0">overdue</Tag></div> : null}</div>
                         <Tag color={statusColor(d.s)}>{d.s}</Tag>
-                        <div style={{ fontSize:12,color:'#94A3B8' }}>{d.pl}</div>
+                        <div style={{ fontSize:12,color:'#6E6E6E' }}>{d.pl}</div>
                         <div style={{ fontSize:12,color:BLUE,fontWeight:700 }}>{d.pay}</div>
                         <div style={{ display:'flex', gap:4 }}>
-                          <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
-                          {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #2a2a2a`,borderRadius:7,padding:'5px 9px',color:'#94A3B8',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
+                          <button onClick={() => setExpandedDeliv(expandedDeliv === d.key ? null : d.key)} title="files and versions" style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 9px',color:'#6E6E6E',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>📎{filesFor(d.key).length > 0 ? ` ${filesFor(d.key).length}` : ''}</button>
+                          {d.src === 'manual' && <button onClick={() => startEditDeliv(d)} style={{ background:'none',border:`1px solid #0A0A0A`,borderRadius:7,padding:'5px 9px',color:'#6E6E6E',fontSize:11,cursor:'pointer',fontFamily:'inherit' }}>✏</button>}
                         </div>
                       </div>
                       {expandedDeliv === d.key && filesPanel(d)}
@@ -9552,10 +9552,10 @@ function ExportTab({ data, year }) {
               {data.map(({ label, pct, flag }) => (
                 <div key={label}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:11 }}>
-                    <span style={{ color:'#2E4A66' }}>{flag ? `${flag} ${label}` : label}</span>
+                    <span style={{ color:'#6E6E6E' }}>{flag ? `${flag} ${label}` : label}</span>
                     <span style={{ color, fontWeight:700 }}>{pct}%</span>
                   </div>
-                  <div style={{ background:'#E0E6EF', borderRadius:4, height:6, overflow:'hidden' }}>
+                  <div style={{ background:'#E9E2C8', borderRadius:4, height:6, overflow:'hidden' }}>
                     <div style={{ height:'100%', borderRadius:4, background:color, width:`${pct}%`, transition:'width 0.6s ease' }} />
                   </div>
                 </div>
@@ -9566,7 +9566,7 @@ function ExportTab({ data, year }) {
           const GenderBar = ({ male, female }) => (
             <div>
               <div style={{ display:'flex', borderRadius:8, overflow:'hidden', height:28, marginBottom:8 }}>
-                <div style={{ width:`${male}%`, background:'#88EAF6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#1A2744' }}>{male}%</div>
+                <div style={{ width:`${male}%`, background:'#88EAF6', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#0A0A0A' }}>{male}%</div>
                 <div style={{ width:`${female}%`, background:'#E1306C', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:TEXT }}>{female}%</div>
               </div>
               <div style={{ display:'flex', gap:16, fontSize:10, color:SLATE }}>
@@ -9648,10 +9648,10 @@ function ExportTab({ data, year }) {
             <div style={{ display:'flex', flexDirection:'column', gap:12, padding:isMobile?'0 12px 24px':'0 0 24px' }}>
 
               {/* ── Header ── */}
-              <div style={{ background:'#FFFFFF', borderRadius:10, padding:'24px 28px', border:'1px solid #CDD4E0', marginBottom:4 }}>
+              <div style={{ background:'#FFFFFF', borderRadius:10, padding:'24px 28px', border:'1px solid #E3DCC3', marginBottom:4 }}>
                 <div style={{ fontSize:9, color:BLUE, textTransform:'uppercase', letterSpacing:'3px', fontWeight:700, marginBottom:8 }}>Audience Intelligence</div>
-                <div style={{ fontSize:isMobile?22:28, fontWeight:900, lineHeight:1.2, marginBottom:10, color:'#1A2744' }}>Who's Actually Watching</div>
-                <div style={{ fontSize:13, color:'#2E4A66', lineHeight:1.7, maxWidth:640 }}>
+                <div style={{ fontSize:isMobile?22:28, fontWeight:900, lineHeight:1.2, marginBottom:10, color:'#0A0A0A' }}>Who's Actually Watching</div>
+                <div style={{ fontSize:13, color:'#6E6E6E', lineHeight:1.7, maxWidth:640 }}>
                   Elder millennials and younger Gen X — ages 28–42 — juggling real life with real money and real decision fatigue. They don't discover content. They let it find them. Your hook has 2 seconds to earn the rest of their time.
                 </div>
                 <div style={{ display:'flex', gap:12, flexWrap:'wrap', marginTop:16 }}>
@@ -9661,9 +9661,9 @@ function ExportTab({ data, year }) {
                     { label:'Top Market', val:'US + AU' },
                     { label:'Trust Signal', val:'60% creator > ad' },
                   ].map(({ label, val }) => (
-                    <div key={label} style={{ background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:8, padding:'10px 14px', textAlign:'center', minWidth:100 }}>
-                      <div style={{ fontSize:9, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'1px', fontWeight:700, marginBottom:4 }}>{label}</div>
-                      <div style={{ fontSize:16, fontWeight:900, color:'#1A2744' }}>{val}</div>
+                    <div key={label} style={{ background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:8, padding:'10px 14px', textAlign:'center', minWidth:100 }}>
+                      <div style={{ fontSize:9, color:'#2A4A5E', textTransform:'uppercase', letterSpacing:'1px', fontWeight:700, marginBottom:4 }}>{label}</div>
+                      <div style={{ fontSize:16, fontWeight:900, color:'#0A0A0A' }}>{val}</div>
                     </div>
                   ))}
                 </div>
@@ -9672,7 +9672,7 @@ function ExportTab({ data, year }) {
               {/* ── Persona Card ── */}
               <Card>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
-                  <div style={{ width:36, height:36, borderRadius:'50%', background:`linear-gradient(135deg, ${OCEAN}, #69C9D044)`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>👤</div>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:'#2A4A5E', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>👤</div>
                   <div>
                     <Label style={{ margin:0 }}>Meet Your Audience</Label>
                     <div style={{ fontSize:11, color:SLATE }}>Composite persona · Elder Millennial / Young Gen X · generated from data as of {personaAsOfLabel}</div>
@@ -9680,12 +9680,12 @@ function ExportTab({ data, year }) {
                 </div>
 
                 {/* Persona hero */}
-                <div style={{ background:'#FFFFFF', borderRadius:8, padding:'20px 24px', border:'1px solid #CDD4E0', marginBottom:16 }}>
+                <div style={{ background:'#FFFFFF', borderRadius:8, padding:'20px 24px', border:'1px solid #E3DCC3', marginBottom:16 }}>
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'2fr 1fr', gap:20 }}>
                     <div>
                       <div style={{ fontSize:22, fontWeight:900, marginBottom:4 }}>Alex, 28–42</div>
                       <div style={{ fontSize:13, color:BLUE, fontWeight:700, marginBottom:12 }}>Elder Millennial / Young Gen X · Sydney, Melbourne, New York, or LA</div>
-                      <div style={{ fontSize:13, color:'#4A6080', lineHeight:1.8 }}>
+                      <div style={{ fontSize:13, color:'#6E6E6E', lineHeight:1.8 }}>
                         Alex has a real job, real bills, and a dog they treat like a small person. They're not broke — they're cost-conscious. They're done with aspirational content that shows them what they can't have and actively look for creators who show them what's actually possible, what it actually costs, and whether it's actually worth it.
                         <br/><br/>
                         They spend ~40 minutes on TikTok daily, mostly passive. They don't comment often, but when something hits — they save it, share it, and follow. What hooks them on TikTok they'll follow to Instagram. What they trust there, they'll subscribe to on YouTube.
@@ -9701,8 +9701,8 @@ function ExportTab({ data, year }) {
                         { label:'Spending mode', val:'Cost-conscious' },
                         { label:'Household', val:'Often has a pet' },
                       ].map(({ label, val }) => (
-                        <div key={label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', background:'#EEF9FD', borderRadius:6 }}>
-                          <span style={{ fontSize:11, color:'#1A2744' }}>{label}</span>
+                        <div key={label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', background:'#F1ECDA', borderRadius:6 }}>
+                          <span style={{ fontSize:11, color:'#0A0A0A' }}>{label}</span>
                           <span style={{ fontSize:11, fontWeight:700, color:BLUE }}>{val}</span>
                         </div>
                       ))}
@@ -9713,23 +9713,23 @@ function ExportTab({ data, year }) {
                 {/* Frustrations + Desires */}
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:12, marginBottom:16 }}>
                   <div>
-                    <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:10 }}>😤 What Frustrates Them</div>
+                    <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:10 }}>😤 What Frustrates Them</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                       {FRUSTRATIONS.map(({ icon, title, desc }) => (
-                        <div key={title} style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:0, padding:'10px 12px', borderLeft:'3px solid #D85A30' }}>
-                          <div style={{ fontSize:12, fontWeight:600, color:'#1A2744', marginBottom:3 }}>{icon} {title}</div>
-                          <div style={{ fontSize:11, color:'#4A6080', lineHeight:1.5 }}>{desc}</div>
+                        <div key={title} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:0, padding:'10px 12px', borderLeft:'3px solid #D85A30' }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:'#0A0A0A', marginBottom:3 }}>{icon} {title}</div>
+                          <div style={{ fontSize:11, color:'#6E6E6E', lineHeight:1.5 }}>{desc}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:10 }}>💭 What They Actually Want</div>
+                    <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:10 }}>💭 What They Actually Want</div>
                     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                       {DESIRES.map(({ icon, title, desc }) => (
-                        <div key={title} style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:0, padding:'10px 12px', borderLeft:'3px solid #88EAF6' }}>
-                          <div style={{ fontSize:12, fontWeight:600, color:'#1A2744', marginBottom:3 }}>{icon} {title}</div>
-                          <div style={{ fontSize:11, color:'#4A6080', lineHeight:1.5 }}>{desc}</div>
+                        <div key={title} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:0, padding:'10px 12px', borderLeft:'3px solid #88EAF6' }}>
+                          <div style={{ fontSize:12, fontWeight:600, color:'#0A0A0A', marginBottom:3 }}>{icon} {title}</div>
+                          <div style={{ fontSize:11, color:'#6E6E6E', lineHeight:1.5 }}>{desc}</div>
                         </div>
                       ))}
                     </div>
@@ -9737,9 +9737,9 @@ function ExportTab({ data, year }) {
                 </div>
 
                 {/* Trust formula */}
-                <div style={{ background:'#EEF9FD', borderRadius:8, padding:'16px 18px', border:'1px solid #CDD4E0' }}>
-                  <div style={{ fontSize:11, fontWeight:800, color:'#1A2744', marginBottom:8 }}>🔑 The Trust Formula That Works On This Audience</div>
-                  <div style={{ fontSize:13, color:'#2E4A66', lineHeight:1.7 }}>
+                <div style={{ background:'#F1ECDA', borderRadius:8, padding:'16px 18px', border:'1px solid #E3DCC3' }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#0A0A0A', marginBottom:8 }}>🔑 The Trust Formula That Works On This Audience</div>
+                  <div style={{ fontSize:13, color:'#6E6E6E', lineHeight:1.7 }}>
                     <strong style={{ color:BLUE }}>Real experience framing</strong> ("I noticed," "my score was") + <strong style={{ color:BLUE }}>one specific data point</strong> (a number, a cost, a date) + <strong style={{ color:BLUE }}>a reaction that feels unscripted</strong> = comment section opens up.
                   </div>
                   <div style={{ marginTop:12, fontSize:11, color:SLATE, lineHeight:1.6 }}>
@@ -9792,14 +9792,14 @@ function ExportTab({ data, year }) {
                         const spokenHook = hookTextFor(hookTextMap, 'yt', v.id);
                         const hook = detectHookType(spokenHook || v.title);
                         return (
-                          <div key={v.id} onClick={() => setSelectedYtVideo(v)} style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 14px', border:'1px solid #CDD4E0', cursor:'pointer', transition:'background 0.12s' }}
-                            onMouseEnter={e => e.currentTarget.style.background='#EEF9FD'}
-                            onMouseLeave={e => e.currentTarget.style.background='#F7F9FC'}>
+                          <div key={v.id} onClick={() => setSelectedYtVideo(v)} style={{ background:'#FFFFFF', borderRadius:8, padding:'12px 14px', border:'1px solid #E3DCC3', cursor:'pointer', transition:'background 0.12s' }}
+                            onMouseEnter={e => e.currentTarget.style.background='#F1ECDA'}
+                            onMouseLeave={e => e.currentTarget.style.background='#FFFFFF'}>
                             <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
                               {v.thumbnail && <img src={v.thumbnail} alt="" style={{ width:64, height:36, borderRadius:4, objectFit:'cover', flexShrink:0 }} />}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontSize:12, fontWeight:600, lineHeight:1.4, marginBottom:6 }}>{v.title.length>65?v.title.slice(0,65)+'…':v.title}</div>
-                                {spokenHook && <div style={{ fontSize:11, color:'#0E6A80', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
+                                {spokenHook && <div style={{ fontSize:11, color:'#2A4A5E', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
                                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                                   <span style={{ fontSize:11, color:TEXT, fontWeight:700 }}>▶ {fmtViews(v.viewCount)}</span>
                                   <span style={{ fontSize:11, color:YELL }}>♥ {fmtViews(v.likeCount)}</span>
@@ -9815,7 +9815,7 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {ytVidsTop.length === 0 && (
-                  <div style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 16px', marginBottom:16, fontSize:12, color:'#4A6080' }}>
+                  <div style={{ background:'#FFFFFF', borderRadius:8, padding:'12px 16px', marginBottom:16, fontSize:12, color:'#6E6E6E' }}>
                     <YTLogo size={14} style={{ display:'inline', marginRight:6 }} /> YouTube analytics loading — go to Analytics tab to fetch data first.
                   </div>
                 )}
@@ -9832,14 +9832,14 @@ function ExportTab({ data, year }) {
                         const spokenHook = hookTextFor(hookTextMap, 'ig', p.id);
                         const hook = detectHookType(spokenHook || p.caption||'');
                         return (
-                          <a key={p.id} href={p.permalink} target="_blank" rel="noopener noreferrer" style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 14px', border:'1px solid #CDD4E0', textDecoration:'none', color:'inherit', display:'block', transition:'background 0.12s' }}
-                            onMouseEnter={e => e.currentTarget.style.background='#EEF9FD'}
-                            onMouseLeave={e => e.currentTarget.style.background='#F7F9FC'}>
+                          <a key={p.id} href={p.permalink} target="_blank" rel="noopener noreferrer" style={{ background:'#FFFFFF', borderRadius:8, padding:'12px 14px', border:'1px solid #E3DCC3', textDecoration:'none', color:'inherit', display:'block', transition:'background 0.12s' }}
+                            onMouseEnter={e => e.currentTarget.style.background='#F1ECDA'}
+                            onMouseLeave={e => e.currentTarget.style.background='#FFFFFF'}>
                             <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
                               {p.thumbnail && <img src={p.thumbnail} alt="" style={{ width:44, height:44, borderRadius:6, objectFit:'cover', flexShrink:0 }} />}
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ fontSize:12, fontWeight:600, lineHeight:1.4, marginBottom:6 }}>{(p.caption||`(${p.mediaType})`).slice(0,65)}{(p.caption||'').length>65?'…':''}</div>
-                                {spokenHook && <div style={{ fontSize:11, color:'#0E6A80', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
+                                {spokenHook && <div style={{ fontSize:11, color:'#2A4A5E', fontStyle:'italic', lineHeight:1.4, marginBottom:6 }}>"{spokenHook.length>100?spokenHook.slice(0,100)+'…':spokenHook}" <span style={{ fontStyle:'normal', fontSize:10, color:SLATE }}>— in-video hook</span></div>}
                                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                                   <span style={{ fontSize:11, color:TEXT, fontWeight:700 }}>👁 {fmtViews(p.reach||0)}</span>
                                   <span style={{ fontSize:11, color:YELL }}>♥ {fmtViews(p.likeCount)}</span>
@@ -9855,7 +9855,7 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {igPostsTop.length === 0 && (
-                  <div style={{ background:'#F7F9FC', borderRadius:8, padding:'12px 16px', marginBottom:16, fontSize:12, color:'#4A6080' }}>
+                  <div style={{ background:'#FFFFFF', borderRadius:8, padding:'12px 16px', marginBottom:16, fontSize:12, color:'#6E6E6E' }}>
                     <IGLogo size={14} style={{ display:'inline', marginRight:6 }} /> Instagram token needs refreshing — fix in Analytics tab first, then come back here.
                   </div>
                 )}
@@ -9928,10 +9928,10 @@ function ExportTab({ data, year }) {
                   {PILLARS.map(({ icon, name, hook, why, stop }) => (
                     <div key={name} style={{ background:`${OCEAN}18`, borderRadius:12, padding:'16px 18px', border:`1px solid ${OCEAN}44` }}>
                       <div style={{ fontSize:13, fontWeight:800, marginBottom:8 }}>{icon} {name}</div>
-                      <div style={{ background:'#F8FAFC', borderRadius:8, padding:'10px 14px', borderLeft:`3px solid ${BLUE}`, marginBottom:10, fontSize:12, fontStyle:'italic', color:'#2E4A66', lineHeight:1.6 }}>
+                      <div style={{ background:'#FAF7EC', borderRadius:8, padding:'10px 14px', borderLeft:`3px solid ${BLUE}`, marginBottom:10, fontSize:12, fontStyle:'italic', color:'#6E6E6E', lineHeight:1.6 }}>
                         {hook}
                       </div>
-                      <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.7, marginBottom:8 }}>{why}</div>
+                      <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.7, marginBottom:8 }}>{why}</div>
                       <div style={{ fontSize:11, color:YELL, lineHeight:1.6 }}>
                         <strong>Scroll-stopper:</strong> {stop}
                       </div>
@@ -9951,7 +9951,7 @@ function ExportTab({ data, year }) {
                       <div key={i} style={{ display:'flex', gap:12, alignItems:'flex-start', padding:'10px 14px', background:'#1a0a0a', borderRadius:10, borderLeft:'3px solid #f87171' }}>
                         <div style={{ width:20, height:20, borderRadius:'50%', background:'#f8717133', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:'#f87171', flexShrink:0, marginTop:1 }}>{i+1}</div>
                         <div style={{ flex:1 }}>
-                          <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.6 }}>{item}</div>
+                          <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6 }}>{item}</div>
                           {ev && (
                             <div style={{ fontSize:10, color:'#8A6A5E', marginTop:6, lineHeight:1.5, borderTop:'1px dashed #f8717144', paddingTop:6 }}>
                               <span style={{ fontWeight:700, color:'#A32D2D' }}>your own example:</span> "{(ev.title||'').length > 70 ? (ev.title||'').slice(0,70)+'…' : (ev.title||'')} · {ev.hook} hook · {ev.eng || 0}% eng (lowest-engagement match in your loaded videos)
@@ -10071,7 +10071,7 @@ function ExportTab({ data, year }) {
                   <div style={{ fontSize:11, color:SLATE, marginTop:4 }}>
                     {[ytAnalytics && 'YouTube live', igAnalytics && 'Instagram live', ttAnalytics && 'TikTok live'].filter(Boolean).join(' · ') || 'connect a platform below'}
                     {ytAnalytics?._cachedAt && (
-                      <span style={{ marginLeft:8, color:'#64748B' }}>
+                      <span style={{ marginLeft:8, color:'#6E6E6E' }}>
                         · cached {Math.round((Date.now() - ytAnalytics._cachedAt) / 60000)}m ago
                       </span>
                     )}
@@ -10083,7 +10083,7 @@ function ExportTab({ data, year }) {
               {ytAnalyticsLoading && !ytAnalytics && (
                 <Card style={{ textAlign:'center', padding:'48px 20px' }}>
                   <div style={{ fontSize:13, color:SLATE }}>Loading YouTube analytics…</div>
-                  <div style={{ fontSize:11, color:'#94A3B8', marginTop:8 }}>Fetching your channel &amp; video data</div>
+                  <div style={{ fontSize:11, color:'#6E6E6E', marginTop:8 }}>Fetching your channel &amp; video data</div>
                 </Card>
               )}
               {ytAnalyticsError && !ytAnalytics && (
@@ -10163,7 +10163,7 @@ function ExportTab({ data, year }) {
                           <div style={{ fontSize:28, fontWeight:900, letterSpacing:'-1px', color:score.color }}>{val}{unit}</div>
                           <Tag color={score.color}>{score.label}</Tag>
                         </div>
-                        <div style={{ background:'#E0E6EF', borderRadius:4, height:6, overflow:'hidden' }}>
+                        <div style={{ background:'#E9E2C8', borderRadius:4, height:6, overflow:'hidden' }}>
                           <div style={{ height:'100%', borderRadius:4, background:score.color, width:`${Math.min(100, (val / (bv * 2)) * 100)}%`, transition:'width 0.6s ease' }} />
                         </div>
                         <div style={{ fontSize:10, color:SLATE, marginTop:4 }}>Benchmark: {bv}{unit}</div>
@@ -10184,9 +10184,9 @@ function ExportTab({ data, year }) {
                       { key:'date', label:'Date' },
                     ].map(({ key, label }) => (
                       <button key={key} onClick={() => setYtSort(key)} style={{
-                        background: ytSort === key ? '#88EAF6' : '#F4F6F9',
-                        color: ytSort === key ? '#1A2744' : '#4A6080',
-                        border: ytSort === key ? 'none' : '1px solid #CDD4E0',
+                        background: ytSort === key ? '#88EAF6' : '#FAF7EC',
+                        color: ytSort === key ? '#0A0A0A' : '#6E6E6E',
+                        border: ytSort === key ? 'none' : '1px solid #E3DCC3',
                         borderRadius: 20,
                         padding: '5px 14px',
                         fontSize: 11,
@@ -10296,7 +10296,7 @@ function ExportTab({ data, year }) {
                               <div style={{ marginTop:8, display:'flex', flexDirection:'column', gap:6 }}>
                                 {examples.map((v, i) => (
                                   <div key={v.id || i} style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'baseline', background:`${OCEAN}22`, borderRadius:8, padding:'8px 10px' }}>
-                                    <div style={{ fontSize:11, color:'#4A6080', flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:11, color:'#6E6E6E', flex:1, minWidth:0 }}>
                                       {i === 0 && <span style={{ color:'#E1306C', fontWeight:800, marginRight:6 }}>★</span>}
                                       {(() => { const spoken = hookTextFor(hookTextMap, 'yt', v.id); return spoken ? (
                                         <span><span style={{ fontStyle:'italic' }}>"{(spoken.length>80?spoken.slice(0,80)+'…':spoken)}"</span>
@@ -10325,11 +10325,11 @@ function ExportTab({ data, year }) {
                       {bestHook && (
                         <div style={{ background:`${OCEAN}33`, borderRadius:10, padding:'12px 14px', borderLeft:`3px solid ${BLUE}` }}>
                           <div style={{ fontSize:11, fontWeight:700, color:BLUE, marginBottom:4 }}>🎯 Strongest format</div>
-                          <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.5 }}>
+                          <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.5 }}>
                             <strong>{bestHook.hook}</strong> hooks average <strong>{fmtViews(bestHook.avg)}</strong> views
                             {agg.avgViews > 0 && ` — ${Math.round((bestHook.avg / agg.avgViews - 1) * 100)}% above your channel average`}.
                           </div>
-                          <div style={{ fontSize:10, color:'#5A7A99', marginTop:6, fontStyle:'italic', lineHeight:1.5 }}>
+                          <div style={{ fontSize:10, color:'#6E6E6E', marginTop:6, fontStyle:'italic', lineHeight:1.5 }}>
                             why you're seeing this: {bestHook.hook} has the highest average views of any hook format in your {vids.length} analysed videos (based on n={bestHook.count})
                           </div>
                         </div>
@@ -10337,7 +10337,7 @@ function ExportTab({ data, year }) {
                       {topVid && (
                         <div style={{ background:`${OCEAN}33`, borderRadius:10, padding:'12px 14px', borderLeft:`3px solid ${YELL}` }}>
                           <div style={{ fontSize:11, fontWeight:700, color:YELL, marginBottom:4 }}>🏆 Top video</div>
-                          <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.5 }}>
+                          <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.5 }}>
                             "{(topVid.title||'').slice(0,60)}{(topVid.title||'').length>60?'…':''}" leads with <strong>{fmtViews(topVid.viewCount)}</strong> views and <strong>{topVid.engagementRate}%</strong> engagement.
                           </div>
                         </div>
@@ -10345,7 +10345,7 @@ function ExportTab({ data, year }) {
                       {topEngVid && topEngVid.id !== topVid?.id && (
                         <div style={{ background:`${OCEAN}33`, borderRadius:10, padding:'12px 14px', borderLeft:`3px solid #C4A8D8` }}>
                           <div style={{ fontSize:11, fontWeight:700, color:'#C4A8D8', marginBottom:4 }}>💬 Most engaging</div>
-                          <div style={{ fontSize:12, color:'#2E4A66', lineHeight:1.5 }}>
+                          <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.5 }}>
                             "{topEngVid.title.slice(0,55)}{topEngVid.title.length>55?'…':''}" drives the most interaction at <strong>{topEngVid.engagementRate}%</strong> eng rate.
                           </div>
                         </div>
@@ -10364,12 +10364,12 @@ function ExportTab({ data, year }) {
                     {recs.slice(0,3).map((r, i) => (
                       <div key={i} style={{ background:`${OCEAN}22`, borderRadius:10, padding:'16px', border:`1px solid ${BDR}` }}>
                         <div style={{ fontSize:10, color:BLUE, textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8, lineHeight:1.4 }}>{r.pillar.split('—')[0].trim()}</div>
-                        <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6 }}>{r.idea}</div>
+                        <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6 }}>{r.idea}</div>
                         <div style={{ fontSize:10, color:SLATE, marginTop:10, fontWeight:700 }}>
                           {r.general ? 'general guidance, not from your video data' : `based on n=${r.n}`}
                         </div>
                         {r.trigger && (
-                          <div style={{ fontSize:10, color:'#5A7A99', marginTop:4, fontStyle:'italic', lineHeight:1.5 }}>
+                          <div style={{ fontSize:10, color:'#6E6E6E', marginTop:4, fontStyle:'italic', lineHeight:1.5 }}>
                             why you're seeing this: {r.trigger}
                           </div>
                         )}
@@ -10472,7 +10472,7 @@ function ExportTab({ data, year }) {
                                   <div style={{ fontSize:28, fontWeight:900, letterSpacing:'-1px', color:score.color }}>{val}{unit}</div>
                                   <Tag color={score.color}>{score.label}</Tag>
                                 </div>
-                                <div style={{ background:'#E0E6EF', borderRadius:4, height:6, overflow:'hidden' }}>
+                                <div style={{ background:'#E9E2C8', borderRadius:4, height:6, overflow:'hidden' }}>
                                   <div style={{ height:'100%', borderRadius:4, background:score.color, width:`${Math.min(100,(val/(bv*2))*100)}%`, transition:'width 0.6s ease' }} />
                                 </div>
                                 <div style={{ fontSize:10, color:SLATE, marginTop:4 }}>Benchmark: {bv}{unit}</div>
@@ -10498,7 +10498,7 @@ function ExportTab({ data, year }) {
                                       {p.caption ? p.caption.slice(0,70)+(p.caption.length>70?'…':'') : `(${p.mediaType})`}
                                     </div>
                                     <div style={{ display:'flex', gap:10, marginTop:4, flexWrap:'wrap' }}>
-                                      {reachAvailable && <span style={{ fontSize:10, color:'#4A6080' }}>👁 {fmtViews(p.reach)}</span>}
+                                      {reachAvailable && <span style={{ fontSize:10, color:'#6E6E6E' }}>👁 {fmtViews(p.reach)}</span>}
                                       <span style={{ fontSize:10, color:YELL }}>♥ {fmtViews(p.likeCount)}</span>
                                       <span style={{ fontSize:10, color:SLATE }}>💬 {fmtViews(p.commentCount)}</span>
                                       <span style={{ fontSize:10, color:SLATE }}>Eng {p.computedEngRate}%</span>
@@ -10633,7 +10633,7 @@ function ExportTab({ data, year }) {
                                   <div style={{ fontSize:24, fontWeight:900, letterSpacing:'-1px', color:score.color }}>{val}{unit}</div>
                                   <Tag color={score.color}>{score.label}</Tag>
                                 </div>
-                                <div style={{ background:'#E0E6EF', borderRadius:4, height:6, overflow:'hidden' }}>
+                                <div style={{ background:'#E9E2C8', borderRadius:4, height:6, overflow:'hidden' }}>
                                   <div style={{ height:'100%', borderRadius:4, background:score.color, width:`${Math.min(100,(val/(bv*2))*100)}%`, transition:'width 0.6s ease' }} />
                                 </div>
                                 <div style={{ fontSize:10, color:SLATE, marginTop:4 }}>Benchmark: {bv}{unit}</div>
@@ -10730,7 +10730,7 @@ function ExportTab({ data, year }) {
                         ].map((step, i) => (
                           <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom:`1px solid ${OCEAN}22` }}>
                             <div style={{ width:20, height:20, borderRadius:'50%', background:`${OCEAN}55`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0, marginTop:1 }}>{step[0]}</div>
-                            <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6 }}>
+                            <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6 }}>
                               {step.length === 2 ? step[1] : (<>{step[1]} <a href={step[3]} target="_blank" rel="noopener noreferrer" style={{ color:BLUE }}>{step[2]}</a> {step[4] || ''}</>)}
                             </div>
                           </div>
@@ -10749,7 +10749,7 @@ function ExportTab({ data, year }) {
                         ].map((step, i) => (
                           <div key={i} style={{ display:'flex', gap:10, padding:'8px 0', borderBottom:`1px solid ${OCEAN}22` }}>
                             <div style={{ width:20, height:20, borderRadius:'50%', background:`${OCEAN}55`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:700, flexShrink:0, marginTop:1 }}>{step[0]}</div>
-                            <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6 }}>
+                            <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6 }}>
                               {step.length === 2 ? step[1] : (<>{step[1]} <a href={step[3]} target="_blank" rel="noopener noreferrer" style={{ color:BLUE }}>{step[2]}</a> {step[4] || ''}</>)}
                             </div>
                           </div>
@@ -10786,14 +10786,14 @@ function ExportTab({ data, year }) {
         {/* ══ CONTENT INTEL ════════════════════════════════════════ */}
         {tab === 'content-intel' && (() => {
           const SentimentBadge = ({ s }) => {
-            const map = { frustrated:['#FDEAEA','#A32D2D'], excited:['#E6F8EF','#1A7A40'], confused:['#FFF3D0','#8A6A10'], 'seeking advice':['#EEF9FD','#0E6A80'], discussing:['#F4F6F9','#4A6080'] };
-            const [bg, color] = map[s?.toLowerCase()] || ['#F4F6F9','#4A6080'];
+            const map = { frustrated:['#FDEAEA','#A32D2D'], excited:['#E6F8EF','#1A7A40'], confused:['#FFF3D0','#8A6A10'], 'seeking advice':['#F1ECDA','#2A4A5E'], discussing:['#FAF7EC','#6E6E6E'] };
+            const [bg, color] = map[s?.toLowerCase()] || ['#FAF7EC','#6E6E6E'];
             return <span style={{ background:bg, color, borderRadius:20, padding:'2px 8px', fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.5px' }}>{s}</span>;
           };
 
           const HookTag = ({ pattern }) => {
-            const colors = { 'Cost breakdown':['#EEF9FD','#0E6A80'], 'Consequence-first':['#FDEAEA','#A32D2D'], 'Curiosity gap':['#FFF3D0','#8A6A10'], 'Contrarian take':['#F0E8F5','#6B2A8B'], 'Before/after':['#E6F8EF','#1A7A40'], 'Day-in-life':['#E8F0E8','#2A6B2A'], 'Listicle':['#F5F0E8','#6B5A2A'] };
-            const [bg, color] = colors[pattern] || ['#F4F6F9','#4A6080'];
+            const colors = { 'Cost breakdown':['#F1ECDA','#2A4A5E'], 'Consequence-first':['#FDEAEA','#A32D2D'], 'Curiosity gap':['#FFF3D0','#8A6A10'], 'Contrarian take':['#F0E8F5','#6B2A8B'], 'Before/after':['#E6F8EF','#1A7A40'], 'Day-in-life':['#E8F0E8','#2A6B2A'], 'Listicle':['#F5F0E8','#6B5A2A'] };
+            const [bg, color] = colors[pattern] || ['#FAF7EC','#6E6E6E'];
             return <span style={{ background:bg, color, borderRadius:20, padding:'2px 8px', fontSize:9, fontWeight:700 }}>{pattern}</span>;
           };
 
@@ -10804,18 +10804,18 @@ function ExportTab({ data, year }) {
           const SectionHeader = ({ title, fetchedAt, onRefresh, loading, cachedNote }) => (
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
               <div>
-                <div style={{ fontSize:11, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600 }}>{title}</div>
+                <div style={{ fontSize:11, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600 }}>{title}</div>
                 {fetchedAt && (
-                  <div style={{ fontSize:11, color:'#5A7A99', marginTop:2 }}>
+                  <div style={{ fontSize:11, color:'#6E6E6E', marginTop:2 }}>
                     Last refreshed: {new Date(fetchedAt).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}
                     {' · '}
                     {new Date(fetchedAt).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
                     {' · updated '}{ci7TimeAgo(fetchedAt)}
-                    {cachedNote && <span style={{ color:'#0E6A80', fontWeight:700 }}> · {cachedNote}</span>}
+                    {cachedNote && <span style={{ color:'#2A4A5E', fontWeight:700 }}> · {cachedNote}</span>}
                   </div>
                 )}
               </div>
-              <button onClick={onRefresh} disabled={loading} style={{ border:'1px solid #CDD4E0', background:'#FFFFFF', color:'#1A2744', borderRadius:8, padding:'6px 14px', fontSize:11, cursor:loading?'default':'pointer', fontFamily:'inherit', opacity:loading?0.6:1 }}>
+              <button onClick={onRefresh} disabled={loading} style={{ border:'1px solid #E3DCC3', background:'#FFFFFF', color:'#0A0A0A', borderRadius:8, padding:'6px 14px', fontSize:11, cursor:loading?'default':'pointer', fontFamily:'inherit', opacity:loading?0.6:1 }}>
                 {loading ? '↻ Loading…' : '↻ Refresh'}
               </button>
             </div>
@@ -10826,33 +10826,33 @@ function ExportTab({ data, year }) {
             const avatarColor = creator.avatar_color || '#88EAF6';
             const alertHit = alerts.length > 0;
             return (
-              <div style={{ background:'#FFFFFF', border:`1px solid ${alertHit ? '#F5A623' : isFav ? '#88EAF6' : '#CDD4E0'}`, borderRadius:8, padding:'12px 14px', ...(alertHit ? { boxShadow:'0 0 0 2px #F5A62333' } : {}) }}>
+              <div style={{ background:'#FFFFFF', border:`1px solid ${alertHit ? '#F5A623' : isFav ? '#88EAF6' : '#E3DCC3'}`, borderRadius:8, padding:'12px 14px', ...(alertHit ? { boxShadow:'0 0 0 2px #F5A62333' } : {}) }}>
                 {/* Top row: avatar + name + star */}
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
                   <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                    <div style={{ width:36, height:36, borderRadius:'50%', background:avatarColor, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#1A2744', flexShrink:0 }}>
+                    <div style={{ width:36, height:36, borderRadius:'50%', background:avatarColor, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#0A0A0A', flexShrink:0 }}>
                       {initials}
                     </div>
                     <div>
-                      <div style={{ fontSize:12, fontWeight:700, color:'#1A2744', lineHeight:1.2 }}>{creator.name}</div>
+                      <div style={{ fontSize:12, fontWeight:700, color:'#0A0A0A', lineHeight:1.2 }}>{creator.name}</div>
                       <div style={{ fontSize:11, color:'#88EAF6' }}>{creator.handle}</div>
                     </div>
                   </div>
-                  <button onClick={onToggle} style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, padding:0, color: isFav ? '#F5A623' : '#CDD4E0', transition:'color 0.15s' }}>
+                  <button onClick={onToggle} style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, padding:0, color: isFav ? '#F5A623' : '#E3DCC3', transition:'color 0.15s' }}>
                     {isFav ? '★' : '☆'}
                   </button>
                 </div>
                 {/* Meta row */}
                 <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
-                  <span style={{ fontSize:10, background:'#F4F6F9', color:'#4A6080', borderRadius:20, padding:'2px 8px' }}>{creator.platform}</span>
-                  <span style={{ fontSize:10, color:'#2E4A66', fontWeight:600 }}>{creator.followers}</span>
+                  <span style={{ fontSize:10, background:'#FAF7EC', color:'#6E6E6E', borderRadius:20, padding:'2px 8px' }}>{creator.platform}</span>
+                  <span style={{ fontSize:10, color:'#6E6E6E', fontWeight:600 }}>{creator.followers}</span>
                   {creator.engagement_rate && <span style={{ fontSize:10, color:'#1A7A40', fontWeight:600 }}>⚡ {creator.engagement_rate} ER</span>}
-                  {creator.posting_cadence && <span style={{ fontSize:10, color:'#5A7A99' }}>📅 {creator.posting_cadence}</span>}
+                  {creator.posting_cadence && <span style={{ fontSize:10, color:'#6E6E6E' }}>📅 {creator.posting_cadence}</span>}
                   {creator.is_dormant && <span style={{ fontSize:9, background:'#FFF3D0', color:'#8A6A10', borderRadius:20, padding:'2px 7px', fontWeight:700 }}>DORMANT</span>}
                 </div>
                 {/* Why watch */}
                 {creator.why_watch && (
-                  <div style={{ fontSize:11, color:'#0E6A80', background:'#EEF9FD', borderRadius:6, padding:'6px 10px', marginBottom:8, lineHeight:1.4 }}>
+                  <div style={{ fontSize:11, color:'#2A4A5E', background:'#F1ECDA', borderRadius:6, padding:'6px 10px', marginBottom:8, lineHeight:1.4 }}>
                     🎯 {creator.why_watch}
                   </div>
                 )}
@@ -10863,14 +10863,14 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {/* Content style */}
-                <div style={{ fontSize:11, color:'#4A6080', lineHeight:1.5, marginBottom:8 }}>{creator.content_style}</div>
+                <div style={{ fontSize:11, color:'#6E6E6E', lineHeight:1.5, marginBottom:8 }}>{creator.content_style}</div>
                 {/* Top videos */}
                 {creator.top_videos && creator.top_videos.length > 0 && (
                   <div style={{ marginBottom:8 }}>
-                    <div style={{ fontSize:9, color:'#8A9BB0', textTransform:'uppercase', letterSpacing:'1px', marginBottom:5 }}>Top Videos</div>
+                    <div style={{ fontSize:9, color:'#2A4A5E', textTransform:'uppercase', letterSpacing:'1px', marginBottom:5 }}>Top Videos</div>
                     {creator.top_videos.slice(0,3).map((v,vi) => (
                       <div key={vi} style={{ marginBottom:3 }}>
-                        <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#2E4A66', textDecoration:'none', lineHeight:1.3 }}>
+                        <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#6E6E6E', textDecoration:'none', lineHeight:1.3 }}>
                           ▶ {v.title.length > 55 ? v.title.slice(0,55)+'...' : v.title}
                         </a>
                       </div>
@@ -10883,7 +10883,7 @@ function ExportTab({ data, year }) {
                     💡 Save to ideas
                   </button>
                   {creator.profile_url && (
-                    <a href={creator.profile_url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'5px 4px' }}>
+                    <a href={creator.profile_url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#6E6E6E', textDecoration:'none', padding:'5px 4px' }}>
                       ↗ View profile
                     </a>
                   )}
@@ -10952,7 +10952,7 @@ function ExportTab({ data, year }) {
 
               {/* Toast */}
               {ciToast && (
-                <div style={{ position:'fixed', bottom:32, right:32, background:'#1A2744', color:'#FFFFFF', borderRadius:10, padding:'12px 20px', fontSize:13, fontWeight:600, zIndex:9999, boxShadow:'0 4px 20px rgba(0,0,0,0.2)', animation:'fadeIn 0.2s ease' }}>
+                <div style={{ position:'fixed', bottom:32, right:32, background:'#2A4A5E', color:'#FFFFFF', borderRadius:10, padding:'12px 20px', fontSize:13, fontWeight:600, zIndex:9999, boxShadow:'0 4px 12px rgba(42,74,94,0.12)', animation:'fadeIn 0.2s ease' }}>
                   {ciToast}
                 </div>
               )}
@@ -10967,8 +10967,8 @@ function ExportTab({ data, year }) {
                   if (subs.length < 2) return null;
                   return (
                     <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
-                      <span style={{ fontSize:11, color:'#5A7A99' }}>subreddit:</span>
-                      <select value={ciRedditSub} onChange={e => setCiRedditSub(e.target.value)} style={{ fontSize:11, color:'#1A2744', border:'1px solid #CDD4E0', borderRadius:6, padding:'5px 8px', fontFamily:'inherit', background:'#FFFFFF' }}>
+                      <span style={{ fontSize:11, color:'#6E6E6E' }}>subreddit:</span>
+                      <select value={ciRedditSub} onChange={e => setCiRedditSub(e.target.value)} style={{ fontSize:11, color:'#0A0A0A', border:'1px solid #E3DCC3', borderRadius:6, padding:'5px 8px', fontFamily:'inherit', background:'#FFFFFF' }}>
                         <option value="all">all ({ciReddit.data.length})</option>
                         {subs.map(s => <option key={s} value={s}>{s} ({ciReddit.data.filter(x => x.subreddit === s).length})</option>)}
                       </select>
@@ -10978,12 +10978,12 @@ function ExportTab({ data, year }) {
                 {!ciReddit.loading && ciReddit.data && ciReddit.data.length > 0 && (
                   <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr', gap:12 }}>
                     {ciReddit.data.filter(i => ciRedditSub === 'all' || i.subreddit === ciRedditSub).length === 0 && (
-                      <div style={{ textAlign:'center', padding:'24px 0', color:'#5A7A99', fontSize:12, gridColumn:'1 / -1' }}>no posts in this subreddit for the current pull</div>
+                      <div style={{ textAlign:'center', padding:'24px 0', color:'#6E6E6E', fontSize:12, gridColumn:'1 / -1' }}>no posts in this subreddit for the current pull</div>
                     )}
                     {ciReddit.data.filter(i => ciRedditSub === 'all' || i.subreddit === ciRedditSub).map((item, i) => {
                       const [pillarLabel, pillarBg, pillarColor] = getPillarTag((item.post_title || '') + ' ' + (item.content_angle || ''));
                       return (
-                        <div key={i} style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:8, padding:'14px 16px', transition:'background 0.15s' }}
+                        <div key={i} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:8, padding:'14px 16px', transition:'background 0.15s' }}
                           className="ci-card-hover">
                           {/* Header row */}
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
@@ -10994,12 +10994,12 @@ function ExportTab({ data, year }) {
                             <SentimentBadge s={item.sentiment} />
                           </div>
                           {/* Title */}
-                          <div style={{ fontSize:13, fontWeight:700, color:'#1A2744', marginBottom:6, lineHeight:1.4 }}>{item.post_title || item.pain_point}</div>
+                          <div style={{ fontSize:13, fontWeight:700, color:'#0A0A0A', marginBottom:6, lineHeight:1.4 }}>{item.post_title || item.pain_point}</div>
                           {/* Content angle */}
-                          <div style={{ fontSize:12, color:'#4A6080', fontStyle:'italic', marginBottom:10, lineHeight:1.5 }}>{item.content_angle}</div>
+                          <div style={{ fontSize:12, color:'#6E6E6E', fontStyle:'italic', marginBottom:10, lineHeight:1.5 }}>{item.content_angle}</div>
                           {/* Metadata row */}
                           {(item.upvotes || item.comments) && (
-                            <div style={{ fontSize:11, color:'#8A9BB0', marginBottom:8, display:'flex', gap:10 }}>
+                            <div style={{ fontSize:11, color:'#2A4A5E', marginBottom:8, display:'flex', gap:10 }}>
                               {item.upvotes && <span>▲ {typeof item.upvotes === 'number' ? item.upvotes.toLocaleString() : item.upvotes}</span>}
                               {item.comments && <span>💬 {typeof item.comments === 'number' ? item.comments.toLocaleString() : item.comments}</span>}
                             </div>
@@ -11007,7 +11007,7 @@ function ExportTab({ data, year }) {
                           {/* Action buttons */}
                           <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
                             <button onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(item.content_angle); saveIdeaToast('📋 Copied!'); }}
-                              style={{ fontSize:10, color:'#1A2744', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              style={{ fontSize:10, color:'#0A0A0A', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
                               📋 Copy angle
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); saveIdea({ source:'Reddit', title: item.post_title || item.pain_point, angle: item.content_angle, url: item.url, subreddit: item.subreddit }); }}
@@ -11015,12 +11015,12 @@ function ExportTab({ data, year }) {
                               💡 Save to ideas
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); saveToSwipe({ source:'Reddit', title: item.post_title || item.pain_point, angle: item.content_angle, url: item.url, subreddit: item.subreddit }); }}
-                              style={{ fontSize:10, color:'#0E6A80', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              style={{ fontSize:10, color:'#2A4A5E', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
                               📁 Swipe file
                             </button>
                             {item.url && (
                               <a href={item.url} target="_blank" rel="noreferrer"
-                                style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'5px 4px' }}
+                                style={{ fontSize:10, color:'#6E6E6E', textDecoration:'none', padding:'5px 4px' }}
                                 onClick={e => e.stopPropagation()}>
                                 ↗ View thread
                               </a>
@@ -11032,25 +11032,25 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {!ciReddit.loading && (!ciReddit.data || ciReddit.data.length === 0) && !ciReddit.error && (
-                  <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load this week's top Reddit posts</div>
+                  <div style={{ textAlign:'center', padding:'32px 0', color:'#6E6E6E', fontSize:13 }}>Click Refresh to load this week's top Reddit posts</div>
                 )}
                 {ciSwipe.length > 0 && (
-                  <div style={{ marginTop:16, borderTop:'1px solid #CDD4E0', paddingTop:12 }}>
-                    <button onClick={() => setCiSwipeOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#1A2744', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
+                  <div style={{ marginTop:16, borderTop:'1px solid #E3DCC3', paddingTop:12 }}>
+                    <button onClick={() => setCiSwipeOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#0A0A0A', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
                       {ciSwipeOpen ? '▾' : '▸'} swipe file ({ciSwipe.length})
                     </button>
                     {ciSwipeOpen && (
                       <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
                         {ciSwipe.map(s => (
-                          <div key={(s.savedAt || '') + (s.title || '')} style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:6, padding:'8px 12px' }}>
+                          <div key={(s.savedAt || '') + (s.title || '')} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:6, padding:'8px 12px' }}>
                             <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}>
                               <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:12, fontWeight:600, color:'#1A2744', lineHeight:1.3 }}>{s.title}</div>
-                                {s.angle && <div style={{ fontSize:11, color:'#4A6080', fontStyle:'italic', marginTop:2, lineHeight:1.4 }}>{s.angle.slice(0,120)}{s.angle.length > 120 ? '…' : ''}</div>}
-                                <div style={{ fontSize:10, color:'#8A9BB0', marginTop:4 }}>{s.subreddit || s.source || 'reddit'} · saved {ci7TimeAgo(s.savedAt)}</div>
+                                <div style={{ fontSize:12, fontWeight:600, color:'#0A0A0A', lineHeight:1.3 }}>{s.title}</div>
+                                {s.angle && <div style={{ fontSize:11, color:'#6E6E6E', fontStyle:'italic', marginTop:2, lineHeight:1.4 }}>{s.angle.slice(0,120)}{s.angle.length > 120 ? '…' : ''}</div>}
+                                <div style={{ fontSize:10, color:'#2A4A5E', marginTop:4 }}>{s.subreddit || s.source || 'reddit'} · saved {ci7TimeAgo(s.savedAt)}</div>
                               </div>
                               <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                                {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
+                                {s.url && <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#6E6E6E', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
                                 <button onClick={() => removeFromSwipe(s.savedAt)} style={{ fontSize:10, color:'#A32D2D', background:'#FDEAEA', border:'1px solid #F5C6C6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✕</button>
                               </div>
                             </div>
@@ -11068,39 +11068,39 @@ function ExportTab({ data, year }) {
                 {ciVideos.error && <div style={{ color:'#A32D2D', fontSize:12, padding:'12px 0' }}>Error: {ciVideos.error}</div>}
                 {ciVideos.loading && [1,2,3].map(i => <PulsingCard key={i} height={160} />)}
                 {!ciVideos.loading && ciVideos.fromCache && ciVideos.data && ciVideos.data.length > 0 && (
-                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12, background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:8, padding:'8px 12px' }}>
-                    <span style={{ fontSize:11, color:'#0E6A80' }}>showing cached results from {ci7TimeAgo(ciVideos.fetchedAt)} — refreshes automatically after 6h</span>
-                    <button onClick={() => refreshTrendingVideos(true)} style={{ fontSize:10, color:'#1A2744', background:'#FFFFFF', border:'1px solid #88EAF6', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>fetch live</button>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12, background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:8, padding:'8px 12px' }}>
+                    <span style={{ fontSize:11, color:'#2A4A5E' }}>showing cached results from {ci7TimeAgo(ciVideos.fetchedAt)} — refreshes automatically after 6h</span>
+                    <button onClick={() => refreshTrendingVideos(true)} style={{ fontSize:10, color:'#0A0A0A', background:'#FFFFFF', border:'1px solid #88EAF6', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>fetch live</button>
                   </div>
                 )}
                 {!ciVideos.loading && (!ciVideos.data || ciVideos.data.length === 0) && !ciVideos.error && (() => {
                   const c = readTrendingCache();
-                  if (!c) return <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load trending video formats</div>;
+                  if (!c) return <div style={{ textAlign:'center', padding:'32px 0', color:'#6E6E6E', fontSize:13 }}>Click Refresh to load trending video formats</div>;
                   return (
-                    <div style={{ textAlign:'center', padding:'24px 0', border:'1px dashed #CDD4E0', borderRadius:8 }}>
-                      <div style={{ fontSize:12, color:'#4A6080', marginBottom:10 }}>cached results from {ci7TimeAgo(c.fetchedAt)} are available</div>
-                      <button onClick={() => refreshTrendingVideos(false)} style={{ fontSize:11, color:'#1A2744', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>load cached results</button>
-                      <div style={{ fontSize:10, color:'#8A9BB0', marginTop:8 }}>or hit refresh for a live pull</div>
+                    <div style={{ textAlign:'center', padding:'24px 0', border:'1px dashed #E3DCC3', borderRadius:8 }}>
+                      <div style={{ fontSize:12, color:'#6E6E6E', marginBottom:10 }}>cached results from {ci7TimeAgo(c.fetchedAt)} are available</div>
+                      <button onClick={() => refreshTrendingVideos(false)} style={{ fontSize:11, color:'#0A0A0A', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>load cached results</button>
+                      <div style={{ fontSize:10, color:'#2A4A5E', marginTop:8 }}>or hit refresh for a live pull</div>
                     </div>
                   );
                 })()}
                 {!ciVideos.loading && ciVideos.data && ciVideos.data.length > 0 && (
                   <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                     {ciVideos.data.map((v, i) => (
-                      <div key={i} style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:8, overflow:'hidden' }}>
+                      <div key={i} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:8, overflow:'hidden' }}>
                         {/* Top section */}
                         <div style={{ padding:'14px 16px' }}>
                           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
                             <div style={{ flex:1 }}>
-                              <div style={{ fontSize:13, fontWeight:700, color:'#1A2744', marginBottom:5 }}>{v.title}</div>
+                              <div style={{ fontSize:13, fontWeight:700, color:'#0A0A0A', marginBottom:5 }}>{v.title}</div>
                               {/* Meta row */}
                               <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', marginBottom:6 }}>
                                 <span style={{ fontSize:11, color:'#88EAF6', fontWeight:600 }}>{v.creator}</span>
-                                <span style={{ fontSize:10, background:'#F4F6F9', color:'#4A6080', borderRadius:20, padding:'2px 8px', fontWeight:600 }}>{v.platform}</span>
-                                {v.views && <span style={{ fontSize:11, color:'#2E4A66', fontWeight:700 }}>👁 {v.views}</span>}
+                                <span style={{ fontSize:10, background:'#FAF7EC', color:'#6E6E6E', borderRadius:20, padding:'2px 8px', fontWeight:600 }}>{v.platform}</span>
+                                {v.views && <span style={{ fontSize:11, color:'#6E6E6E', fontWeight:700 }}>👁 {v.views}</span>}
                                 {v.engagement_rate && <span style={{ fontSize:11, color:'#1A7A40', fontWeight:700 }}>⚡ {v.engagement_rate} ER</span>}
                                 {v.video_length && (
-                                  <span style={{ fontSize:10, background: v.in_target_range === false ? '#FFF3D0' : v.in_target_range === true ? '#E6F8EF' : '#F4F6F9', color: v.in_target_range === false ? '#8A6A10' : v.in_target_range === true ? '#1A7A40' : '#4A6080', borderRadius:20, padding:'2px 8px', fontWeight:600 }}>
+                                  <span style={{ fontSize:10, background: v.in_target_range === false ? '#FFF3D0' : v.in_target_range === true ? '#E6F8EF' : '#FAF7EC', color: v.in_target_range === false ? '#8A6A10' : v.in_target_range === true ? '#1A7A40' : '#6E6E6E', borderRadius:20, padding:'2px 8px', fontWeight:600 }}>
                                     {v.in_target_range === false ? '⚠️' : '✓'} {v.video_length}
                                   </span>
                                 )}
@@ -11108,18 +11108,18 @@ function ExportTab({ data, year }) {
                               </div>
                             </div>
                             <button onClick={() => setCiExpandedVideo(ciExpandedVideo === i ? null : i)}
-                              style={{ background:'none', border:'1px solid #CDD4E0', borderRadius:6, padding:'5px 10px', color:'#4A6080', fontSize:11, cursor:'pointer', fontFamily:'inherit', flexShrink:0, marginLeft:12 }}>
+                              style={{ background:'none', border:'1px solid #E3DCC3', borderRadius:6, padding:'5px 10px', color:'#6E6E6E', fontSize:11, cursor:'pointer', fontFamily:'inherit', flexShrink:0, marginLeft:12 }}>
                               {ciExpandedVideo === i ? '▲ Collapse' : '▼ Expand'}
                             </button>
                           </div>
                           {/* Hook box */}
-                          <div style={{ background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'8px 12px', marginBottom:10 }}>
-                            <div style={{ fontSize:9, color:'#0E6A80', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:4 }}>Hook (first 3 sec)</div>
-                            <div style={{ fontSize:12, color:'#0E6A80', lineHeight:1.4 }}>{v.hook}</div>
+                          <div style={{ background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'8px 12px', marginBottom:10 }}>
+                            <div style={{ fontSize:9, color:'#2A4A5E', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:4 }}>Hook (first 3 sec)</div>
+                            <div style={{ fontSize:12, color:'#2A4A5E', lineHeight:1.4 }}>{v.hook}</div>
                           </div>
                           {/* Top comment */}
                           {v.top_comment && (
-                            <div style={{ fontSize:11, color:'#6A7A8A', fontStyle:'italic', marginBottom:10, lineHeight:1.4, borderLeft:'2px solid #CDD4E0', paddingLeft:10 }}>
+                            <div style={{ fontSize:11, color:'#6A7A8A', fontStyle:'italic', marginBottom:10, lineHeight:1.4, borderLeft:'2px solid #E3DCC3', paddingLeft:10 }}>
                               "{v.top_comment.length > 100 ? v.top_comment.slice(0,100)+'...' : v.top_comment}"
                             </div>
                           )}
@@ -11130,12 +11130,12 @@ function ExportTab({ data, year }) {
                               💡 Save to ideas
                             </button>
                             <button onClick={() => saveToHookBank(v)}
-                              style={{ fontSize:10, color:'#0E6A80', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
+                              style={{ fontSize:10, color:'#2A4A5E', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>
                               🪝 Save to hook bank
                             </button>
                             {v.platform_url && (
                               <a href={v.platform_url} target="_blank" rel="noreferrer"
-                                style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'5px 4px' }}>
+                                style={{ fontSize:10, color:'#6E6E6E', textDecoration:'none', padding:'5px 4px' }}>
                                 ↗ Watch on {v.platform}
                               </a>
                             )}
@@ -11143,12 +11143,12 @@ function ExportTab({ data, year }) {
                         </div>
                         {/* Expanded section */}
                         {ciExpandedVideo === i && (
-                          <div style={{ padding:'14px 16px', borderTop:'1px solid #CDD4E0', background:'#F7F9FC' }}>
-                            <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Why It Worked</div>
-                            <div style={{ fontSize:12, color:'#4A6080', lineHeight:1.6, marginBottom:14 }}>{v.why_it_worked}</div>
+                          <div style={{ padding:'14px 16px', borderTop:'1px solid #E3DCC3', background:'#FFFFFF' }}>
+                            <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Why It Worked</div>
+                            <div style={{ fontSize:12, color:'#6E6E6E', lineHeight:1.6, marginBottom:14 }}>{v.why_it_worked}</div>
                             <div style={{ background:'#FFFFFF', borderLeft:'3px solid #88EAF6', borderRadius:4, padding:'10px 14px', marginBottom:12 }}>
-                              <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Copy This For Your Channel</div>
-                              <div style={{ fontSize:12, color:'#1A2744', lineHeight:1.6 }}>{v.copy_framework}</div>
+                              <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>Copy This For Your Channel</div>
+                              <div style={{ fontSize:12, color:'#0A0A0A', lineHeight:1.6 }}>{v.copy_framework}</div>
                             </div>
                           </div>
                         )}
@@ -11157,25 +11157,25 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {ciHookBank.length > 0 && (
-                  <div style={{ marginTop:16, borderTop:'1px solid #CDD4E0', paddingTop:12 }}>
-                    <button onClick={() => setCiHookBankOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#1A2744', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
+                  <div style={{ marginTop:16, borderTop:'1px solid #E3DCC3', paddingTop:12 }}>
+                    <button onClick={() => setCiHookBankOpen(o => !o)} style={{ background:'none', border:'none', fontSize:11, fontWeight:700, color:'#0A0A0A', cursor:'pointer', fontFamily:'inherit', padding:0 }}>
                       {ciHookBankOpen ? '▾' : '▸'} hook bank ({ciHookBank.length})
                     </button>
                     {ciHookBankOpen && (
                       <div style={{ display:'flex', flexDirection:'column', gap:8, marginTop:10 }}>
                         {ciHookBank.map(h => (
-                          <div key={(h.savedAt || '') + (h.title || '')} style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:6, padding:'8px 12px' }}>
+                          <div key={(h.savedAt || '') + (h.title || '')} style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:6, padding:'8px 12px' }}>
                             <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start' }}>
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:3 }}>
                                   {h.hook_pattern && <HookTag pattern={h.hook_pattern} />}
-                                  <span style={{ fontSize:10, color:'#8A9BB0' }}>{h.creator} · {h.platform}</span>
+                                  <span style={{ fontSize:10, color:'#2A4A5E' }}>{h.creator} · {h.platform}</span>
                                 </div>
-                                <div style={{ fontSize:12, color:'#0E6A80', lineHeight:1.4 }}>{h.hook}</div>
-                                <div style={{ fontSize:10, color:'#8A9BB0', marginTop:3 }}>saved {ci7TimeAgo(h.savedAt)}</div>
+                                <div style={{ fontSize:12, color:'#2A4A5E', lineHeight:1.4 }}>{h.hook}</div>
+                                <div style={{ fontSize:10, color:'#2A4A5E', marginTop:3 }}>saved {ci7TimeAgo(h.savedAt)}</div>
                               </div>
                               <div style={{ display:'flex', gap:6, flexShrink:0 }}>
-                                {h.url && <a href={h.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#5A7A99', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
+                                {h.url && <a href={h.url} target="_blank" rel="noreferrer" style={{ fontSize:10, color:'#6E6E6E', textDecoration:'none', padding:'3px 4px' }}>↗</a>}
                                 <button onClick={() => removeFromHookBank(h.savedAt)} style={{ fontSize:10, color:'#A32D2D', background:'#FDEAEA', border:'1px solid #F5C6C6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✕</button>
                               </div>
                             </div>
@@ -11192,11 +11192,11 @@ function ExportTab({ data, year }) {
                 <SectionHeader title="Creator Watch" fetchedAt={ciCreators.fetchedAt} onRefresh={() => { setCiCreators({ data:null, loading:false, error:null, fetchedAt:null }); fetchCI('creators'); }} loading={ciCreators.loading} />
 
                 {/* Keyword alerts */}
-                <div style={{ background:'#F7F9FC', border:'1px solid #CDD4E0', borderRadius:8, padding:'12px 14px', marginBottom:16 }}>
-                  <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8 }}>🔔 keyword alerts</div>
+                <div style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:8, padding:'12px 14px', marginBottom:16 }}>
+                  <div style={{ fontSize:10, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:700, marginBottom:8 }}>🔔 keyword alerts</div>
                   <div style={{ display:'flex', gap:8, marginBottom:8 }}>
-                    <input value={ciKeywordInput} onChange={e => setCiKeywordInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addKeyword(); }} placeholder="add a keyword, e.g. budget travel" style={{ flex:1, fontSize:11, color:'#1A2744', border:'1px solid #CDD4E0', borderRadius:6, padding:'7px 10px', fontFamily:'inherit' }} />
-                    <button onClick={addKeyword} style={{ fontSize:11, color:'#1A2744', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>add</button>
+                    <input value={ciKeywordInput} onChange={e => setCiKeywordInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addKeyword(); }} placeholder="add a keyword, e.g. budget travel" style={{ flex:1, fontSize:11, color:'#0A0A0A', border:'1px solid #E3DCC3', borderRadius:6, padding:'7px 10px', fontFamily:'inherit' }} />
+                    <button onClick={addKeyword} style={{ fontSize:11, color:'#0A0A0A', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:6, padding:'7px 14px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>add</button>
                   </div>
                   {ciKeywords.length > 0 ? (
                     <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -11207,24 +11207,24 @@ function ExportTab({ data, year }) {
                       ))}
                     </div>
                   ) : (
-                    <div style={{ fontSize:11, color:'#8A9BB0' }}>no keywords yet — matching creators get highlighted below</div>
+                    <div style={{ fontSize:11, color:'#2A4A5E' }}>no keywords yet — matching creators get highlighted below</div>
                   )}
                 </div>
 
                 {/* Starred creators pinned at top */}
                 {starredCreators.length > 0 && (
                   <div style={{ marginBottom:20 }}>
-                    <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, marginBottom:10 }}>⭐ Starred Creators</div>
+                    <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, marginBottom:10 }}>⭐ Starred Creators</div>
                     <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr', gap:10 }}>
                       {starredCreators.map((creator, i) => (
                         <CreatorCard key={i} creator={creator} isFav={true} alerts={creatorKeywordHits(creator)} onToggle={() => toggleFavorite(creator)} onSave={() => saveIdea({ source:'Creator', title: creator.name, angle: creator.why_watch || creator.content_style, url: creator.profile_url || `https://tiktok.com/${creator.handle}` })} />
                       ))}
                     </div>
-                    <div style={{ height:1, background:'#CDD4E0', margin:'16px 0' }} />
+                    <div style={{ height:1, background:'#E3DCC3', margin:'16px 0' }} />
                   </div>
                 )}
 
-                <div style={{ fontSize:9, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, marginBottom:10 }}>🔍 Discover</div>
+                <div style={{ fontSize:9, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2.5px', fontWeight:700, marginBottom:10 }}>🔍 Discover</div>
                 {ciCreators.error && <div style={{ color:'#A32D2D', fontSize:12, padding:'12px 0' }}>Error: {ciCreators.error}</div>}
                 {ciCreators.loading && [1,2,3,4,5,6].map(i => <PulsingCard key={i} height={120} />)}
                 {!ciCreators.loading && discoveryCreators.length > 0 && (
@@ -11235,14 +11235,14 @@ function ExportTab({ data, year }) {
                   </div>
                 )}
                 {!ciCreators.loading && (!ciCreators.data || ciCreators.data.length === 0) && !ciCreators.error && (
-                  <div style={{ textAlign:'center', padding:'32px 0', color:'#5A7A99', fontSize:13 }}>Click Refresh to load creator recommendations</div>
+                  <div style={{ textAlign:'center', padding:'32px 0', color:'#6E6E6E', fontSize:13 }}>Click Refresh to load creator recommendations</div>
                 )}
               </Card>
 
               {/* ── SECTION D: Ideas Kanban ── */}
               <Card>
                 <div style={{ marginBottom:20 }}>
-                  <div style={{ fontSize:11, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600, marginBottom:12 }}>💡 Ideas Board</div>
+                  <div style={{ fontSize:11, color:'#0A0A0A', textTransform:'uppercase', letterSpacing:'2px', fontWeight:600, marginBottom:12 }}>💡 Ideas Board</div>
                   {/* Stats bar */}
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:10, marginBottom:4 }}>
                     {[
@@ -11251,9 +11251,9 @@ function ExportTab({ data, year }) {
                       { label:'This Week', value: thisWeekCreated, highlight:false },
                       { label:'Videos Created', value: ciIdeas.created.length, highlight:true },
                     ].map(({ label, value, highlight }) => (
-                      <div key={label} style={{ background: highlight ? '#1A2744' : '#F7F9FC', borderRadius:8, padding:'12px 14px', textAlign:'center', border:`1px solid ${highlight ? '#1A2744' : '#CDD4E0'}` }}>
-                        <div style={{ fontSize: highlight ? 24 : 20, fontWeight:800, color: highlight ? '#88EAF6' : '#1A2744', lineHeight:1 }}>{value}</div>
-                        <div style={{ fontSize:10, color: highlight ? '#8CA0C8' : '#5A7A99', marginTop:4, textTransform:'uppercase', letterSpacing:'1px' }}>{label}</div>
+                      <div key={label} style={{ background: highlight ? '#2A4A5E' : '#FFFFFF', borderRadius:8, padding:'12px 14px', textAlign:'center', border:`1px solid ${highlight ? '#2A4A5E' : '#E3DCC3'}` }}>
+                        <div style={{ fontSize: highlight ? 24 : 20, fontWeight:800, color: highlight ? '#88EAF6' : '#0A0A0A', lineHeight:1 }}>{value}</div>
+                        <div style={{ fontSize:10, color: highlight ? '#C9D6E2' : '#6E6E6E', marginTop:4, textTransform:'uppercase', letterSpacing:'1px' }}>{label}</div>
                       </div>
                     ))}
                   </div>
@@ -11262,32 +11262,32 @@ function ExportTab({ data, year }) {
                 {/* Kanban columns */}
                 <div style={{ display:'grid', gridTemplateColumns:isMobile?'1fr':'1fr 1fr 1fr', gap:14 }}>
                   {[
-                    { key:'saved', label:'📥 Saved', color:'#4A6080' },
-                    { key:'prioritized', label:'🎯 Prioritized', color:'#0E6A80' },
+                    { key:'saved', label:'📥 Saved', color:'#6E6E6E' },
+                    { key:'prioritized', label:'🎯 Prioritized', color:'#2A4A5E' },
                     { key:'created', label:'✅ Created', color:'#1A7A40' },
                   ].map(({ key, label, color }) => (
-                    <div key={key} style={{ background:'#F7F9FC', borderRadius:8, padding:'12px', border:'1px solid #CDD4E0' }}>
+                    <div key={key} style={{ background:'#FFFFFF', borderRadius:8, padding:'12px', border:'1px solid #E3DCC3' }}>
                       <div style={{ fontSize:11, fontWeight:700, color, marginBottom:10, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                         <span>{label}</span>
-                        <span style={{ background:'#FFFFFF', border:'1px solid #CDD4E0', borderRadius:20, padding:'1px 8px', fontSize:10, color:'#5A7A99', fontWeight:600 }}>{ciIdeas[key].length}</span>
+                        <span style={{ background:'#FFFFFF', border:'1px solid #E3DCC3', borderRadius:20, padding:'1px 8px', fontSize:10, color:'#6E6E6E', fontWeight:600 }}>{ciIdeas[key].length}</span>
                       </div>
                       <div className="ci-idea-col" style={{ display:'flex', flexDirection:'column', gap:8 }}>
                         {ciIdeas[key].length === 0 && (
-                          <div style={{ textAlign:'center', padding:'20px 0', color:'#8A9BB0', fontSize:12 }}>
+                          <div style={{ textAlign:'center', padding:'20px 0', color:'#2A4A5E', fontSize:12 }}>
                             {key === 'saved' ? 'Save ideas from above' : key === 'prioritized' ? 'Promote ideas here' : 'Mark ideas as done'}
                           </div>
                         )}
                         {ciIdeas[key].map(idea => (
-                          <div key={idea.id} style={{ background:'#FFFFFF', borderRadius:6, padding:'10px 12px', border:'1px solid #CDD4E0' }}>
+                          <div key={idea.id} style={{ background:'#FFFFFF', borderRadius:6, padding:'10px 12px', border:'1px solid #E3DCC3' }}>
                             <div style={{ fontSize:10, color:'#88EAF6', fontWeight:700, marginBottom:4 }}>{idea.source}</div>
-                            <div style={{ fontSize:12, fontWeight:600, color:'#1A2744', marginBottom:4, lineHeight:1.3 }}>{idea.title}</div>
-                            {idea.angle && <div style={{ fontSize:11, color:'#4A6080', marginBottom:8, lineHeight:1.4, fontStyle:'italic' }}>{idea.angle.slice(0,100)}{idea.angle.length > 100 ? '...' : ''}</div>}
+                            <div style={{ fontSize:12, fontWeight:600, color:'#0A0A0A', marginBottom:4, lineHeight:1.3 }}>{idea.title}</div>
+                            {idea.angle && <div style={{ fontSize:11, color:'#6E6E6E', marginBottom:8, lineHeight:1.4, fontStyle:'italic' }}>{idea.angle.slice(0,100)}{idea.angle.length > 100 ? '...' : ''}</div>}
                             <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                              {key === 'saved' && <button onClick={() => moveIdea(idea.id, 'saved', 'prioritized')} style={{ fontSize:9, color:'#0E6A80', background:'#EEF9FD', border:'1px solid #88EAF6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>🎯 Prioritize</button>}
+                              {key === 'saved' && <button onClick={() => moveIdea(idea.id, 'saved', 'prioritized')} style={{ fontSize:9, color:'#2A4A5E', background:'#F1ECDA', border:'1px solid #88EAF6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>🎯 Prioritize</button>}
                               {key === 'prioritized' && <button onClick={() => moveIdea(idea.id, 'prioritized', 'created')} style={{ fontSize:9, color:'#1A7A40', background:'#E6F8EF', border:'1px solid #A8D5B5', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✅ Mark created</button>}
                               {key !== 'created' && key !== 'prioritized' && null}
                               {key === 'created' && <span style={{ fontSize:9, color:'#1A7A40', fontWeight:700 }}>🎉 Done!</span>}
-                              {idea.url && <a href={idea.url} target="_blank" rel="noreferrer" style={{ fontSize:9, color:'#5A7A99', padding:'3px 4px', textDecoration:'none' }}>↗ Source</a>}
+                              {idea.url && <a href={idea.url} target="_blank" rel="noreferrer" style={{ fontSize:9, color:'#6E6E6E', padding:'3px 4px', textDecoration:'none' }}>↗ Source</a>}
                               <button onClick={() => deleteIdea(idea.id, key)} style={{ fontSize:9, color:'#A32D2D', background:'#FDEAEA', border:'1px solid #F5C6C6', borderRadius:5, padding:'3px 8px', cursor:'pointer', fontFamily:'inherit', fontWeight:700 }}>✕</button>
                             </div>
                           </div>
