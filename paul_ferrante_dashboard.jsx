@@ -344,8 +344,8 @@ const DELIV_STATUSES = ['Pitching','Scripting','In Production','Awaiting Approva
 const EMPTY_DEAL = { b:'', v:'', p:'TikTok', s:'Pitching', d:'TBC', del:'', col:'#A8D8E0', nextStep:'', remindDate:'', remindScheduledFor:'', remindEmailId:'', videoLink:'', invoiceUrl:'' };
 
 // ── Shared components ─────────────────────────────────────────
-function Card({ children, style }) {
-  return <div style={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, padding:20, boxShadow:'0 1px 3px rgba(26,39,68,0.06)', ...style }}>{children}</div>;
+function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ background:CARD, border:`1px solid ${BDR}`, borderRadius:8, padding:20, boxShadow:'0 1px 3px rgba(26,39,68,0.06)', cursor: onClick ? 'pointer' : 'default', ...style }}>{children}</div>;
 }
 function Label({ children }) {
   return <div style={{ fontSize:10, color:'#1A2744', textTransform:'uppercase', letterSpacing:'2.5px', marginBottom:14, fontWeight:700 }}>{children}</div>;
@@ -3227,14 +3227,15 @@ function SecCtl({ collapsed, onToggle, onMove, isFirst, isLast }) {
     </span>
   );
 }
-function DeepCard({ tab, setTab, title, style, children }) {
+function DeepCard({ tab, setTab, title, style, children, onOpen }) {
   const [hov, setHov] = useState(false);
   const hoverStyle = hov ? { boxShadow:'0 6px 20px rgba(26,39,68,0.14)', transform:'translateY(-1px)', borderColor: BLUE } : {};
+  const activate = () => { if (onOpen) onOpen(); else if (setTab && tab) setTab(tab); };
   return (
     <Card style={{ cursor:'pointer', transition:'box-shadow .18s ease, transform .18s ease, border-color .18s ease', ...hoverStyle, ...style }}>
       <div role="link" tabIndex={0} title={title || (tab ? `open ${tab}` : 'open')}
-        onClick={() => { if (setTab && tab) setTab(tab); }}
-        onKeyDown={e => { if (e.key === 'Enter' && setTab && tab) setTab(tab); }}
+        onClick={activate}
+        onKeyDown={e => { if (e.key === 'Enter') activate(); }}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
         style={{ outline:'none' }}>
         {children}
@@ -4050,6 +4051,24 @@ export default function App() {
   const [dealPlatform, setDealPlatform] = useState('All');
   const [dealStage,    setDealStage]    = useState('All');
   const [dealModal,    setDealModal]    = useState(null);
+  // Revenue drill-down (Revenue tab): same shape/pattern as the Books expense
+  // drill-down. scope 'paid' = paid 2026 deals (sums to Total Earned);
+  // scope 'pipeline' = Pitching/Awaiting Approval/Delivered deals (sums to
+  // Active Pipeline). Persisted to sessionStorage and holding the cloud-sync
+  // poll off while open, exactly like the Books drills.
+  function validRevenueDrill(v) {
+    if (!v || typeof v !== 'object') return null;
+    const scope = v.scope === 'pipeline' ? 'pipeline' : 'paid';
+    if (v.view === 'cats') return { view:'cats', scope };
+    if (v.view === 'list' && ['brand','stage','month','quarter'].includes(v.mode) && typeof v.key === 'string' && v.key
+        && typeof v.label === 'string') return { view:'list', scope, mode: v.mode, key: v.key, label: v.label };
+    return null;
+  }
+  const [revDrill, setRevDrillRaw] = useState(() => validRevenueDrill(_ssGet('revenue_drill', null)));
+  function setRevDrill(v) { _ssSet('revenue_drill', v); setRevDrillRaw(validRevenueDrill(v)); }
+  useEffect(() => { setBooksUiBusy(!!revDrill, 'revenue-drill'); }, [revDrill]);
+  useEffect(() => () => setBooksUiBusy(false, 'revenue-drill'), []);
+  const openRevenueDrill = (scope) => { setRevDrill({ view:'cats', scope }); setTab('revenue'); };
   // ── Deals board enhancements: board/calendar view, bulk select, per-deal tasks ──
   const [dealView,     setDealView]     = useState('board');   // 'board' | 'calendar'
   const [selDeals,     setSelDeals]     = useState([]);        // bulk-selected deal ids
@@ -4674,7 +4693,8 @@ export default function App() {
       return (ym && ym.y === y && ym.m === m) ? s + dealAmount(d.v) : s;
     }, 0),
   }));
-  const pipelineValue = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s))).reduce((s, d) => s + dealAmount(d.v), 0);
+  const pipelineDeals = deals.filter(d => ['Pitching','Awaiting Approval','Delivered'].includes(canonStage(d.s)));
+  const pipelineValue = pipelineDeals.reduce((s, d) => s + dealAmount(d.v), 0);
   const biggestDeal   = paidDeals.reduce((best, d) => (d.v || 0) > (best?.v || 0) ? d : best, null);
   const filteredComments = commFilter === 'positive' ? COMMENTS.filter(c => c.pos) : commFilter === 'questions' ? COMMENTS.filter(c => !c.pos) : COMMENTS;
 
@@ -5108,7 +5128,7 @@ function _ssSet(key, value) {
 // ─────────────────────────────────────────────────────────────────────────────
 // BooksTab — top-level component
 // ─────────────────────────────────────────────────────────────────────────────
-function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
+function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0, onOpenDeal }) {
   const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
   // Expense drill-down: null = off (normal sub-tabs),
@@ -5133,6 +5153,23 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   // the nested drawer/profit-panel flags can't clobber it.)
   useEffect(() => { setBooksUiBusy(!!drill, 'drill'); }, [drill]);
   useEffect(() => () => setBooksUiBusy(false, 'drill'), []);
+  // Revenue drill-down: same shape/pattern as the expense drill-down, but the
+  // universe is paid deals for the Books year (sums exactly to Revenue YTD).
+  // null = off, {view:'cats'} = breakdown cards, {view:'list', mode, key,
+  // label} = deal list filtered to one group. Persisted to sessionStorage and
+  // holding the sync poll off, exactly like the expense drill-down.
+  const REV_DRILL_MODE_IDS = ['brand', 'stage', 'month', 'quarter'];
+  function validRevDrill(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (v.view === 'cats') return { view: 'cats' };
+    if (v.view === 'list' && REV_DRILL_MODE_IDS.includes(v.mode) && typeof v.key === 'string' && v.key
+        && typeof v.label === 'string') return { view: 'list', mode: v.mode, key: v.key, label: v.label };
+    return null;
+  }
+  const [revDrill, setRevDrillRaw] = useState(() => validRevDrill(_ssGet('books_rev_drill', null)));
+  function setRevDrill(v) { _ssSet('books_rev_drill', v); setRevDrillRaw(validRevDrill(v)); }
+  useEffect(() => { setBooksUiBusy(!!revDrill, 'rev-drill'); }, [revDrill]);
+  useEffect(() => () => setBooksUiBusy(false, 'rev-drill'), []);
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -5178,6 +5215,11 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   // never duplicated. Pipeline / Awaiting / Delivered / Not Paid never count.
   const totalRevenue  = paidSumForYear(storeDeals, year);
   const pipelineTotal = pipelineSum(storeDeals);
+  // Revenue drill-down universe: the raw paid deals behind Revenue YTD, so the
+  // breakdown sums exactly to the card. Raw store schema (not the projection)
+  // so tapping a deal can open the real deal modal via onOpenDeal.
+  const revDeals = (dashboardDeals || []).filter((d) =>
+    canonStage(d.s) === 'Paid' && dealYear(d.d, new Date().getFullYear()) === year);
   // "Needs review" matches the Inbox queue: anything not yet marked reviewed.
   // (Previously this counted flagged expenses, which include reviewed rows.)
   const flaggedCount  = data.expenses.filter((r) => String(r.reviewed).toLowerCase() !== 'true').length;
@@ -5222,7 +5264,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
           <div style={{ fontSize:11, color:BOOKS.muted, letterSpacing:'2px', textTransform:'uppercase', marginTop:2 }}>RGG Media · {year}</div>
         </div>
         <select
-          value={year} onChange={(e) => { setYear(Number(e.target.value)); setDrill(null); }}
+          value={year} onChange={(e) => { setYear(Number(e.target.value)); setDrill(null); setRevDrill(null); }}
           style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, cursor:'pointer' }}
         >
           {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -5239,8 +5281,9 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
       {/* ── KPI strip ────────────────────────────────────────────── */}
       <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
         <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink"
-          onClick={() => setDrill({ view:'cats' })} clickable hint="tap for category breakdown" />
-        <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean" />
+          onClick={() => { setRevDrill(null); setDrill({ view:'cats' }); }} clickable hint="tap for category breakdown" />
+        <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean"
+          onClick={() => { setDrill(null); setRevDrill({ view:'cats' }); }} clickable hint="tap for deal breakdown" />
         <KpiCard label="Net"          value={fmtMoney(totalRevenue - totalExpenses)} tone={totalRevenue >= totalExpenses ? 'green' : 'red'} />
         <KpiCard
           label="Needs review"
@@ -5267,10 +5310,27 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
         ))}
       </div>
 
-      {/* ── Sub-tab body (or expense drill-down) ─────────────────── */}
+      {/* ── Sub-tab body (or expense drill-down, or revenue drill-down) ─── */}
       {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
       {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
-      {!loading && drill !== null && (
+      {!loading && revDrill !== null && (
+        <>
+          {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
+          {revDrill.view === 'cats' ? (
+            <DealBreakdown deals={revDeals} title="revenue breakdown"
+              headline={fmtMoney(totalRevenue)} sub={`${year} · paid deals`}
+              onPick={(mode, key, label) => setRevDrill({ view:'list', mode, key, label })}
+              onBack={() => setRevDrill(null)} backLabel="books" isMobile={isMobile}
+              storageKey="books_rev_drill_mode" />
+          ) : (
+            <DealDrillList deals={revDeals} mode={revDrill.mode} groupKey={revDrill.key} label={revDrill.label}
+              onBack={() => setRevDrill({ view:'cats' })}
+              onOpenDeal={(d) => { if (onOpenDeal) onOpenDeal(d); }}
+              isMobile={isMobile} />
+          )}
+        </>
+      )}
+      {!loading && revDrill === null && drill !== null && (
         <>
           {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
           {drill.view === 'cats' ? (
@@ -5295,7 +5355,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
           )}
         </>
       )}
-      {!loading && drill === null && (
+      {!loading && revDrill === null && drill === null && (
         <>
           {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
           {!error && (
@@ -5422,6 +5482,146 @@ function CategoryBreakdown({ expenses, onPick, onBack, isMobile }) {
           <div style={{ fontSize:12, color:BOOKS.muted, padding:'12px 0' }}>no expenses this year.</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DealBreakdown — revenue drill-down level 1: per-group totals/cards.
+// Mirrors CategoryBreakdown (expense drill-down). Entered by tapping a revenue
+// summary card. Grouping modes: brand, deal stage, month, or quarter. Tapping
+// a card drills into the filtered deal list, and tapping a deal row opens the
+// existing deal detail modal — the full drill path is card → group → deal.
+// Uses the main-app theme (deals are a main-app concept shared by the revenue
+// tab and Books). Lowercase copy throughout. No <label> anywhere — rows are
+// plain divs with onClick (the label-activation bug wiped this pattern once).
+// ─────────────────────────────────────────────────────────────────────────────
+const DEAL_DRILL_MODES = [
+  { id:'brand',   label:'by brand' },
+  { id:'stage',   label:'by deal stage' },
+  { id:'month',   label:'by month' },
+  { id:'quarter', label:'by quarter' },
+];
+function dealDrillGroupKey(d, mode, fbYear) {
+  if (mode === 'stage') return canonStage(d.s) || 'Pitching';
+  if (mode === 'month' || mode === 'quarter') {
+    const ym = dealYearMonth(d.d, fbYear);
+    if (!ym) return 'no date';
+    const mm = String(ym.m + 1).padStart(2, '0');
+    if (mode === 'month') return ym.y + '-' + mm;
+    return ym.y + '-Q' + (Math.floor(ym.m / 3) + 1);
+  }
+  return (d.b || '').trim() || 'unknown brand';
+}
+function DealBreakdown({ deals, title, headline, sub, onPick, onBack, backLabel, isMobile, storageKey }) {
+  // Grouping mode persists across remounts (same sessionStorage pattern as the
+  // expense drill-down) so a background refresh can't reset the toggle.
+  const [mode, setModeRaw] = useState(() => {
+    const m = _ssGet(storageKey, 'brand');
+    return DEAL_DRILL_MODES.some(x => x.id === m) ? m : 'brand';
+  });
+  function setMode(m) { _ssSet(storageKey, m); setModeRaw(m); }
+  const fbYear = new Date().getFullYear();
+  const groups = useMemo(() => {
+    const m = {};
+    (deals || []).forEach((d) => {
+      const k = dealDrillGroupKey(d, mode, fbYear);
+      if (!m[k]) m[k] = { key: k, total: 0, count: 0 };
+      m[k].total += dealAmount(d.v);
+      m[k].count += 1;
+    });
+    const arr = Object.values(m);
+    // Time modes read newest-first; brand/stage modes read biggest-first.
+    if (mode === 'month' || mode === 'quarter') arr.sort((a, b) => b.key.localeCompare(a.key));
+    else arr.sort((a, b) => b.total - a.total);
+    return arr;
+  }, [deals, mode, fbYear]);
+  const grandTotal = groups.reduce((s, g) => s + g.total, 0);
+  const grandCount = groups.reduce((s, g) => s + g.count, 0);
+  return (
+    <div>
+      <div style={{ marginBottom:12, fontSize:12 }}>
+        <button onClick={onBack}
+          style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← {backLabel || 'back'}</button>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, margin:'0 0 4px' }}>
+        <div style={{ fontSize:13, fontWeight:700, color:TEXT }}>{title}</div>
+        <div style={{ display:'flex', gap:4, background:CARD, border:`1px solid ${BDR}`, borderRadius:99, padding:3 }}>
+          {DEAL_DRILL_MODES.map((dm) => (
+            <button key={dm.id} onClick={() => setMode(dm.id)}
+              style={{
+                background: mode === dm.id ? TEXT : 'transparent',
+                color: mode === dm.id ? '#FFFFFF' : SLATE,
+                border:'none', borderRadius:99, padding:'5px 12px', fontSize:11, fontWeight:600,
+                cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap',
+              }}>{dm.label}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ fontSize:12, color:SLATE, marginBottom:12 }}>
+        {headline} <span style={{ color:'#94A3B8' }}>· {grandCount} deal{grandCount === 1 ? '' : 's'}{sub ? ` · ${sub}` : ''}</span>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:12 }}>
+        {groups.map((g) => (
+          <div key={g.key} onClick={() => onPick(mode, g.key, g.key)}
+            style={{
+              background:CARD, border:`1px solid ${BDR}`, borderRadius:12, padding:'14px 16px',
+              cursor:'pointer', minHeight:74,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = TEXT; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = BDR; }}>
+            <div style={{ fontSize:10, color:SLATE, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{g.key}</div>
+            <div style={{ fontSize:22, fontWeight:800, color:TEXT, letterSpacing:'-0.5px' }}>{usd(g.total)}</div>
+            <div style={{ fontSize:10, color:SLATE, marginTop:4 }}>{g.count} deal{g.count === 1 ? '' : 's'} · tap to view</div>
+          </div>
+        ))}
+        {groups.length === 0 && (
+          <div style={{ fontSize:12, color:'#94A3B8', padding:'12px 0' }}>no deals here.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DealDrillList — revenue drill-down level 2: deals filtered to one group.
+// Tapping a row opens the existing deal detail modal via onOpenDeal. Rows are
+// plain divs (never <label>), whole-row tap target, no nested buttons.
+// ─────────────────────────────────────────────────────────────────────────────
+function DealDrillList({ deals, mode, groupKey, label, onBack, onOpenDeal, isMobile }) {
+  const fbYear = new Date().getFullYear();
+  const rows = useMemo(() => (deals || [])
+    .filter((d) => dealDrillGroupKey(d, mode, fbYear) === groupKey)
+    .sort((a, b) => dealAmount(b.v) - dealAmount(a.v)),
+    [deals, mode, groupKey, fbYear]);
+  const total = rows.reduce((s, d) => s + dealAmount(d.v), 0);
+  return (
+    <div>
+      <div style={{ marginBottom:12, fontSize:12, display:'flex', alignItems:'center', gap:6 }}>
+        <button onClick={onBack}
+          style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← back</button>
+        <span style={{ color:'#94A3B8' }}>/</span>
+        <span style={{ fontWeight:700, color:TEXT }}>{label}</span>
+      </div>
+      <div style={{ fontSize:12, color:SLATE, marginBottom:12 }}>
+        {rows.length} deal{rows.length === 1 ? '' : 's'} · {usd(total)}
+      </div>
+      {rows.map((d) => (
+        <div key={d.id} onClick={() => onOpenDeal(d)}
+          style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 0', borderBottom:`1px solid ${BDR}`, cursor:'pointer', gap:12 }}>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:isMobile ? 13 : 14, fontWeight:600, marginBottom:4, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.b || 'unknown brand'}</div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+              <Tag color={statusColor(canonStage(d.s))}>{canonStage(d.s)}</Tag>
+              <span style={{ fontSize:11, color:'#64748B' }}>{d.p}{d.d ? ` · ${d.d}` : ''}</span>
+            </div>
+          </div>
+          <div style={{ fontSize:isMobile ? 16 : 20, fontWeight:800, color:TEXT, flexShrink:0, marginLeft:12 }}>{usd(dealAmount(d.v))}</div>
+        </div>
+      ))}
+      {rows.length === 0 && (
+        <div style={{ fontSize:12, color:'#94A3B8', padding:'12px 0' }}>no deals in this group.</div>
+      )}
     </div>
   );
 }
@@ -7907,7 +8107,7 @@ function ExportTab({ data, year }) {
                 </div>
                 {!ovC[id] && (
                 <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr',gap:gutter }}>
-                  <DeepCard tab="revenue" setTab={setTab} title="open revenue" style={{ borderLeft:`3px solid ${BLUE}` }}>
+                  <DeepCard tab="revenue" setTab={setTab} title="open revenue breakdown" onOpen={() => openRevenueDrill('paid')} style={{ borderLeft:`3px solid ${BLUE}` }}>
                     <div style={{ fontSize:10,color:'#0E6A80',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Total Earned (2026)</div>
                     <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#0E6A80' }}>{usd(totalRevenue2026)}</div>
                     <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{paidDeals2026.length} deals</div>
@@ -7921,13 +8121,13 @@ function ExportTab({ data, year }) {
                       </div>
                     )}
                   </DeepCard>
-                  <DeepCard tab="deals" setTab={setTab} title="open deals" style={{ borderLeft:`3px solid ${YELL}` }}>
+                  <DeepCard tab="revenue" setTab={setTab} title="open pipeline breakdown" onOpen={() => openRevenueDrill('pipeline')} style={{ borderLeft:`3px solid ${YELL}` }}>
                     <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
                     <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
                     <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{deals.filter(d=>d.s==='Pitching').length} pitches</div>
                   </DeepCard>
                   {!isMobile && (
-                    <DeepCard tab="deals" setTab={setTab} title="open deals" style={{ borderLeft:'3px solid #5DBF8A' }}>
+                    <DeepCard tab="deals" setTab={setTab} title="open deal" onOpen={() => { if (biggestDeal) setDealModal({ ...biggestDeal }); }} style={{ borderLeft:'3px solid #5DBF8A' }}>
                       <div style={{ fontSize:10,color:'#1A7A40',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Biggest Deal</div>
                       <div style={{ fontSize:36,fontWeight:800,color:'#1A2744' }}>{biggestDeal ? usd(biggestDeal.v) : '$0'}</div>
                       <div style={{ fontSize:11,color:'#1A7A40',marginTop:6 }}>{biggestDeal ? biggestDeal.b : 'no paid deals yet'}</div>
@@ -8441,6 +8641,10 @@ function ExportTab({ data, year }) {
           let bestI = 0;
           rev26.forEach((d, i) => { if (((d || {}).r || 0) > ((rev26[bestI] || {}).r || 0)) bestI = i; });
           const best26 = rev26[bestI] || { m:'—', r:0 };
+          // Best-month drill target: YYYY-MM key matching the deal month grouping.
+          const bestYM = REVENUE_MONTHS[idx26r[bestI]] || { y:2026, m:0 };
+          const bestMonthKey = bestYM.y + '-' + String(bestYM.m + 1).padStart(2, '0');
+          const bestMonthLabel = MONTH_ABBR[bestYM.m] + ' ' + bestYM.y;
           // chart rows: 2026 solid; dashed overlay = prior 4-month period aligned by index
           const revRows = idx26r.map((ri, k) => ({
             m: (revenueByMonth[ri] || {}).m || '',
@@ -8461,17 +8665,40 @@ function ExportTab({ data, year }) {
           const filtStyle = { background:'#fff', border:`1px solid ${BDR}`, borderRadius:8, padding:'8px 10px', fontSize:12, fontFamily:'inherit', color:TEXT, outline:'none' };
           return (
           <div style={{ display:'flex',flexDirection:'column',gap:gutter }}>
+            {revDrill ? (() => {
+              const isPipe = revDrill.scope === 'pipeline';
+              const list = isPipe ? pipelineDeals : paidDeals2026;
+              const headline = isPipe ? usd(pipelineValue) : usd(totalRevenue2026);
+              const sub = isPipe ? `${pipelineDeals.length} open deals` : `${paidDeals2026.length} paid deals · 2026`;
+              return revDrill.view === 'cats' ? (
+                <DealBreakdown deals={list} title={isPipe ? 'pipeline breakdown' : 'revenue breakdown'}
+                  headline={headline} sub={sub}
+                  onPick={(mode, key, label) => setRevDrill({ view:'list', scope: revDrill.scope, mode, key, label })}
+                  onBack={() => setRevDrill(null)} backLabel="revenue" isMobile={isMobile}
+                  storageKey="revenue_drill_mode" />
+              ) : (
+                <DealDrillList deals={list} mode={revDrill.mode} groupKey={revDrill.key} label={revDrill.label}
+                  onBack={() => setRevDrill({ view:'cats', scope: revDrill.scope })}
+                  onOpenDeal={(d) => setDealModal({ ...d })}
+                  isMobile={isMobile} />
+              );
+            })() : (
+            <>
             <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr 1fr':'1fr 1fr 1fr 1fr',gap:gutter }}>
               {[
-                { lbl:'Total Earned (2026)',  val:usd(totalRevenue2026),           color:BLUE,      sub:`${paidDeals2026.length} paid deals` },
-                { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${deals.filter(d=>d.s==='Pitching').length} pitches` },
+                { lbl:'Total Earned (2026)',  val:usd(totalRevenue2026),           color:BLUE,      sub:`${paidDeals2026.length} paid deals`,
+                  onClick:() => setRevDrill({ view:'cats', scope:'paid' }), hint:'tap for deal breakdown' },
+                { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${deals.filter(d=>d.s==='Pitching').length} pitches`,
+                  onClick:() => setRevDrill({ view:'cats', scope:'pipeline' }), hint:'tap for deal breakdown' },
                 { lbl:'Avg Deal Value',       val:usd(totalRevenue2026/Math.max(paidDeals2026.length,1)), color:'#a78bfa', sub:'paid deals only' },
-                { lbl:'Best Month (2026)',    val:usd(best26.r),                  color:'#4ade80', sub:`${best26.m} 2026` },
-              ].map(({ lbl, val, color, sub }) => (
-                <Card key={lbl} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
+                { lbl:'Best Month (2026)',    val:usd(best26.r),                  color:'#4ade80', sub:`${best26.m} 2026`,
+                  onClick:() => setRevDrill({ view:'list', scope:'paid', mode:'month', key:bestMonthKey, label:bestMonthLabel }), hint:'tap to see deals' },
+              ].map(({ lbl, val, color, sub, onClick, hint }) => (
+                <Card key={lbl} onClick={onClick} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
                   <div style={{ fontSize:9,color,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
                   <div style={{ fontSize:isMobile?20:26,fontWeight:800,color }}>{val}</div>
                   {sub && <div style={{ fontSize:11,color:SLATE,marginTop:6 }}>{sub}</div>}
+                  {hint && <div style={{ fontSize:10,color:'#94A3B8',marginTop:4 }}>{hint}</div>}
                 </Card>
               ))}
             </div>
@@ -8576,6 +8803,8 @@ function ExportTab({ data, year }) {
                 </div>
               ))}
             </Card>
+              </>
+            )}
           </div>
           );
         })()}
@@ -11048,7 +11277,7 @@ function ExportTab({ data, year }) {
 
         {/* ══ REALITY TV CASTING ══════════════════════════════════ */}
         {tab === 'reality-casting' && <RealityCastingTab />}
-        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} />}
+        {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} onOpenDeal={(d) => setDealModal({ ...d })} />}
         {/* ══ DISCOVERY ════════════════════════════════ */}
         {tab === 'discovery' && <DiscoveryTab crm={crm} deals={deals} showToast={showToast} isMobile={isMobile} />}
         {tab === 'brand' && <BrandGuidelinesTab />}
