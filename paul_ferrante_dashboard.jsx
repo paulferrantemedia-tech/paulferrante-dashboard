@@ -4971,6 +4971,30 @@ function parseLinkedDeals(row) {
   } catch (_) { return []; }
 }
 function linkedDealCount(r) { return parseLinkedDeals(r).length; }
+// Every deal id an expense is tied to: the new linked_deals JSON snapshots
+// plus the legacy single-link fields (auto/linked/linked_2). Used by the
+// campaign profitability view so nothing linked the old way is missed.
+function expenseDealIds(row) {
+  const ids = [];
+  parseLinkedDeals(row).forEach((x) => { if (x.deal_id && !ids.includes(x.deal_id)) ids.push(x.deal_id); });
+  ['linked_deal_id', 'linked_deal_id_2', 'auto_linked_deal_id'].forEach((k) => {
+    const v = String((row && row[k]) || '').trim();
+    if (v && !ids.includes(v)) ids.push(v);
+  });
+  return ids;
+}
+function expensesForDeal(expenses, dealId) {
+  return (expenses || []).filter((r) => expenseDealIds(r).includes(dealId));
+}
+// Tax category is stored locally (never blank — getTaxCategory falls back to
+// 'other'), so "missing" means no explicit tag was ever set.
+function hasExplicitTaxCategory(row) {
+  if (!row) return false;
+  const v = taxCatMap()[row.expense_id] || row.tax_category || '';
+  return TAX_CATEGORIES.includes(v);
+}
+function rowHasReceipt(r) { return !!((r && r.receipt_url) || getReceiptPhoto(r && r.expense_id)); }
+function rowHasPurpose(r) { return String((r && r.business_purpose) || '').trim().length >= 10; }
 function linkedVideoCount(r) { return parseLinkedVideos(r).length; }
 function fmtMoney(n, ccy = 'USD') {
   if (n === '' || n == null || isNaN(Number(n))) return '—';
@@ -5021,9 +5045,11 @@ function _ssSet(key, value) {
 function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
   const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
-  // Expense drill-down: null = off (normal sub-tabs), '__cats__' = category
-  // breakdown cards, otherwise a category name = filtered expense list.
-  const [drillCat, setDrillCat] = useState(null);
+  // Expense drill-down: null = off (normal sub-tabs),
+  // {view:'cats'} = breakdown cards, {view:'list', mode, key, label} =
+  // expense list filtered to one group. mode is 'category' | 'tax' |
+  // 'month' | 'quarter'.
+  const [drill, setDrill] = useState(null);
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -5113,7 +5139,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
           <div style={{ fontSize:11, color:BOOKS.muted, letterSpacing:'2px', textTransform:'uppercase', marginTop:2 }}>RGG Media · {year}</div>
         </div>
         <select
-          value={year} onChange={(e) => { setYear(Number(e.target.value)); setDrillCat(null); }}
+          value={year} onChange={(e) => { setYear(Number(e.target.value)); setDrill(null); }}
           style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, cursor:'pointer' }}
         >
           {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -5130,7 +5156,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
       {/* ── KPI strip ────────────────────────────────────────────── */}
       <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
         <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink"
-          onClick={() => setDrillCat('__cats__')} clickable hint="tap for category breakdown" />
+          onClick={() => setDrill({ view:'cats' })} clickable hint="tap for category breakdown" />
         <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean" />
         <KpiCard label="Net"          value={fmtMoney(totalRevenue - totalExpenses)} tone={totalRevenue >= totalExpenses ? 'green' : 'red'} />
         <KpiCard
@@ -5161,25 +5187,32 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
       {/* ── Sub-tab body (or expense drill-down) ─────────────────── */}
       {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
       {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
-      {!loading && drillCat !== null && (
+      {!loading && drill !== null && (
         <>
           {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
-          {drillCat === '__cats__' ? (
-            <CategoryBreakdown expenses={data.expenses} onPick={(c) => setDrillCat(c)} onBack={() => setDrillCat(null)} isMobile={isMobile} />
+          {drill.view === 'cats' ? (
+            <CategoryBreakdown expenses={data.expenses}
+              onPick={(mode, key, label) => setDrill({ view:'list', mode, key, label })}
+              onBack={() => setDrill(null)} isMobile={isMobile} />
           ) : (
             <div>
               <div style={{ marginBottom:12, fontSize:12, display:'flex', alignItems:'center', gap:6 }}>
-                <button onClick={() => setDrillCat('__cats__')}
-                  style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← categories</button>
+                <button onClick={() => setDrill({ view:'cats' })}
+                  style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← back</button>
                 <span style={{ color:BOOKS.muted }}>/</span>
-                <span style={{ fontWeight:700, color:BOOKS.ink }}>{drillCat}</span>
+                <span style={{ fontWeight:700, color:BOOKS.ink }}>{drill.label}</span>
               </div>
-              <ExpensesTab key={drillCat} data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} initialCategory={drillCat} />
+              <ExpensesTab key={drill.mode + ':' + drill.key} data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast}
+                initialCategory={drill.mode === 'category' ? drill.key : ''}
+                initialTaxCat={drill.mode === 'tax' ? drill.key : ''}
+                initialMonth={drill.mode === 'month' ? drill.key : ''}
+                initialQuarter={drill.mode === 'quarter' ? drill.key : ''}
+                showInfoFlags />
             </div>
           )}
         </>
       )}
-      {!loading && drillCat === null && (
+      {!loading && drill === null && (
         <>
           {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
           {!error && (
@@ -5223,37 +5256,80 @@ function KpiCard({ label, value, tone, onClick, clickable, hint }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CategoryBreakdown — expense drill-down level 1: per-category totals/cards.
-// Entered by tapping the "Expenses YTD" KPI card. Tapping a category drills
-// into the filtered expense list (BooksTab renders ExpensesTab with
-// initialCategory), and tapping an expense row opens the existing detail
-// drawer — the full drill path is card → category → expense.
+// CategoryBreakdown — expense drill-down level 1: per-group totals/cards.
+// Entered by tapping the "Expenses YTD" KPI card. Grouping modes: expense
+// category, tax category (with a "missing tax category" card for untagged
+// expenses), month, or quarter. Tapping a card drills into the filtered
+// expense list, and tapping an expense row opens the existing detail drawer —
+// the full drill path is card → group → expense.
 // ─────────────────────────────────────────────────────────────────────────────
+const DRILL_MODES = [
+  { id:'category', label:'by category' },
+  { id:'tax',      label:'by tax category' },
+  { id:'month',    label:'by month' },
+  { id:'quarter',  label:'by quarter' },
+];
+function drillGroupKey(r, mode) {
+  if (mode === 'tax') return hasExplicitTaxCategory(r) ? getTaxCategory(r) : '__missing__';
+  if (mode === 'month') return String(r.date || '').slice(0, 7) || 'no date';
+  if (mode === 'quarter') {
+    const d = String(r.date || '');
+    const mo = Number(d.slice(5, 7)) || 0;
+    return d.slice(0, 4) ? d.slice(0, 4) + '-Q' + Math.ceil(mo / 3) : 'no date';
+  }
+  return r.category || 'Uncategorized';
+}
+function drillGroupLabel(mode, key) {
+  if (mode === 'tax' && key === '__missing__') return 'missing tax category';
+  return key;
+}
 function CategoryBreakdown({ expenses, onPick, onBack, isMobile }) {
-  const cats = useMemo(() => {
+  const [mode, setMode] = useState('category');
+  const groups = useMemo(() => {
     const m = {};
     (expenses || []).forEach((r) => {
-      const c = r.category || 'Uncategorized';
-      if (!m[c]) m[c] = { category: c, total: 0, count: 0 };
-      m[c].total += toUSD(r.amount, r.currency);
-      m[c].count += 1;
+      const k = drillGroupKey(r, mode);
+      if (!m[k]) m[k] = { key: k, total: 0, count: 0 };
+      m[k].total += toUSD(r.amount, r.currency);
+      m[k].count += 1;
     });
-    return Object.values(m).sort((a, b) => b.total - a.total);
-  }, [expenses]);
+    const arr = Object.values(m);
+    // Time modes read newest-first; category modes read biggest-first.
+    if (mode === 'month' || mode === 'quarter') arr.sort((a, b) => b.key.localeCompare(a.key));
+    else arr.sort((a, b) => b.total - a.total);
+    return arr;
+  }, [expenses, mode]);
   return (
     <div>
       <div style={{ marginBottom:12, fontSize:12 }}>
         <button onClick={onBack}
           style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← expenses</button>
       </div>
-      <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink, margin:'0 0 12px' }}>expenses by category</div>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, margin:'0 0 12px' }}>
+        <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>expenses breakdown</div>
+        <div style={{ display:'flex', gap:4, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:3 }}>
+          {DRILL_MODES.map((dm) => (
+            <button key={dm.id} onClick={() => setMode(dm.id)}
+              style={{
+                background: mode === dm.id ? BOOKS.ink : 'transparent',
+                color: mode === dm.id ? '#FFFFFF' : BOOKS.muted,
+                border:'none', borderRadius:99, padding:'5px 12px', fontSize:11, fontWeight:600,
+                cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap',
+              }}>{dm.label}</button>
+          ))}
+        </div>
+      </div>
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:12 }}>
-        {cats.map((c) => (
-          <KpiCard key={c.category} label={c.category} value={fmtMoney(c.total)} tone="ink"
-            onClick={() => onPick(c.category)} clickable
-            hint={`${c.count} expense${c.count === 1 ? '' : 's'} · tap to view`} />
-        ))}
-        {cats.length === 0 && (
+        {groups.map((g) => {
+          const missing = mode === 'tax' && g.key === '__missing__';
+          return (
+            <KpiCard key={g.key} label={drillGroupLabel(mode, g.key)} value={fmtMoney(g.total)}
+              tone={missing ? 'red' : 'ink'}
+              onClick={() => onPick(mode, g.key, drillGroupLabel(mode, g.key))} clickable
+              hint={`${g.count} expense${g.count === 1 ? '' : 's'} · tap to view`} />
+          );
+        })}
+        {groups.length === 0 && (
           <div style={{ fontSize:12, color:BOOKS.muted, padding:'12px 0' }}>no expenses this year.</div>
         )}
       </div>
@@ -5906,8 +5982,11 @@ function ConfidenceBadge({ level }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ExpensesTab — full table view
 // ─────────────────────────────────────────────────────────────────────────────
-function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory = '' }) {
+function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory = '', initialTaxCat = '', initialMonth = '', initialQuarter = '', showInfoFlags = false }) {
   const [filterCat, setFilterCat]         = useState(initialCategory || '');
+  const [filterTaxCat, setFilterTaxCat]   = useState(initialTaxCat || '');
+  const [filterMonth, setFilterMonth]     = useState(initialMonth || '');
+  const [filterQuarter, setFilterQuarter] = useState(initialQuarter || '');
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterUnrev, setFilterUnrev]     = useState(false);
   const [filterEntered, setFilterEntered] = useState('');
@@ -5934,6 +6013,16 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
 
   const filtered = data.expenses.filter((r) => {
     if (filterCat && r.category !== filterCat) return false;
+    if (filterTaxCat) {
+      const t = hasExplicitTaxCategory(r) ? getTaxCategory(r) : '';
+      if (filterTaxCat === '__missing__' ? t !== '' : t !== filterTaxCat) return false;
+    }
+    if (filterMonth && String(r.date || '').slice(0, 7) !== filterMonth) return false;
+    if (filterQuarter) {
+      const d = String(r.date || '');
+      const mo = Number(d.slice(5, 7)) || 0;
+      if ((d.slice(0, 4) + '-Q' + Math.ceil(mo / 3)) !== filterQuarter) return false;
+    }
     if (filterFlagged && (r.flags_computed || []).length === 0) return false;
     if (filterUnrev && String(r.reviewed).toLowerCase() === 'true') return false;
     if (filterEntered && r.entered_by !== filterEntered) return false;
@@ -5982,6 +6071,29 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
       <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:8 }}>
         Showing {filtered.length} of {data.expenses.length} expenses · total {fmtMoney(filtered.reduce((s, r) => s + toUSD(r.amount, r.currency), 0))} USD
       </div>
+      {(filterTaxCat || filterMonth || filterQuarter) && (
+        <div style={{ marginBottom:10, display:'flex', gap:6, alignItems:'center', fontSize:11, flexWrap:'wrap' }}>
+          <span style={{ color:BOOKS.muted }}>drill filter:</span>
+          {filterTaxCat && (
+            <button onClick={() => setFilterTaxCat('')}
+              style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:'2px 10px', fontSize:11, fontWeight:600, color:BOOKS.ink, cursor:'pointer', fontFamily:'inherit' }}>
+              {filterTaxCat === '__missing__' ? 'missing tax category' : 'tax: ' + filterTaxCat} ×
+            </button>
+          )}
+          {filterMonth && (
+            <button onClick={() => setFilterMonth('')}
+              style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:'2px 10px', fontSize:11, fontWeight:600, color:BOOKS.ink, cursor:'pointer', fontFamily:'inherit' }}>
+              {filterMonth} ×
+            </button>
+          )}
+          {filterQuarter && (
+            <button onClick={() => setFilterQuarter('')}
+              style={{ background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:'2px 10px', fontSize:11, fontWeight:600, color:BOOKS.ink, cursor:'pointer', fontFamily:'inherit' }}>
+              {filterQuarter} ×
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:10, overflow:'hidden', overflowX:'auto' }}>
@@ -6012,6 +6124,15 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
                 )}{linkedDealCount(r) > 0 && (
                   <span title="Campaigns linked to this expense"
                     style={{ marginLeft:6, fontSize:10, fontWeight:700, color:BOOKS.ink, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>◆ {linkedDealCount(r)} campaign{linkedDealCount(r) === 1 ? '' : 's'}</span>
+                )}{showInfoFlags && !rowHasReceipt(r) && (
+                  <span title="No receipt attached — open the expense to add one"
+                    style={missingPillStyle}>no receipt</span>
+                )}{showInfoFlags && !rowHasPurpose(r) && (
+                  <span title="No business purpose — open the expense to add one"
+                    style={missingPillStyle}>no purpose</span>
+                )}{showInfoFlags && !hasExplicitTaxCategory(r) && (
+                  <span title="No tax category set — pick one in the expense drawer"
+                    style={missingPillStyle}>no tax cat</span>
                 )}</td>
                 <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
                 <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
@@ -6028,7 +6149,7 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
         </table>
       </div>
 
-      {selected && <ExpenseDetailPanel key={selected.expense_id} row={selected} deals={data.deals} onClose={() => setSelectedId(null)} reload={reload} showToast={showToast} />}
+      {selected && <ExpenseDetailPanel key={selected.expense_id} row={selected} deals={data.deals} expenses={data.expenses} onClose={() => setSelectedId(null)} reload={reload} showToast={showToast} />}
       {showManual && <ManualExpenseModal deals={data.deals} expenses={data.expenses} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
       {showCsvImport && <CsvImportModal year={year} onClose={() => setShowCsvImport(false)} reload={reload} showToast={showToast} />}
     </div>
@@ -6037,6 +6158,9 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
 
 const thStyle = { padding:'10px 12px', fontWeight:700, fontSize:11, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px' };
 const tdStyle = { padding:'10px 12px', color:BOOKS.ink, verticalAlign:'top' };
+// Amber pill for missing-info flags in the drill-down list (no receipt /
+// no purpose / no tax category) — cleanup happens in the flow.
+const missingPillStyle = { marginLeft:6, fontSize:10, fontWeight:700, color:'#92400E', background:'#FEF3C7', border:'1px solid #FCD34D', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' };
 
 function linkedDealLabel(dealId, deals) {
   if (!dealId) return <span style={{ color:'#94A3B8' }}>—</span>;
@@ -6084,7 +6208,7 @@ function ReceiptPhotoField({ expenseId }) {
   );
 }
 
-function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
+function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses = [] }) {
   const [edit, setEdit] = useState({ ...row });
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -6101,6 +6225,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   const [linkedDeals, setLinkedDeals] = useState(() => parseLinkedDeals(row));
   const [dealPickerOpen, setDealPickerOpen] = useState(false);
   const [dealSearch, setDealSearch] = useState('');
+  // Campaign profitability drill-down (opens DealProfitPanel for a linked deal).
+  const [profitDealId, setProfitDealId] = useState(null);
 
   // Lazy-load his posted-video catalog for the tap-to-link picker.
   // catalog-data is a public discovery action (same call the catalog UI makes).
@@ -6153,6 +6279,14 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   // drawer shows the CURRENT stage, amount, and invoice/payment info from the
   // deals store.
   const liveDeal = (id) => (deals || []).find((d) => d.deal_id === id) || null;
+  // Deal for the profitability drill-down: live store row, or the link-time
+  // snapshot if the deal no longer exists.
+  const profitDeal = profitDealId
+    ? (liveDeal(profitDealId) || (() => {
+        const s = linkedDeals.find((x) => x.deal_id === profitDealId) || {};
+        return { deal_id: profitDealId, brand: s.brand || '', deal_value: s.deal_value || 0, status: s.status || '', platform: s.platform || '', month: '' };
+      })())
+    : null;
 
   // Deal picker results: free-text search over brand/status/platform,
   // biggest campaigns first (the expense is most likely tied to a major deal).
@@ -6166,6 +6300,57 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
       .sort((a, b) => (Number(b.deal_value) || 0) - (Number(a.deal_value) || 0))
       .slice(0, 40);
   })();
+
+  // Smart link suggestions: rank unlinked deals by (1) the expense date
+  // falling inside the deal's shoot window, (2) the deal month matching the
+  // expense month, (3) brand keywords in the expense vendor/purpose/notes,
+  // (4) brand keywords in the titles of videos already linked to this
+  // expense. Top 3 surface above the list so linking is usually one tap.
+  const dealSuggestions = (() => {
+    const expDate = String(edit.date || '').slice(0, 10);
+    const expYM = expDate.slice(0, 7);
+    const hay = [edit.vendor, edit.business_purpose, edit.notes].filter(Boolean).join(' ').toLowerCase();
+    const vidText = linkedVids.map((v) => v.title || '').join(' ').toLowerCase();
+    return (deals || [])
+      .filter((d) => !linkedDeals.some((x) => x.deal_id === d.deal_id))
+      .map((d) => {
+        let s = 0;
+        const ss = String(d.shoot_start_date || '').slice(0, 10);
+        const se = String(d.shoot_end_date || '').slice(0, 10);
+        if (expDate && ss && se && expDate >= ss && expDate <= se) s += 3;
+        const dm = d.month ? dealYearMonth(d.month, 0) : null;
+        if (dm && expYM && dm.y === Number(expYM.slice(0, 4)) && dm.m === Number(expYM.slice(5, 7)) - 1) s += 2;
+        const tokens = String(d.brand || '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+        if (tokens.some((t) => hay.includes(t))) s += 2;
+        if (tokens.some((t) => vidText.includes(t))) s += 2;
+        return { d, s };
+      })
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s || (Number(b.d.deal_value) || 0) - (Number(a.d.deal_value) || 0))
+      .slice(0, 3)
+      .map((x) => x.d);
+  })();
+
+  // One picker row renderer shared by the suggestions and the full list.
+  const dealRow = (d, already, keyPrefix) => (
+    <div key={(keyPrefix || '') + d.deal_id}
+      onClick={() => { if (!already) addDeal(d); }}
+      style={{ display:'flex', alignItems:'center', gap:8, padding:6, borderRadius:6, cursor:already ? 'default' : 'pointer', opacity:already ? 0.55 : 1 }}
+      onMouseEnter={(e) => { if (!already) e.currentTarget.style.background = BOOKS.parchment; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.brand || '(untitled)'}</div>
+        <div style={{ fontSize:10, color:BOOKS.muted }}>{d.status || '—'}{d.deal_value ? ' · ' + fmtMoney(d.deal_value) : ''}{d.platform ? ' · ' + d.platform : ''}</div>
+      </div>
+      {already
+        ? <span style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, flexShrink:0 }}>linked ✓</span>
+        : <button type="button" aria-label="link this campaign"
+            onClick={(e) => { e.stopPropagation(); addDeal(d); }}
+            style={{ background:'none', border:'none', padding:0, margin:0, fontSize:11, fontWeight:700, color:SLATE, flexShrink:0, cursor:'pointer', fontFamily:'inherit' }}>
+            + link
+          </button>}
+    </div>
+  );
 
   // Picker ranking (Paul, 2026-10-04): keyword/caption matching is PRIMARY.
   // His videos often post days/weeks after the trip (editing lag — e.g. Japan
@@ -6373,7 +6558,9 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
                   <div key={x.deal_id}
                     style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 10px' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ flex:1, minWidth:0, cursor: live.deal_id ? 'pointer' : 'default' }}
+                        title={live.deal_id ? 'view campaign profit' : undefined}
+                        onClick={() => { if (live.deal_id) setProfitDealId(x.deal_id); }}>
                         <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{live.brand || x.brand || '(untitled campaign)'}</div>
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
@@ -6399,32 +6586,17 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
                 <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:8, marginTop:4, background:BOOKS.surface }}>
                   <input aria-label="search campaigns" placeholder="search campaigns…" value={dealSearch} onChange={(e) => setDealSearch(e.target.value)}
                     style={{ ...inputStyle, marginBottom:8 }} />
+                  {dealSuggestions.length > 0 && (
+                    <div style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1px', fontWeight:700, marginBottom:4 }}>suggested</div>
+                      {dealSuggestions.map((d) => dealRow(d, false, 'sug-'))}
+                    </div>
+                  )}
                   {(deals || []).length === 0 && (
                     <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>no campaigns found.</div>
                   )}
                   <div style={{ maxHeight:260, overflowY:'auto' }}>
-                    {dealPickerResults.map((d) => {
-                      const already = linkedDeals.some((x) => x.deal_id === d.deal_id);
-                      return (
-                        <div key={d.deal_id}
-                          onClick={() => { if (!already) addDeal(d); }}
-                          style={{ display:'flex', alignItems:'center', gap:8, padding:6, borderRadius:6, cursor:already ? 'default' : 'pointer', opacity:already ? 0.55 : 1 }}
-                          onMouseEnter={(e) => { if (!already) e.currentTarget.style.background = BOOKS.parchment; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.brand || '(untitled)'}</div>
-                            <div style={{ fontSize:10, color:BOOKS.muted }}>{d.status || '—'}{d.deal_value ? ' · ' + fmtMoney(d.deal_value) : ''}{d.platform ? ' · ' + d.platform : ''}</div>
-                          </div>
-                          {already
-                            ? <span style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, flexShrink:0 }}>linked ✓</span>
-                            : <button type="button" aria-label="link this campaign"
-                                onClick={(e) => { e.stopPropagation(); addDeal(d); }}
-                                style={{ background:'none', border:'none', padding:0, margin:0, fontSize:11, fontWeight:700, color:SLATE, flexShrink:0, cursor:'pointer', fontFamily:'inherit' }}>
-                                + link
-                              </button>}
-                        </div>
-                      );
-                    })}
+                    {dealPickerResults.map((d) => dealRow(d, linkedDeals.some((x) => x.deal_id === d.deal_id)))}
                   </div>
                   <button onClick={() => setDealPickerOpen(false)}
                     style={{ marginTop:8, background:'none', border:'none', fontSize:12, color:BOOKS.muted, cursor:'pointer', fontFamily:'inherit' }}>
@@ -6493,7 +6665,103 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
             <pre style={{ marginTop:8, whiteSpace:'pre-wrap', maxHeight:200, overflow:'auto', background:BOOKS.surface, padding:10, borderRadius:6 }}>{row.extracted_text}</pre>
           </details>
         )}
+        {profitDeal && (
+          <DealProfitPanel deal={profitDeal} expenses={expenses} deals={deals}
+            onClose={() => setProfitDealId(null)} reload={reload} showToast={showToast} />
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DealProfitPanel — campaign profitability view: the drill-down in the other
+// direction. For one deal/campaign it shows every linked expense (new
+// linked_deals JSON + legacy linked/auto fields, so nothing linked the old
+// way is missed), every video linked to those expenses, total spend against
+// the deal amount, and profit at a glance. Tapping an expense opens the
+// regular expense drawer nested on top; tapping a linked campaign inside an
+// expense drawer opens this panel — the two drill directions connect.
+// ─────────────────────────────────────────────────────────────────────────────
+function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast }) {
+  const [selectedId, setSelectedId] = useState(null);
+  useEffect(() => { setBooksUiBusy(true); return () => setBooksUiBusy(false); }, []);
+  const linked = useMemo(() => expensesForDeal(expenses, deal.deal_id), [expenses, deal]);
+  const totalSpend = linked.reduce((s, r) => s + toUSD(r.amount, r.currency), 0);
+  const value = dealAmount(deal.deal_value);
+  const profit = value - totalSpend;
+  const vids = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    linked.forEach((r) => parseLinkedVideos(r).forEach((v) => {
+      const k = v.platform + ':' + v.video_id;
+      if (!seen.has(k)) { seen.add(k); out.push(v); }
+    }));
+    return out;
+  }, [linked]);
+  const selected = (expenses || []).find((r) => r.expense_id === selectedId) || null;
+  const status = canonStage(deal.status);
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:210, display:'flex', justifyContent:'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width:'min(540px, 100vw)', height:'100%', background:BOOKS.parchment, padding:24, overflowY:'auto', boxShadow:'-4px 0 20px rgba(0,0,0,0.12)' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:4 }}>campaign profit</div>
+            <div style={{ fontSize:18, fontWeight:800, color:BOOKS.ink }}>{deal.brand || '(untitled campaign)'}</div>
+            <div style={{ fontSize:11, color:BOOKS.muted, marginTop:4 }}>
+              {status}{deal.platform ? ' · ' + deal.platform : ''}{deal.month ? ' · ' + deal.month : ''}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:BOOKS.muted }}>×</button>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:18 }}>
+          <KpiCard label="deal amount" value={fmtMoney(value)} tone="ink" />
+          <KpiCard label="total spend" value={fmtMoney(totalSpend)} tone="ink" hint={`${linked.length} expense${linked.length === 1 ? '' : 's'}`} />
+          <KpiCard label="profit" value={fmtMoney(profit)} tone={profit >= 0 ? 'green' : 'red'}
+            hint={value ? Math.round((profit / value) * 100) + '% margin' : 'gifted / no amount'} />
+        </div>
+
+        <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:8 }}>
+          linked expenses ({linked.length})
+        </div>
+        {linked.length === 0 && (
+          <div style={{ fontSize:12, color:BOOKS.muted, marginBottom:16 }}>no expenses linked to this campaign yet — link them from any expense drawer.</div>
+        )}
+        <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:18 }}>
+          {linked.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((r) => (
+            <div key={r.expense_id} onClick={() => setSelectedId(r.expense_id)}
+              style={{ display:'flex', alignItems:'center', gap:8, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', cursor:'pointer' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.vendor || '—'}</div>
+                <div style={{ fontSize:10, color:BOOKS.muted }}>{fmtDate(r.date)}{r.category ? ' · ' + r.category : ''}</div>
+              </div>
+              <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, fontVariantNumeric:'tabular-nums', flexShrink:0 }}>{fmtMoney(r.amount, r.currency)}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:8 }}>
+          linked videos ({vids.length})
+        </div>
+        {vids.length === 0 && (
+          <div style={{ fontSize:12, color:BOOKS.muted }}>no videos linked to these expenses yet.</div>
+        )}
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {vids.map((v) => (
+            <div key={v.platform + ':' + v.video_id}
+              style={{ display:'flex', alignItems:'center', gap:8, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:6 }}>
+              {v.thumbnail ? <img src={v.thumbnail} alt="" style={{ width:44, height:44, objectFit:'cover', borderRadius:6, flexShrink:0 }} /> : null}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.title || '(untitled)'}</div>
+                <div style={{ fontSize:10, color:BOOKS.muted }}>{v.platform}</div>
+              </div>
+              {v.url ? <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>open ↗</a> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+      {selected && <ExpenseDetailPanel key={selected.expense_id} row={selected} deals={deals} expenses={expenses} onClose={() => setSelectedId(null)} reload={reload} showToast={showToast} />}
     </div>
   );
 }
@@ -6799,13 +7067,18 @@ function CsvImportModal({ year, onClose, reload, showToast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // DealsTab — pipeline kanban
 // ─────────────────────────────────────────────────────────────────────────────
-function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, showToast }) {
+function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, showToast, reload }) {
   // Read-only MIRROR of the Deals tab (the single source of truth). Cards render
   // from data.deals, which BooksTab has replaced with the projected dashboard
   // store — so these are the exact same deals, same canonical stages. Editing
   // happens on the Deals tab to keep one writable copy.
   const cols = DEAL_STATUSES; // canonical 5 stages
   const allDeals = data.deals || [];
+  // Campaign profitability drill-down: tapping a deal opens its profit view
+  // (linked expenses + videos, total spend vs deal amount).
+  const [profitDeal, setProfitDeal] = useState(null);
+  useEffect(() => { setBooksUiBusy(!!profitDeal); }, [profitDeal]);
+  useEffect(() => () => setBooksUiBusy(false), []);
 
   // PHASE 4 cross-check: the board's Paid column total must equal the Books
   // Revenue YTD KPI when scoped to the same paid set. Logged for proof.
@@ -6837,8 +7110,8 @@ function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, sho
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {list.map((d) => (
-                  <div key={d.deal_id}
-                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px' }}>
+                  <div key={d.deal_id} onClick={() => setProfitDeal(d)} title="view campaign profit"
+                    style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'10px 12px', cursor:'pointer' }}>
                     <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink }}>{d.brand}</div>
                     <div style={{ fontSize:11, color:BOOKS.muted, marginTop:3, display:'flex', justifyContent:'space-between' }}>
                       <span>{d.platform || '—'}{d.month ? ' · ' + d.month : ''}</span>
@@ -6867,7 +7140,7 @@ function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, sho
             </thead>
             <tbody>
               {allDeals.slice().sort((a, b) => dealAmount(b.deal_value) - dealAmount(a.deal_value)).map((d) => (
-                <tr key={d.deal_id} style={{ borderBottom:`1px solid ${BOOKS.border}` }}>
+                <tr key={d.deal_id} onClick={() => setProfitDeal(d)} title="view campaign profit" style={{ borderBottom:`1px solid ${BOOKS.border}`, cursor:'pointer' }}>
                   <td style={{ padding:'8px 12px', fontWeight:600, color:BOOKS.ink }}>{d.brand}</td>
                   <td style={{ padding:'8px 12px', color:BOOKS.muted }}>{d.platform || '—'}</td>
                   <td style={{ padding:'8px 12px', fontVariantNumeric:'tabular-nums', color:SLATE }}>{d.deal_value ? fmtMoney(d.deal_value) : '—'}</td>
@@ -6882,6 +7155,10 @@ function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, sho
           </table>
         </div>
       </div>
+      {profitDeal && (
+        <DealProfitPanel deal={profitDeal} expenses={data.expenses} deals={data.deals}
+          onClose={() => setProfitDeal(null)} reload={reload} showToast={showToast} />
+      )}
     </div>
   );
 }
