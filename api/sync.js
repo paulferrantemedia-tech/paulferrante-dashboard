@@ -203,6 +203,20 @@ async function sheetsUpdate(token, sheetId, range, values) {
   if (!r.ok) throw new Error(`Sheets UPDATE ${range} failed: ${r.status} ${await r.text()}`);
   return r.json();
 }
+// Batch write many ranges in ONE Sheets API call (stays under serverless
+// timeouts for bulk backfills).
+async function sheetsBatchUpdate(token, sheetId, data) {
+  const r = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+    }
+  );
+  if (!r.ok) throw new Error(`Sheets BATCHUPDATE failed: ${r.status} ${await r.text()}`);
+  return r.json();
+}
 
 // Convert a sheet (rows of values, first row = headers) into objects
 function rowsToObjects(values) {
@@ -1108,6 +1122,125 @@ async function handleBooksData(req, res) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ONE-TIME migration (2026-10-04): backfill tax_category + tax_description
+// for all 81 2026 expenses in a single batched Sheets write.
+// Token-guarded via ?token= (one-time secret, NOT the dashboard session).
+// DELETE THIS ACTION after the backfill is verified.
+// ─────────────────────────────────────────────────────────────
+const BACKFILL_TAX_TOKEN = 'QOPk5FOqueQGkwvrePFn5yPPhRlrb7OG';
+const BACKFILL_TAX_2026 = [
+  ["c1f936ee-9898-42b1-bd6b-9e0db0300a2c", "travel", "flights lax-pvr-lax, puerto vallarta creator trip nov 2026 (tryst comp stay)"],
+  ["24305a24-6517-4872-80bb-8ff9ea84795e", "travel", "lodging, san diego creator trip oct 5-8 2026"],
+  ["3a960c40-efef-49f3-acc9-cfca92f35d21", "travel", "lodging, palm springs creator trip oct 2-5 2026"],
+  ["3ee616d3-27d3-469d-acef-4e40d15afc1e", "home office", "50% santa monica home office rent, oct 2026"],
+  ["9fe15e0d-6e73-42ed-b10a-a0368333f012", "travel", "dan's airfare hartford-denver-lax sep 2026, creator trip"],
+  ["3803bbf3-3c6a-4928-a5f5-ea98785238ce", "meals", "meal during nyc creator trip sep 2026"],
+  ["0c63dcf0-d311-4412-b85a-54f1fe091b0a", "travel", "flight toronto-nyc sep 2026, creator trip"],
+  ["d04cfefb-2f68-4210-85e3-00922d214b26", "travel", "bag fee, toronto-nyc flight, creator trip"],
+  ["94e2f1cb-91cb-470e-94c6-1a1101323832", "travel", "flights toronto/nyc/boston creator trip sep 2026 (50% may be reimbursed by tiktok)"],
+  ["035e2cda-297d-4686-9894-82a0e339f081", "home office", "50% santa monica home office rent, sep 2026"],
+  ["b1f3c101-15ad-4b3c-9128-dfa8fa9a7df7", "travel", "lodging, santa rosa creator trip aug 2026"],
+  ["2774e6b1-3776-4970-adcf-58d3e4c452c9", "home office", "50% santa monica home office rent, aug 2026"],
+  ["180ff027-d02c-4355-9b97-8f5d58a85ff4", "meals", "business meal, laguna beach"],
+  ["c273fda0-20c1-4f94-8547-af5b3acb84e3", "home office", "50% santa monica home office rent, jul 2026"],
+  ["e8c60c15-db1d-411c-a7fc-abc821fc3d88", "meals", "groceries, lake arrowhead creator trip jun 2026"],
+  ["85e4d754-87f8-4678-82a0-5054727b4282", "meals", "meal during business travel"],
+  ["d041e432-46db-4b13-9af1-c6c4bdae3d58", "meals", "meal during business travel"],
+  ["22bef162-79ff-40bf-b6f5-9c3870f6d9e6", "meals", "meal during business travel"],
+  ["c8c52645-e497-4a9a-846c-479cbc3b9bdf", "travel", "lodging, lake arrowhead creator trip jun 2026"],
+  ["44066ea6-ebdb-4a2b-be2b-24dbf139efdd", "meals", "groceries during business travel, content trip"],
+  ["6c0a92dd-4fea-4cd0-b24c-a255f42f9b83", "software", "claude ai subscription, content production"],
+  ["ebf2c2b7-fc4b-46ec-b1ff-58f239eb6f6d", "home office", "50% santa monica home office rent, jun 2026"],
+  ["f12b50df-7b0c-4e06-87d6-f5bc1e2bc5c9", "travel", "lodging, seoul creator trip may 2026"],
+  ["8d0ba1cf-1f72-41ad-9258-ac7842db31d7", "travel", "lodging, seoul creator trip may 2026"],
+  ["98f2b8b6-db3f-496e-bf0a-976eca402289", "meals", "meal during seoul creator trip"],
+  ["955e1802-9803-4d09-a44f-d81179b9a6fd", "travel", "lodging, seoul creator trip may 2026"],
+  ["8accf2b7-d431-40c8-8ca0-3443c1e6a035", "travel", "return flight icn-lax may 2026, creator trip"],
+  ["084954fe-2cb5-489b-8f8e-eed05b87712f", "meals", "meal during seoul creator trip"],
+  ["99eceeb8-b800-4b1d-90d0-fe8e12960a07", "meals", "working cafe session, seoul creator trip"],
+  ["18d84607-5a3b-49f0-a603-d7d404fbbb62", "meals", "working cafe session, seoul creator trip"],
+  ["a8dab7b0-b677-4281-9e00-4d7317efc96f", "meals", "working lunch, seoul creator trip"],
+  ["988e9a9d-7fd8-4da8-9132-00211fb975e2", "travel", "rideshare during seoul creator trip"],
+  ["a93410d4-2fd4-4f4e-9141-087481097556", "travel", "rideshare during seoul creator trip"],
+  ["fd317c11-f5c2-41ee-8019-71a95b15e5bc", "travel", "rideshare during seoul creator trip"],
+  ["8006cc1a-1eeb-4d77-bfff-efd824fad5cd", "travel", "rideshare during seoul creator trip"],
+  ["ef0ddc06-1d8c-46c6-bfcc-5ddaa7472c96", "travel", "rideshare during seoul creator trip"],
+  ["4a3f479e-62ba-45a1-8bd9-50702771dd9c", "travel", "rideshare during seoul creator trip"],
+  ["0e6a5d76-8a7a-4eb5-9638-cbd36468e1ba", "travel", "rideshare during seoul creator trip"],
+  ["dd809ee5-5046-492c-8011-799c30564720", "meals", "meal during seoul creator trip"],
+  ["be4b382a-4e8c-4c7e-b9ef-1c7ab0db13f3", "meals", "meal during seoul creator trip"],
+  ["409d0fba-41c2-43a6-9836-da9eac59a76b", "travel", "flight hnd-gmp may 2026, creator trip"],
+  ["5299e984-db69-4165-8151-b5dd3eec08a0", "meals", "working cafe session, tokyo creator trip"],
+  ["e656bd2e-44d6-4960-9564-619e59537a1c", "meals", "meal during tokyo creator trip"],
+  ["ba869251-5c1d-4d4b-a7aa-2127ab557f73", "meals", "meal during tokyo creator trip"],
+  ["44ad8f2c-4a96-4ebb-9821-b6e0b8d7d3ab", "meals", "meal during tokyo creator trip"],
+  ["3d6e856c-936c-4184-905d-f7798e923fc9", "meals", "working cafe session, tokyo creator trip"],
+  ["8c9ca7aa-1383-41f8-94c3-e894483f9cfd", "meals", "animal cafe visit filmed for travel content, tokyo"],
+  ["f1d29c7a-4441-4cf4-ab42-88f091224bfb", "travel", "lodging charge, tokyo creator trip"],
+  ["51c3c0e6-ffb6-40f2-9359-78c5624d3835", "travel", "taxi to shoot location, tokyo"],
+  ["19fd6a75-00d9-43e2-9205-d1df01635d67", "meals", "meal during tokyo creator trip"],
+  ["e624b4e4-7db8-49a2-8cb3-497080837a16", "software", "claude ai subscription, content production"],
+  ["56d0d759-5226-4a8f-b682-ea08692eac86", "software", "claude ai api usage, content production"],
+  ["b86cd00d-bbde-4297-8317-eac5c3570073", "software", "claude ai api usage, content production"],
+  ["dca17582-4f2a-4471-921c-781af03d4e8f", "travel", "lodging, seoul creator trip may 21-27 2026 (duplicate booking refund pending verification)"],
+  ["9754ac38-6274-4641-b2d1-0a51c937a594", "home office", "50% santa monica home office rent, may 2026"],
+  ["018c9535-a27d-4bce-9330-8789c5b250e5", "meals", "business dinner, santa monica"],
+  ["602c2991-bcbf-4261-b7ab-ef55dbc17bd7", "meals", "business meal with employee"],
+  ["236d2940-83d5-46ec-8a17-8bdbfc35ae91", "home office", "50% santa monica home office rent, apr 2026"],
+  ["63130da1-3154-4e28-b88d-d016b11155a9", "meals", "meal with collaborator, palm springs creator trip"],
+  ["42d8eedd-7ef2-4064-a4b4-a4a031dda59a", "meals", "meal during palm springs creator trip"],
+  ["4343b8b6-0d43-4317-9dbb-d996dd077467", "meals", "meal during palm springs creator trip"],
+  ["e473b285-b02b-4414-82d3-ea49a12d87d8", "meals", "meal during palm springs creator trip"],
+  ["74d02767-2220-4bb9-91f2-00f1ead4f1ff", "meals", "meal during palm springs creator trip"],
+  ["4d1daf86-ee99-4b5f-89e4-371e4971224e", "meals", "meal during palm springs creator trip"],
+  ["cffae8bb-e124-4fe2-ba8c-a5db5c7773b3", "travel", "lodging, palm springs creator trip mar 2026"],
+  ["ee6c0e8b-0dfc-48cb-9d85-dd2dd15f7085", "meals", "groceries during palm springs creator trip"],
+  ["f9fdd07a-2469-498b-ba6d-58be344816a5", "home office", "50% santa monica home office rent, mar 2026"],
+  ["ae3b3d62-70d8-43e9-bdb4-09993acfedee", "meals", "dinner with collaborator, sydney creator trip"],
+  ["97a5c7f4-0d71-4403-95c0-000b43d0ad86", "travel", "lodging, australia creator trip feb 2026"],
+  ["d29a51fb-ef6e-4a58-ada0-71a55617b61c", "meals", "meal during australia creator trip"],
+  ["3bc6e5ed-e2cb-4d09-9e3b-1d5565086108", "meals", "meal during australia creator trip"],
+  ["ceeb06c3-db9e-4d4b-985f-6004c2419b0a", "meals", "meal during australia creator trip"],
+  ["886a2a54-e39b-4ff0-9826-780af9280c5d", "meals", "meal during australia creator trip"],
+  ["2dfaf723-280a-4d6b-b60c-7e6e7ce8b0e8", "meals", "groceries during australia creator trip"],
+  ["ee4bc273-9295-45f6-8868-12daf504bb35", "meals", "meal during australia creator trip"],
+  ["45cd2c7f-c80f-4b43-811b-26dcc08a6234", "meals", "meal during australia creator trip"],
+  ["f1e04272-6929-4af3-9622-1a8307f65311", "meals", "meal during australia creator trip"],
+  ["543ab2a1-f66e-4225-bdbe-2c86793b6779", "travel", "lodging, australia creator trip feb 2026"],
+  ["428dcfd1-36b4-4f05-90c2-9cf37e01c8c3", "meals", "meal during australia creator trip"],
+  ["f433e406-00ad-46d0-8178-3053c4162e79", "home office", "50% santa monica home office rent, feb 2026"],
+  ["10539f28-fc4e-4ce0-9e60-ed94b2aafd22", "home office", "50% santa monica home office rent, jan 2026"],
+];
+async function handleBackfillTax2026(req, res) {
+  if ((req.query.token || '') !== BACKFILL_TAX_TOKEN) return res.status(403).json({ error: 'forbidden' });
+  const sheetId = process.env.GOOGLE_SHEETS_ID;
+  if (!sheetId) return res.status(500).json({ error: 'GOOGLE_SHEETS_ID missing' });
+  let token;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return res.status(500).json({ error: `Google auth failed: ${e.message}` }); }
+  try {
+    const objs = rowsToObjects(await sheetsGet(token, sheetId, 'Expenses!A1:AA'));
+    const byId = new Map(objs.filter((r) => r.expense_id).map((r) => [r.expense_id, r]));
+    const data = [{ range: 'Expenses!Z1:AA1', values: [['tax_category', 'tax_description']] }];
+    let applied = 0;
+    const missing = [];
+    const skipped = [];
+    for (const [id, cat, desc] of BACKFILL_TAX_2026) {
+      const target = byId.get(id);
+      if (!target) { missing.push(id); continue; }
+      // Idempotent: skip rows that already carry an explicit tax category.
+      if (target.tax_category && TAX_CATEGORIES_SERVER.includes(String(target.tax_category).toLowerCase())) { skipped.push(id); continue; }
+      const merged = { ...target, tax_category: cat, tax_description: desc };
+      delete merged._rowIndex; delete merged.flags_computed;
+      data.push({ range: `Expenses!A${target._rowIndex}:AA${target._rowIndex}`, values: [objectToRow(merged, EXPENSE_HEADERS)] });
+      applied++;
+    }
+    await sheetsBatchUpdate(token, sheetId, data);
+    return res.status(200).json({ ok: true, applied, skipped: skipped.length, missing });
+  } catch (e) { return res.status(500).json({ error: e.message }); }
+}
+
+// ─────────────────────────────────────────────────────────────
 // update-expense action
 // ─────────────────────────────────────────────────────────────
 async function handleUpdateExpense(req, res) {
@@ -1656,6 +1789,7 @@ export default async function handler(req, res) {
   if (action === 'resolve-dup')      return handleResolveDup(req, res);
   if (action === 'books-diag')       return handleBooksDiag(req, res);
   if (action === 'update-expense')   return handleUpdateExpense(req, res);
+  if (action === 'backfill-tax-2026')  return handleBackfillTax2026(req, res);
   if (action === 'upsert-deal')      return handleUpsertDeal(req, res);
   if (action === 'manual-expense')   return handleManualExpense(req, res);
   if (action === 'year-export')      return handleYearExport(req, res);
