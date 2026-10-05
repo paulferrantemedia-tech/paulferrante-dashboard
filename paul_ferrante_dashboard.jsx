@@ -314,6 +314,10 @@ const INIT_DELIVS = [
   { id:6, b:'Darry Ring',    sc:'Quote sent',            d:'TBC', s:'Pitching',          pl:'TikTok/IG',    pay:'$1,250' },
   { id:7, b:'Perfit',        sc:'Rate requested',        d:'Apr', s:'Pitching',          pl:'TikTok',       pay:'$1,250' },
   { id:8, b:'Airalo',        sc:'Rate requested',        d:'Apr', s:'Pitching',          pl:'TikTok',       pay:'$1,250' },
+  { id:9, b:'Liquid Death',  sc:'Emailed info@ + IG DM 10/5', d:'Oct 5', s:'Pitching',    pl:'TikTok/IG',    pay:'TBC'   },
+  { id:10, b:'Catalina Snacks', sc:'Emailed hi@ + IG DM 10/5', d:'Oct 5', s:'Pitching',   pl:'TikTok/IG',    pay:'TBC'   },
+  { id:11, b:'Something & Nothing', sc:'Emailed george@ + IG DM 10/5', d:'Oct 5', s:'Pitching', pl:'TikTok/IG', pay:'TBC' },
+  { id:12, b:'Dunkin\'',     sc:'IG DM + creator form 10/5', d:'Oct 5', s:'Pitching',     pl:'TikTok/IG',    pay:'TBC'   },
 ];
 
 const COMMENTS = [
