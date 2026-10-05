@@ -6670,12 +6670,13 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                     style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'12px 14px' }}>
                     {/* minHeight keeps the whole row comfortably tappable (2026-10-04: tap target felt narrow) */}
                     <div style={{ display:'flex', alignItems:'center', gap:8, minHeight:40 }}>
-                      {/* panel-opening tap target is the text block ONLY. the unlink button
-                          is its sibling, never its descendant, so a text tap can never reach
-                          the button's handler and a button tap can never bubble to a panel
-                          opener (2026-10-04: row-text taps were spuriously arming unlink).
-                          opening the panel also disarms any armed unlink: opening it is
-                          never an intent to unlink. */}
+                      {/* panel-opening tap target is the text block ONLY. the unlink
+                          control lives on its own action row below the card
+                          content, outside this block's subtree entirely, so a
+                          text tap can never reach the unlink handler and an
+                          unlink tap can never open the panel. opening the panel
+                          also disarms any armed unlink: opening it is never an
+                          intent to unlink. */}
                       <div onClick={() => { if (live.deal_id) { setConfirmUnlinkDeal(null); setProfitDealId(x.deal_id); } }}
                         title={live.deal_id ? 'view campaign profit' : undefined}
                         style={{ flex:1, minWidth:0, cursor: live.deal_id ? 'pointer' : 'default' }}>
@@ -6683,14 +6684,6 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
                       {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
-                      {/* explicit "unlink" label (not ×): the × glyph was too easy
-                          to confuse with the drawer's close ×, and a mistap silently
-                          unlinks. the button is a sibling of the panel-opening text
-                          block, never its descendant, so its taps cannot reach the
-                          panel opener; stopPropagation is belt-and-suspenders. */}
-                      <button type="button" aria-label="unlink campaign"
-                        onClick={(e) => { e.stopPropagation(); if (confirmUnlinkDeal === x.deal_id) { removeDeal(x); setConfirmUnlinkDeal(null); } else { setConfirmUnlinkDeal(x.deal_id); } }} title="unlink campaign"
-                        style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:confirmUnlinkDeal === x.deal_id ? '#DC2626' : BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>{confirmUnlinkDeal === x.deal_id ? 'confirm unlink' : 'unlink'}</button>
                     </div>
                     {(live.paid_date || live.deliverable_url || status === 'Paid') && (
                       <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>
@@ -6698,6 +6691,21 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                         {live.deliverable_url ? <>{' · '}<a href={live.deliverable_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color:SLATE }}>deliverable ↗</a></> : null}
                       </div>
                     )}
+                    {/* unlink lives on its own full-width action row BELOW the row
+                        content, outside the panel-opening text block's subtree
+                        entirely (2026-10-04: inline edge-button taps kept arming
+                        unlink alongside panel opens in real Chromium, so the
+                        control is physically separated). a tap on the row text
+                        can never reach this button — different subtree, no shared
+                        clickable ancestor — and a tap here can never open the
+                        panel: no panel opener exists in its ancestor chain.
+                        two-step arm/confirm preserved; stopPropagation kept as
+                        belt-and-suspenders. */}
+                    <div style={{ marginTop:6, paddingTop:6, borderTop:`1px dashed ${BOOKS.border}` }}>
+                      <button type="button" aria-label="unlink campaign"
+                        onClick={(e) => { e.stopPropagation(); if (confirmUnlinkDeal === x.deal_id) { removeDeal(x); setConfirmUnlinkDeal(null); } else { setConfirmUnlinkDeal(x.deal_id); } }} title="unlink campaign"
+                        style={{ display:'block', width:'100%', background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', textAlign:'right', color:confirmUnlinkDeal === x.deal_id ? '#DC2626' : BOOKS.muted, padding:'8px 4px', fontFamily:'inherit' }}>{confirmUnlinkDeal === x.deal_id ? 'confirm unlink' : 'unlink campaign'}</button>
+                    </div>
                   </div>
                 );
               })}
