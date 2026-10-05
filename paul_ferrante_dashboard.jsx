@@ -6050,12 +6050,18 @@ function InboxCard({ row, deals, reload, isMobile, showToast }) {
   );
 }
 
-function Field({ label, children }) {
+function Field({ label, children, plain }) {
+  // plain: render as a div instead of a label. Use for sections whose children
+  // include buttons (e.g. linked videos/campaigns rows with unlink buttons):
+  // a <label> natively forwards ANY tap inside it as a synthetic click on its
+  // first labelable descendant (the unlink button), causing phantom unlinks.
+  // Real form fields keep the <label> so click-to-focus still works.
+  const Tag = plain ? 'div' : 'label';
   return (
-    <label style={{ display:'block' }}>
+    <Tag style={{ display:'block' }}>
       <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.2px', fontWeight:600, marginBottom:4 }}>{label}</div>
       {children}
-    </label>
+    </Tag>
   );
 }
 
@@ -6593,7 +6599,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
               {deals.map((d) => <option key={d.deal_id} value={d.deal_id}>{d.brand} ({d.status})</option>)}
             </select>
           </Field>
-          <Field label={`Linked videos${linkedVids.length ? ` (${linkedVids.length})` : ''}`}>
+          <Field plain label={`Linked videos${linkedVids.length ? ` (${linkedVids.length})` : ''}`}>
             <div>
               {linkedVids.map((v) => (
                 <div key={v.platform + ':' + v.video_id}
@@ -6658,7 +6664,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
               )}
             </div>
           </Field>
-          <Field label={`Linked campaigns${linkedDeals.length ? ` (${linkedDeals.length})` : ''}`}>
+          <Field plain label={`Linked campaigns${linkedDeals.length ? ` (${linkedDeals.length})` : ''}`}>
             <div>
               {linkedDeals.map((x) => {
                 const live = liveDeal(x.deal_id) || {};
