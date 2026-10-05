@@ -3920,18 +3920,17 @@ function BrandGuidelinesTab() {
   );
 }
 
-// ── Books drawer/modal busy flag ──────────────────────────────────────────
+// ── Books UI busy registry ──────────────────────────────────────────────
 // Module scope (NOT inside App): lets the cloud-sync poll pause while Paul is
-// working in a Books expense drawer or modal, so an App re-render can't wipe
-// out a multi-step flow (video link → save, delete → confirm). Same pattern as
-// dealFormOpenRef, but the drawer state lives in ExpensesTab while the poll
-// lives in App, so a module-level flag bridges them.
-// Module-level "busy" registry: the App cloud-sync poll skips while ANY Books
-// overlay holds the UI (expense drawer, profit panel, drill-down). A Set of
-// reason tokens — NOT a single boolean — so nested overlays can't clobber each
-// other: closing the profit panel must not drop protection while the
-// underlying expense drawer is still open (that exact clobber caused a
-// poll-driven remount and a stale linked-campaigns render, 2026-10-04).
+// working in a Books expense drawer, modal, profit panel, or drill-down, so
+// an App re-render can't wipe out a multi-step flow (video link → save,
+// delete → confirm, drill-down browsing). Same pattern as dealFormOpenRef,
+// but the UI state lives in the Books components while the poll lives in App,
+// so a module-level registry bridges them. A Set of reason tokens — NOT a
+// single boolean — so nested overlays can't clobber each other: closing the
+// profit panel must not drop protection while the underlying expense drawer
+// is still open (that exact clobber caused a poll-driven remount and a stale
+// linked-campaigns render, 2026-10-04).
 const booksBusyReasons = new Set();
 function setBooksUiBusy(v, reason) {
   const r = reason || 'default';
