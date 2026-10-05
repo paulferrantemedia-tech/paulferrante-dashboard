@@ -5034,7 +5034,8 @@ function useStoreDerivedList(parse, rowValue, keyOf) {
     }));
   };
   const clearDeltas = () => setDeltas({ added: [], removed: new Set() });
-  return { displayed, add, remove, clearDeltas };
+  const hasPending = deltas.added.length > 0 || deltas.removed.size > 0;
+  return { displayed, add, remove, clearDeltas, hasPending };
 }
 // Every deal id an expense is tied to: the new linked_deals JSON snapshots
 // plus the legacy single-link fields (auto/linked/linked_2). Used by the
@@ -6597,8 +6598,11 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                     <div style={{ fontSize:10, color:BOOKS.muted }}>{v.platform}</div>
                   </div>
                   {v.url ? <a href={v.url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>open ↗</a> : null}
-                  <button onClick={() => removeVideo(v)} title="remove"
-                    style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
+                  {/* explicit "unlink" label (not ×): the × glyph was too easy
+                      to confuse with the drawer's close ×, and a mistap silently
+                      unlinks (2026-10-04). */}
+                  <button type="button" onClick={() => removeVideo(v)} title="unlink video"
+                    style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>unlink</button>
                 </div>
               ))}
               {!pickerOpen ? (
@@ -6667,12 +6671,13 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
                       {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
-                      {/* the × is a small edge button only — it must never cover
-                          the row. stopPropagation keeps its tap from bubbling to
+                      {/* explicit "unlink" label (not ×): the × glyph was too easy
+                          to confuse with the drawer's close ×, and a mistap silently
+                          unlinks. stopPropagation keeps the tap from bubbling to
                           the row and opening the profit panel (2026-10-04). */}
-                      <button type="button" aria-label="remove campaign link"
-                        onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="remove"
-                        style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
+                      <button type="button" aria-label="unlink campaign"
+                        onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="unlink campaign"
+                        style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>unlink</button>
                     </div>
                     {(live.paid_date || live.deliverable_url || status === 'Paid') && (
                       <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>
@@ -6731,9 +6736,13 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
           </label>
         </div>
 
+        {(dealLinks.hasPending || vidLinks.hasPending) && (
+          <div style={{ marginTop:16, fontSize:11, fontWeight:700, color:'#B45309', background:'#FEF3C7', border:'1px solid #F59E0B55', borderRadius:8, padding:'8px 12px' }}>
+            link changes not saved yet — save to keep them, or close without saving to discard.
+          </div>
+        )}
         <div style={{ marginTop:20, display:'flex', gap:8 }}>
-          <button onClick={save} disabled={saving}
-            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
+          <button onClick={save} disabled={saving}            style={{ flex:1, background:BOOKS.ink, color:'#FFFFFF', border:'none', borderRadius:8, padding:'10px', fontSize:13, fontWeight:700, cursor:saving?'wait':'pointer', fontFamily:'inherit', opacity:saving?0.6:1 }}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
           <button onClick={onClose}
