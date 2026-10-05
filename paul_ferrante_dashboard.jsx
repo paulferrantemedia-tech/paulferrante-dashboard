@@ -4979,6 +4979,26 @@ function parseLinkedDeals(row) {
   } catch (_) { return []; }
 }
 function linkedDealCount(r) { return parseLinkedDeals(r).length; }
+// useRowSyncedList — drawer link-list state that heals from a stale mount.
+// The expense drawer's `row` prop can be momentarily stale: save() fires
+// reload() without awaiting it, so a drawer opened before the refetch lands
+// initializes its link lists from the pre-save row — and the old code never
+// re-read the row, leaving linked rows invisible until a full close/reopen
+// (observed 2026-10-04: nested profit-panel round-trip ended with the parent
+// drawer's linked-campaigns section empty while the saved link was intact).
+// This hook re-syncs from the row whenever its payload changes, but never
+// clobbers the user's own unsaved link/unlink taps: the re-sync only fires
+// while the current list still matches the previous payload.
+function useRowSyncedList(parse, rowValue) {
+  const [list, setList] = useState(() => parse(rowValue));
+  const prevRef = useRef(rowValue);
+  if (prevRef.current !== rowValue) {
+    const prevList = parse(prevRef.current);
+    prevRef.current = rowValue;
+    if (JSON.stringify(prevList) === JSON.stringify(list)) setList(parse(rowValue));
+  }
+  return [list, setList];
+}
 // Every deal id an expense is tied to: the new linked_deals JSON snapshots
 // plus the legacy single-link fields (auto/linked/linked_2). Used by the
 // campaign profitability view so nothing linked the old way is missed.
@@ -5509,8 +5529,11 @@ function csvCell(v) {
 }
 
 // Recently-reviewed history list (shared by the Inbox tab's two render paths).
-function RecentReviewLog() {
-  const log = getReviewLog().slice(0, 8);
+// liveIds: expense_ids currently in Books; log entries for deleted expenses
+// (e.g. removed QA test rows) are hidden instead of lingering forever.
+function RecentReviewLog({ liveIds }) {
+  const log = getReviewLog().slice(0, 8)
+    .filter((e) => !liveIds || !e.expense_id || liveIds.has(e.expense_id));
   if (log.length === 0) return null;
   return (
     <div style={{ marginTop:16, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:10, padding:'12px 14px' }}>
@@ -5575,6 +5598,9 @@ function DupCard({ dup, reload, showToast }) {
 }
 
 function InboxTab({ data, reload, isMobile, showToast }) {
+  // Live expense ids, so the Recently Reviewed log can hide entries for
+  // deleted expenses (stale QA test rows) instead of showing them forever.
+  const liveExpenseIds = useMemo(() => new Set((data.expenses || []).map((r) => r.expense_id)), [data.expenses]);
   // Show ALL unreviewed rows so every AI extraction lands in your approval queue.
   // Sorted by flag priority — flagged items bubble to top, clean ones below.
   const queue = data.expenses
@@ -5666,7 +5692,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
           <div style={{ fontSize:14, color:BOOKS.muted }}>Inbox is clear. Nothing needs review.</div>
           <div style={{ fontSize:12, color:BOOKS.muted, marginTop:6 }}>If receipts are sitting in your Drive folder, use “Pull in receipt backlog” above.</div>
         </div>
-        <RecentReviewLog />
+        <RecentReviewLog liveIds={liveExpenseIds} />
       </div>
     );
   }
@@ -5692,7 +5718,7 @@ function InboxTab({ data, reload, isMobile, showToast }) {
           <InboxCard key={row.expense_id} row={row} deals={data.deals} reload={reload} isMobile={isMobile} showToast={showToast} />
         ))}
       </div>
-      <RecentReviewLog />
+      <RecentReviewLog liveIds={liveExpenseIds} />
     </div>
   );
 }
@@ -6244,7 +6270,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [linkedVids, setLinkedVids] = useState(() => parseLinkedVideos(row));
+  const [linkedVids, setLinkedVids] = useRowSyncedList((v) => parseLinkedVideos({ linked_videos: v }), row.linked_videos);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [catPosts, setCatPosts] = useState(null); // null = not yet loaded
   const [catLoading, setCatLoading] = useState(false);
@@ -6253,7 +6279,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   // Linked campaigns (deals): snapshot JSON column `linked_deals`, same
   // tap-to-link pattern as videos. The drawer re-resolves each snapshot
   // against the live deals prop for current stage/amount/invoice info.
-  const [linkedDeals, setLinkedDeals] = useState(() => parseLinkedDeals(row));
+  const [linkedDeals, setLinkedDeals] = useRowSyncedList((v) => parseLinkedDeals({ linked_deals: v }), row.linked_deals);
   const [dealPickerOpen, setDealPickerOpen] = useState(false);
   const [dealSearch, setDealSearch] = useState('');
   // Campaign profitability drill-down (opens DealProfitPanel for a linked deal).
