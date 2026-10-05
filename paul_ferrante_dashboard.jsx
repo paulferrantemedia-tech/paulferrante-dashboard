@@ -8131,7 +8131,7 @@ function ExportTab({ data, year }) {
                   <DeepCard tab="revenue" setTab={setTab} title="open pipeline breakdown" onOpen={() => openRevenueDrill('pipeline')} style={{ borderLeft:`3px solid ${YELL}` }}>
                     <div style={{ fontSize:10,color:'#8A6A10',textTransform:'uppercase',letterSpacing:'2px',marginBottom:10,fontWeight:600 }}>Pipeline</div>
                     <div style={{ fontSize:isMobile?24:36,fontWeight:800,color:'#8A6A10' }}>{usd(pipelineValue)}</div>
-                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{deals.filter(d=>d.s==='Pitching').length} pitches</div>
+                    <div style={{ fontSize:11,color:'#4A6080',marginTop:6 }}>{pipelineDeals.length} open deals</div>
                   </DeepCard>
                   {!isMobile && (
                     <DeepCard tab="deals" setTab={setTab} title="open deal" onOpen={() => { if (biggestDeal) setDealModal({ ...biggestDeal }); }} style={{ borderLeft:'3px solid #5DBF8A' }}>
