@@ -6667,20 +6667,27 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                 const platform = live.platform || x.platform || '';
                 return (
                   <div key={x.deal_id}
-                    onClick={() => { if (live.deal_id) setProfitDealId(x.deal_id); }}
-                    title={live.deal_id ? 'view campaign profit' : undefined}
-                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'12px 14px', cursor: live.deal_id ? 'pointer' : 'default' }}>
+                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'12px 14px' }}>
                     {/* minHeight keeps the whole row comfortably tappable (2026-10-04: tap target felt narrow) */}
                     <div style={{ display:'flex', alignItems:'center', gap:8, minHeight:40 }}>
-                      <div style={{ flex:1, minWidth:0 }}>
+                      {/* panel-opening tap target is the text block ONLY. the unlink button
+                          is its sibling, never its descendant, so a text tap can never reach
+                          the button's handler and a button tap can never bubble to a panel
+                          opener (2026-10-04: row-text taps were spuriously arming unlink).
+                          opening the panel also disarms any armed unlink: opening it is
+                          never an intent to unlink. */}
+                      <div onClick={() => { if (live.deal_id) { setConfirmUnlinkDeal(null); setProfitDealId(x.deal_id); } }}
+                        title={live.deal_id ? 'view campaign profit' : undefined}
+                        style={{ flex:1, minWidth:0, cursor: live.deal_id ? 'pointer' : 'default' }}>
                         <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{live.brand || x.brand || '(untitled campaign)'}</div>
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
                       {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
                       {/* explicit "unlink" label (not ×): the × glyph was too easy
                           to confuse with the drawer's close ×, and a mistap silently
-                          unlinks. stopPropagation keeps the tap from bubbling to
-                          the row and opening the profit panel (2026-10-04). */}
+                          unlinks. the button is a sibling of the panel-opening text
+                          block, never its descendant, so its taps cannot reach the
+                          panel opener; stopPropagation is belt-and-suspenders. */}
                       <button type="button" aria-label="unlink campaign"
                         onClick={(e) => { e.stopPropagation(); if (confirmUnlinkDeal === x.deal_id) { removeDeal(x); setConfirmUnlinkDeal(null); } else { setConfirmUnlinkDeal(x.deal_id); } }} title="unlink campaign"
                         style={{ background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', color:confirmUnlinkDeal === x.deal_id ? '#DC2626' : BOOKS.muted, flexShrink:0, padding:'6px 8px', fontFamily:'inherit' }}>{confirmUnlinkDeal === x.deal_id ? 'confirm unlink' : 'unlink'}</button>
@@ -6788,7 +6795,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
         )}
         {profitDeal && (
           <DealProfitPanel deal={profitDeal} expenses={expenses} deals={deals} sourceExpenseId={row.expense_id}
-            onClose={() => setProfitDealId(null)} reload={reload} showToast={showToast} />
+            onClose={() => { setConfirmUnlinkDeal(null); setConfirmUnlinkVideo(null); setProfitDealId(null); }} reload={reload} showToast={showToast} />
         )}
       </div>
     </div>
