@@ -4960,6 +4960,17 @@ function parseLinkedVideos(row) {
     return Array.isArray(arr) ? arr.filter((x) => x && x.video_id && x.url) : [];
   } catch (_) { return []; }
 }
+// linked_deals is stored as a JSON array string on the expense row.
+// Parse defensively: malformed input → [].
+function parseLinkedDeals(row) {
+  try {
+    const v = row && row.linked_deals;
+    if (!v) return [];
+    const arr = typeof v === 'string' ? JSON.parse(v) : v;
+    return Array.isArray(arr) ? arr.filter((x) => x && x.deal_id) : [];
+  } catch (_) { return []; }
+}
+function linkedDealCount(r) { return parseLinkedDeals(r).length; }
 function linkedVideoCount(r) { return parseLinkedVideos(r).length; }
 function fmtMoney(n, ccy = 'USD') {
   if (n === '' || n == null || isNaN(Number(n))) return '—';
@@ -5010,6 +5021,9 @@ function _ssSet(key, value) {
 function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals = [], dashboardTotalRevenue = 0 }) {
   const [year, setYearRaw] = useState(function () { return Number(_ssGet('books_year', new Date().getFullYear())) || new Date().getFullYear(); });
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
+  // Expense drill-down: null = off (normal sub-tabs), '__cats__' = category
+  // breakdown cards, otherwise a category name = filtered expense list.
+  const [drillCat, setDrillCat] = useState(null);
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -5099,7 +5113,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
           <div style={{ fontSize:11, color:BOOKS.muted, letterSpacing:'2px', textTransform:'uppercase', marginTop:2 }}>RGG Media · {year}</div>
         </div>
         <select
-          value={year} onChange={(e) => setYear(Number(e.target.value))}
+          value={year} onChange={(e) => { setYear(Number(e.target.value)); setDrillCat(null); }}
           style={{ background:BOOKS.parchment, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 12px', fontSize:13, fontFamily:'inherit', color:BOOKS.ink, cursor:'pointer' }}
         >
           {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -5115,7 +5129,8 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
 
       {/* ── KPI strip ────────────────────────────────────────────── */}
       <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(2,1fr)':'repeat(4,1fr)', gap:12, marginBottom:18 }}>
-        <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink" />
+        <KpiCard label="Expenses YTD" value={fmtMoney(totalExpenses)} tone="ink"
+          onClick={() => setDrillCat('__cats__')} clickable hint="tap for category breakdown" />
         <KpiCard label="Revenue YTD"  value={fmtMoney(totalRevenue)}  tone="deepOcean" />
         <KpiCard label="Net"          value={fmtMoney(totalRevenue - totalExpenses)} tone={totalRevenue >= totalExpenses ? 'green' : 'red'} />
         <KpiCard
@@ -5143,10 +5158,28 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
         ))}
       </div>
 
-      {/* ── Sub-tab body ─────────────────────────────────────────── */}
+      {/* ── Sub-tab body (or expense drill-down) ─────────────────── */}
       {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
       {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
-      {!loading && (
+      {!loading && drillCat !== null && (
+        <>
+          {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
+          {drillCat === '__cats__' ? (
+            <CategoryBreakdown expenses={data.expenses} onPick={(c) => setDrillCat(c)} onBack={() => setDrillCat(null)} isMobile={isMobile} />
+          ) : (
+            <div>
+              <div style={{ marginBottom:12, fontSize:12, display:'flex', alignItems:'center', gap:6 }}>
+                <button onClick={() => setDrillCat('__cats__')}
+                  style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← categories</button>
+                <span style={{ color:BOOKS.muted }}>/</span>
+                <span style={{ fontWeight:700, color:BOOKS.ink }}>{drillCat}</span>
+              </div>
+              <ExpensesTab key={drillCat} data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} initialCategory={drillCat} />
+            </div>
+          )}
+        </>
+      )}
+      {!loading && drillCat === null && (
         <>
           {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
           {!error && (
@@ -5167,7 +5200,7 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
 // ─────────────────────────────────────────────────────────────────────────────
 // KPI card
 // ─────────────────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, tone, onClick, clickable }) {
+function KpiCard({ label, value, tone, onClick, clickable, hint }) {
   const toneColor = {
     ink: TEXT, deepOcean: SLATE, brightSky: BLUE, green: '#16A34A', red: '#DC2626',
   }[tone] || TEXT;
@@ -5184,6 +5217,46 @@ function KpiCard({ label, value, tone, onClick, clickable }) {
     >
       <div style={{ fontSize:10, color:BOOKS.muted, textTransform:'uppercase', letterSpacing:'1.5px', fontWeight:700, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:22, fontWeight:800, color:toneColor, letterSpacing:'-0.5px' }}>{value}</div>
+      {hint && <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CategoryBreakdown — expense drill-down level 1: per-category totals/cards.
+// Entered by tapping the "Expenses YTD" KPI card. Tapping a category drills
+// into the filtered expense list (BooksTab renders ExpensesTab with
+// initialCategory), and tapping an expense row opens the existing detail
+// drawer — the full drill path is card → category → expense.
+// ─────────────────────────────────────────────────────────────────────────────
+function CategoryBreakdown({ expenses, onPick, onBack, isMobile }) {
+  const cats = useMemo(() => {
+    const m = {};
+    (expenses || []).forEach((r) => {
+      const c = r.category || 'Uncategorized';
+      if (!m[c]) m[c] = { category: c, total: 0, count: 0 };
+      m[c].total += toUSD(r.amount, r.currency);
+      m[c].count += 1;
+    });
+    return Object.values(m).sort((a, b) => b.total - a.total);
+  }, [expenses]);
+  return (
+    <div>
+      <div style={{ marginBottom:12, fontSize:12 }}>
+        <button onClick={onBack}
+          style={{ background:'none', border:'none', fontSize:12, color:SLATE, fontWeight:600, cursor:'pointer', fontFamily:'inherit', padding:0 }}>← expenses</button>
+      </div>
+      <div style={{ fontSize:13, fontWeight:700, color:BOOKS.ink, margin:'0 0 12px' }}>expenses by category</div>
+      <div style={{ display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:12 }}>
+        {cats.map((c) => (
+          <KpiCard key={c.category} label={c.category} value={fmtMoney(c.total)} tone="ink"
+            onClick={() => onPick(c.category)} clickable
+            hint={`${c.count} expense${c.count === 1 ? '' : 's'} · tap to view`} />
+        ))}
+        {cats.length === 0 && (
+          <div style={{ fontSize:12, color:BOOKS.muted, padding:'12px 0' }}>no expenses this year.</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -5833,8 +5906,8 @@ function ConfidenceBadge({ level }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // ExpensesTab — full table view
 // ─────────────────────────────────────────────────────────────────────────────
-function ExpensesTab({ data, reload, isMobile, showToast, year }) {
-  const [filterCat, setFilterCat]         = useState('');
+function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory = '' }) {
+  const [filterCat, setFilterCat]         = useState(initialCategory || '');
   const [filterFlagged, setFilterFlagged] = useState(false);
   const [filterUnrev, setFilterUnrev]     = useState(false);
   const [filterEntered, setFilterEntered] = useState('');
@@ -5936,6 +6009,9 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
                 )}{linkedVideoCount(r) > 0 && (
                   <span title="Videos linked to this expense"
                     style={{ marginLeft:6, fontSize:10, fontWeight:700, color:'#1E40AF', background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>▶ {linkedVideoCount(r)} video{linkedVideoCount(r) === 1 ? '' : 's'}</span>
+                )}{linkedDealCount(r) > 0 && (
+                  <span title="Campaigns linked to this expense"
+                    style={{ marginLeft:6, fontSize:10, fontWeight:700, color:BOOKS.ink, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:99, padding:'1px 7px', whiteSpace:'nowrap' }}>◆ {linkedDealCount(r)} campaign{linkedDealCount(r) === 1 ? '' : 's'}</span>
                 )}</td>
                 <td style={{ ...tdStyle, textAlign:'right', fontVariantNumeric:'tabular-nums', fontWeight:600 }}>{fmtMoney(r.amount, r.currency)}</td>
                 <td style={tdStyle}>{r.category || <span style={{ color:BOOKS.muted }}>—</span>}</td>
@@ -6019,6 +6095,12 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   const [catLoading, setCatLoading] = useState(false);
   const [catFailed, setCatFailed] = useState(false);
   const [vidSearch, setVidSearch] = useState('');
+  // Linked campaigns (deals): snapshot JSON column `linked_deals`, same
+  // tap-to-link pattern as videos. The drawer re-resolves each snapshot
+  // against the live deals prop for current stage/amount/invoice info.
+  const [linkedDeals, setLinkedDeals] = useState(() => parseLinkedDeals(row));
+  const [dealPickerOpen, setDealPickerOpen] = useState(false);
+  const [dealSearch, setDealSearch] = useState('');
 
   // Lazy-load his posted-video catalog for the tap-to-link picker.
   // catalog-data is a public discovery action (same call the catalog UI makes).
@@ -6050,6 +6132,40 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
   function removeVideo(v) {
     setLinkedVids((prev) => prev.filter((x) => !(x.platform === v.platform && x.video_id === v.video_id)));
   }
+
+  function addDeal(d) {
+    setLinkedDeals((prev) => {
+      if (prev.some((x) => x.deal_id === d.deal_id)) return prev;
+      return [...prev, {
+        deal_id: d.deal_id,
+        brand: d.brand || '',
+        deal_value: Number(d.deal_value) || 0,
+        status: d.status || '',
+        platform: d.platform || '',
+        linked_at: new Date().toISOString(),
+      }];
+    });
+  }
+  function removeDeal(x) {
+    setLinkedDeals((prev) => prev.filter((y) => y.deal_id !== x.deal_id));
+  }
+  // Live deal lookup: snapshots carry the stage/amount at link time, but the
+  // drawer shows the CURRENT stage, amount, and invoice/payment info from the
+  // deals store.
+  const liveDeal = (id) => (deals || []).find((d) => d.deal_id === id) || null;
+
+  // Deal picker results: free-text search over brand/status/platform,
+  // biggest campaigns first (the expense is most likely tied to a major deal).
+  const dealPickerResults = (() => {
+    const q = dealSearch.trim().toLowerCase();
+    return (deals || [])
+      .filter((d) => !q
+        || String(d.brand || '').toLowerCase().includes(q)
+        || String(d.status || '').toLowerCase().includes(q)
+        || String(d.platform || '').toLowerCase().includes(q))
+      .sort((a, b) => (Number(b.deal_value) || 0) - (Number(a.deal_value) || 0))
+      .slice(0, 40);
+  })();
 
   // Picker ranking (Paul, 2026-10-04): keyword/caption matching is PRIMARY.
   // His videos often post days/weeks after the trip (editing lag — e.g. Japan
@@ -6103,6 +6219,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
       ['date','vendor','amount','currency','category','tax_category','business_purpose','payment_method',
        'linked_deal_id','linked_deal_id_2','reviewed','notes'].forEach((k) => { patch[k] = edit[k] ?? ''; });
       patch.linked_videos = JSON.stringify(linkedVids);
+      patch.linked_deals = JSON.stringify(linkedDeals);
       await booksApi('update-expense', { method:'POST', body: { expense_id: row.expense_id, patch, confirm_vendor_category: edit.category !== row.category_auto } });
       // Tax tag is stored locally (the sheet has no column for it); log a
       // review only on the transition from unreviewed to reviewed.
@@ -6238,6 +6355,78 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
                     })}
                   </div>
                   <button onClick={() => setPickerOpen(false)}
+                    style={{ marginTop:8, background:'none', border:'none', fontSize:12, color:BOOKS.muted, cursor:'pointer', fontFamily:'inherit' }}>
+                    done
+                  </button>
+                </div>
+              )}
+            </div>
+          </Field>
+          <Field label={`Linked campaigns${linkedDeals.length ? ` (${linkedDeals.length})` : ''}`}>
+            <div>
+              {linkedDeals.map((x) => {
+                const live = liveDeal(x.deal_id) || {};
+                const status = live.status || x.status || '—';
+                const amount = (live.deal_value != null && live.deal_value !== '') ? live.deal_value : x.deal_value;
+                const platform = live.platform || x.platform || '';
+                return (
+                  <div key={x.deal_id}
+                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 10px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{live.brand || x.brand || '(untitled campaign)'}</div>
+                        <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
+                      </div>
+                      {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
+                      <button onClick={() => removeDeal(x)} title="remove"
+                        style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
+                    </div>
+                    {(live.paid_date || live.deliverable_url || status === 'Paid') && (
+                      <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>
+                        {live.paid_date ? 'paid ' + live.paid_date : 'not paid yet'}
+                        {live.deliverable_url ? <>{' · '}<a href={live.deliverable_url} target="_blank" rel="noreferrer" style={{ color:SLATE }}>deliverable ↗</a></> : null}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!dealPickerOpen ? (
+                <button onClick={() => setDealPickerOpen(true)}
+                  style={{ background:BOOKS.surface, color:BOOKS.ink, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 14px', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+                  link campaigns
+                </button>
+              ) : (
+                <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:8, marginTop:4, background:BOOKS.surface }}>
+                  <input aria-label="search campaigns" placeholder="search campaigns…" value={dealSearch} onChange={(e) => setDealSearch(e.target.value)}
+                    style={{ ...inputStyle, marginBottom:8 }} />
+                  {(deals || []).length === 0 && (
+                    <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>no campaigns found.</div>
+                  )}
+                  <div style={{ maxHeight:260, overflowY:'auto' }}>
+                    {dealPickerResults.map((d) => {
+                      const already = linkedDeals.some((x) => x.deal_id === d.deal_id);
+                      return (
+                        <div key={d.deal_id}
+                          onClick={() => { if (!already) addDeal(d); }}
+                          style={{ display:'flex', alignItems:'center', gap:8, padding:6, borderRadius:6, cursor:already ? 'default' : 'pointer', opacity:already ? 0.55 : 1 }}
+                          onMouseEnter={(e) => { if (!already) e.currentTarget.style.background = BOOKS.parchment; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.brand || '(untitled)'}</div>
+                            <div style={{ fontSize:10, color:BOOKS.muted }}>{d.status || '—'}{d.deal_value ? ' · ' + fmtMoney(d.deal_value) : ''}{d.platform ? ' · ' + d.platform : ''}</div>
+                          </div>
+                          {already
+                            ? <span style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, flexShrink:0 }}>linked ✓</span>
+                            : <button type="button" aria-label="link this campaign"
+                                onClick={(e) => { e.stopPropagation(); addDeal(d); }}
+                                style={{ background:'none', border:'none', padding:0, margin:0, fontSize:11, fontWeight:700, color:SLATE, flexShrink:0, cursor:'pointer', fontFamily:'inherit' }}>
+                                + link
+                              </button>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button onClick={() => setDealPickerOpen(false)}
                     style={{ marginTop:8, background:'none', border:'none', fontSize:12, color:BOOKS.muted, cursor:'pointer', fontFamily:'inherit' }}>
                     done
                   </button>
