@@ -6620,25 +6620,26 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                 const platform = live.platform || x.platform || '';
                 return (
                   <div key={x.deal_id}
-                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 10px' }}>
+                    onClick={() => { if (live.deal_id) setProfitDealId(x.deal_id); }}
+                    title={live.deal_id ? 'view campaign profit' : undefined}
+                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 10px', cursor: live.deal_id ? 'pointer' : 'default' }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <div style={{ flex:1, minWidth:0, cursor: live.deal_id ? 'pointer' : 'default' }}
-                        title={live.deal_id ? 'view campaign profit' : undefined}
-                        onClick={() => { if (live.deal_id) setProfitDealId(x.deal_id); }}>
+                      <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{live.brand || x.brand || '(untitled campaign)'}</div>
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
                       </div>
-                      {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
-                      {/* stopPropagation: the row itself opens the profit panel — without
-                          it, tapping × both unlinks the campaign AND opens the
-                          panel, silently wiping the local linked list (2026-10-04). */}
-                      <button onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="remove"
+                      {live.invoice_url ? <a href={live.invoice_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize:11, color:SLATE, flexShrink:0 }}>invoice ↗</a> : null}
+                      {/* the × is a small edge button only — it must never cover
+                          the row. stopPropagation keeps its tap from bubbling to
+                          the row and opening the profit panel (2026-10-04). */}
+                      <button type="button" aria-label="remove campaign link"
+                        onClick={(e) => { e.stopPropagation(); removeDeal(x); }} title="remove"
                         style={{ background:'none', border:'none', fontSize:16, cursor:'pointer', color:BOOKS.muted, flexShrink:0, padding:'2px 6px' }}>×</button>
                     </div>
                     {(live.paid_date || live.deliverable_url || status === 'Paid') && (
                       <div style={{ fontSize:10, color:BOOKS.muted, marginTop:4 }}>
                         {live.paid_date ? 'paid ' + live.paid_date : 'not paid yet'}
-                        {live.deliverable_url ? <>{' · '}<a href={live.deliverable_url} target="_blank" rel="noreferrer" style={{ color:SLATE }}>deliverable ↗</a></> : null}
+                        {live.deliverable_url ? <>{' · '}<a href={live.deliverable_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color:SLATE }}>deliverable ↗</a></> : null}
                       </div>
                     )}
                   </div>
