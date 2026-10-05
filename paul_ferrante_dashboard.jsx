@@ -4054,14 +4054,17 @@ export default function App() {
   // Revenue drill-down (Revenue tab): same shape/pattern as the Books expense
   // drill-down. scope 'paid' = paid 2026 deals (sums to Total Earned);
   // scope 'pipeline' = Pitching/Awaiting Approval/Delivered deals (sums to
-  // Active Pipeline). Persisted to sessionStorage and holding the cloud-sync
-  // poll off while open, exactly like the Books drills.
+  // Active Pipeline). entry 'cards' marks a direct list opened straight from
+  // the tab cards (Best Month) — its back target is the cards, not a parent
+  // breakdown. Persisted to sessionStorage and holding the cloud-sync poll
+  // off while open, exactly like the Books drills.
   function validRevenueDrill(v) {
     if (!v || typeof v !== 'object') return null;
     const scope = v.scope === 'pipeline' ? 'pipeline' : 'paid';
+    const entry = v.entry === 'cards' ? 'cards' : undefined;
     if (v.view === 'cats') return { view:'cats', scope };
     if (v.view === 'list' && ['brand','stage','month','quarter'].includes(v.mode) && typeof v.key === 'string' && v.key
-        && typeof v.label === 'string') return { view:'list', scope, mode: v.mode, key: v.key, label: v.label };
+        && typeof v.label === 'string') return { view:'list', scope, mode: v.mode, key: v.key, label: v.label, ...(entry ? { entry } : {}) };
     return null;
   }
   const [revDrill, setRevDrillRaw] = useState(() => validRevenueDrill(_ssGet('revenue_drill', null)));
@@ -5513,12 +5516,16 @@ function dealDrillGroupKey(d, mode, fbYear) {
   }
   return (d.b || '').trim() || 'unknown brand';
 }
-function DealBreakdown({ deals, title, headline, sub, onPick, onBack, backLabel, isMobile, storageKey }) {
+function DealBreakdown({ deals, title, headline, sub, onPick, onBack, backLabel, isMobile, storageKey, defaultMode }) {
   // Grouping mode persists across remounts (same sessionStorage pattern as the
   // expense drill-down) so a background refresh can't reset the toggle.
+  // Mode keys and defaults are scoped per drill universe (e.g. paid deals
+  // default to by brand, pipeline defaults to by deal stage) so a mode picked
+  // in one universe never leaks into another.
+  const fbDefault = DEAL_DRILL_MODES.some(x => x.id === defaultMode) ? defaultMode : 'brand';
   const [mode, setModeRaw] = useState(() => {
-    const m = _ssGet(storageKey, 'brand');
-    return DEAL_DRILL_MODES.some(x => x.id === m) ? m : 'brand';
+    const m = _ssGet(storageKey, fbDefault);
+    return DEAL_DRILL_MODES.some(x => x.id === m) ? m : fbDefault;
   });
   function setMode(m) { _ssSet(storageKey, m); setModeRaw(m); }
   const fbYear = new Date().getFullYear();
@@ -8675,10 +8682,12 @@ function ExportTab({ data, year }) {
                   headline={headline} sub={sub}
                   onPick={(mode, key, label) => setRevDrill({ view:'list', scope: revDrill.scope, mode, key, label })}
                   onBack={() => setRevDrill(null)} backLabel="revenue" isMobile={isMobile}
-                  storageKey="revenue_drill_mode" />
+                  key={isPipe ? 'pipe' : 'paid'}
+                  storageKey={isPipe ? "revenue_drill_mode_pipeline" : "revenue_drill_mode_paid"}
+                  defaultMode={isPipe ? "stage" : "brand"} />
               ) : (
                 <DealDrillList deals={list} mode={revDrill.mode} groupKey={revDrill.key} label={revDrill.label}
-                  onBack={() => setRevDrill({ view:'cats', scope: revDrill.scope })}
+                  onBack={() => (revDrill.entry === 'cards' ? setRevDrill(null) : setRevDrill({ view:'cats', scope: revDrill.scope }))}
                   onOpenDeal={(d) => setDealModal({ ...d })}
                   isMobile={isMobile} />
               );
@@ -8688,11 +8697,11 @@ function ExportTab({ data, year }) {
               {[
                 { lbl:'Total Earned (2026)',  val:usd(totalRevenue2026),           color:BLUE,      sub:`${paidDeals2026.length} paid deals`,
                   onClick:() => setRevDrill({ view:'cats', scope:'paid' }), hint:'tap for deal breakdown' },
-                { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${deals.filter(d=>d.s==='Pitching').length} pitches`,
+                { lbl:'Active Pipeline',      val:usd(pipelineValue),             color:YELL,      sub:`${pipelineDeals.length} open deals`,
                   onClick:() => setRevDrill({ view:'cats', scope:'pipeline' }), hint:'tap for deal breakdown' },
                 { lbl:'Avg Deal Value',       val:usd(totalRevenue2026/Math.max(paidDeals2026.length,1)), color:'#a78bfa', sub:'paid deals only' },
                 { lbl:'Best Month (2026)',    val:usd(best26.r),                  color:'#4ade80', sub:`${best26.m} 2026`,
-                  onClick:() => setRevDrill({ view:'list', scope:'paid', mode:'month', key:bestMonthKey, label:bestMonthLabel }), hint:'tap to see deals' },
+                  onClick:() => setRevDrill({ view:'list', scope:'paid', mode:'month', key:bestMonthKey, label:bestMonthLabel, entry:'cards' }), hint:'tap to see deals' },
               ].map(({ lbl, val, color, sub, onClick, hint }) => (
                 <Card key={lbl} onClick={onClick} style={{ background:`${OCEAN}55`, borderLeft:`3px solid ${color}` }}>
                   <div style={{ fontSize:9,color,textTransform:'uppercase',letterSpacing:'1.5px',marginBottom:10 }}>{lbl}</div>
