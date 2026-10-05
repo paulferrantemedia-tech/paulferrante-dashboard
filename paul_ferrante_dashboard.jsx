@@ -6701,7 +6701,14 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                         panel: no panel opener exists in its ancestor chain.
                         two-step arm/confirm preserved; stopPropagation kept as
                         belt-and-suspenders. */}
-                    <div style={{ marginTop:6, paddingTop:6, borderTop:`1px dashed ${BOOKS.border}` }}>
+                    <div style={{ marginTop:14, paddingTop:10, borderTop:`1px dashed ${BOOKS.border}` }}>
+                      {/* 2026-10-04 fix round 10: real-Chromium re-QA showed taps
+                          aimed at the row text landing on this full-width button
+                          (only ~12px separated them). the dead zone between the
+                          text block and the button hit area is now ~24px, so a
+                          near-miss tap lands on dead space instead of arming
+                          unlink. the button hit area itself is unchanged and does
+                          not extend above its visual row (no negative margins). */}
                       <button type="button" aria-label="unlink campaign"
                         onClick={(e) => { e.stopPropagation(); if (confirmUnlinkDeal === x.deal_id) { removeDeal(x); setConfirmUnlinkDeal(null); } else { setConfirmUnlinkDeal(x.deal_id); } }} title="unlink campaign"
                         style={{ display:'block', width:'100%', background:'none', border:'none', fontSize:11, fontWeight:600, cursor:'pointer', textAlign:'right', color:confirmUnlinkDeal === x.deal_id ? '#DC2626' : BOOKS.muted, padding:'8px 4px', fontFamily:'inherit' }}>{confirmUnlinkDeal === x.deal_id ? 'confirm unlink' : 'unlink campaign'}</button>
