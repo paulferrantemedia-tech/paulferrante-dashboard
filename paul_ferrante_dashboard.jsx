@@ -3920,6 +3920,16 @@ function BrandGuidelinesTab() {
   );
 }
 
+// ── Books drawer/modal busy flag ──────────────────────────────────────────
+// Module scope (NOT inside App): lets the cloud-sync poll pause while Paul is
+// working in a Books expense drawer or modal, so an App re-render can't wipe
+// out a multi-step flow (video link → save, delete → confirm). Same pattern as
+// dealFormOpenRef, but the drawer state lives in ExpensesTab while the poll
+// lives in App, so a module-level flag bridges them.
+let booksUiBusyFlag = false;
+function setBooksUiBusy(v) { booksUiBusyFlag = !!v; }
+function booksUiBusy() { return booksUiBusyFlag; }
+
 export default function App() {
   const width = useWindowWidth();
   const isMobile = width < 768;
@@ -4095,11 +4105,18 @@ export default function App() {
   useEffect(() => { dealFormOpenRef.current = !!dealModal; }, [dealModal]);
 
   // ── Cloud sync: load from cloud and apply state ──────────────
+  // Bail-out helpers: when the incoming cloud value is deep-equal to current
+  // state, keep the previous reference so React skips the re-render. Without
+  // this, every 15s poll re-renders App even when nothing changed — and an App
+  // re-render remounts tab content, which would close an open Books expense
+  // drawer mid-task.
+  const sameJSON = (a, b) => { try { return JSON.stringify(a) === JSON.stringify(b); } catch (_) { return false; } };
+  const setIfChanged = (setter, next) => setter((prev) => (sameJSON(prev, next) ? prev : next));
   const applyCloudState = (state, quiet = false) => {
     if (!state) return;
     // Block pushToCloud from firing while we apply cloud data — prevents feedback loop
     isApplyingCloud.current = true;
-    if (state.deals)       { const _nd = (state.deals||[]).map(d=>({ ...d, s: canonStage(d.s) })); setDeals(_nd); localStorage.setItem('pf_deals', JSON.stringify(_nd)); }
+    if (state.deals)       { const _nd = (state.deals||[]).map(d=>({ ...d, s: canonStage(d.s) })); setIfChanged(setDeals, _nd); localStorage.setItem('pf_deals', JSON.stringify(_nd)); }
     if (state.crm) {
       // INIT_CRM is always the permanent base. Cloud data overrides any edited entries
       // and appends any manually-added contacts that aren't in the base set.
@@ -4108,14 +4125,14 @@ export default function App() {
         ...INIT_CRM.map(c => cloudByName.get((c.b || '').toLowerCase()) || c),
         ...state.crm.filter(c => !INIT_CRM.some(ic => (ic.b || '').toLowerCase() === (c.b || '').toLowerCase())),
       ];
-      setCrm(merged);
+      setIfChanged(setCrm, merged);
       localStorage.setItem('pf_crm', JSON.stringify(merged));
     }
-    if (state.delivs)      { setDelivs(state.delivs);           localStorage.setItem('pf_delivs',       JSON.stringify(state.delivs)); }
-    if (state.milestones)  { const _ms = (state.milestones||[]).filter(m => !RETIRED_MILESTONE_IDS.includes(m.id)); setMilestones(_ms); localStorage.setItem('pf_milestones', JSON.stringify(_ms)); }
-    if (state.revenue)     { setRevenue(state.revenue);         localStorage.setItem('pf_revenue',      JSON.stringify(state.revenue)); }
-    if (state.igFollowers) { setIgFollowers(state.igFollowers); localStorage.setItem('pf_ig_followers', JSON.stringify(state.igFollowers)); }
-    if (state.ttFollowers) { setTtFollowers(state.ttFollowers); localStorage.setItem('pf_tt_followers', JSON.stringify(state.ttFollowers)); }
+    if (state.delivs)      { setIfChanged(setDelivs, state.delivs);           localStorage.setItem('pf_delivs',       JSON.stringify(state.delivs)); }
+    if (state.milestones)  { const _ms = (state.milestones||[]).filter(m => !RETIRED_MILESTONE_IDS.includes(m.id)); setIfChanged(setMilestones, _ms); localStorage.setItem('pf_milestones', JSON.stringify(_ms)); }
+    if (state.revenue)     { setIfChanged(setRevenue, state.revenue);         localStorage.setItem('pf_revenue',      JSON.stringify(state.revenue)); }
+    if (state.igFollowers) { setIgFollowers((prev) => (prev === state.igFollowers ? prev : state.igFollowers)); localStorage.setItem('pf_ig_followers', JSON.stringify(state.igFollowers)); }
+    if (state.ttFollowers) { setTtFollowers((prev) => (prev === state.ttFollowers ? prev : state.ttFollowers)); localStorage.setItem('pf_tt_followers', JSON.stringify(state.ttFollowers)); }
     if (state.snapshots) { setSnapshots(prev => { const merged = { ...state.snapshots, ...prev }; localStorage.setItem('pf_snapshots', JSON.stringify(merged)); return merged; }); }
     // Reset flag after effects have had time to run (~200ms is plenty)
     setTimeout(() => { isApplyingCloud.current = false; }, 200);
@@ -4142,16 +4159,19 @@ export default function App() {
     // SINGLE interval, created once here, cleared on unmount below. No stacking.
     console.log('[books-fix] sync poll interval CREATED (id tracked once, cleared on unmount)');
     const poll = setInterval(() => {
-      // Pause the refresh while a deal form is open OR while the user is typing
-      // into ANY field (e.g. the Books Inbox review cards). A refresh re-renders
-      // the dashboard, which on the Books page remounts the review card and steals
-      // focus / interrupts typing. Skipping the refresh while a field is focused
-      // keeps edits and caret intact; it resumes automatically on blur/save.
+      // Pause the refresh while a deal form is open, while a Books expense
+      // drawer/modal is open, OR while the user is typing into ANY field
+      // (e.g. the Books Inbox review cards). A refresh re-renders the dashboard,
+      // which on the Books page remounts the review card and steals focus /
+      // interrupts typing — and would close an open expense drawer mid-task
+      // (video link → save, delete → confirm). Skipping the refresh while a
+      // field is focused or a drawer is open keeps edits and caret intact; it
+      // resumes automatically on blur/save/close.
       const ae = (typeof document !== 'undefined') ? document.activeElement : null;
       const fieldFocused = !!ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || '');
-      console.log('[books-fix] sync poll fired; dealFormOpen=', dealFormOpenRef.current, 'fieldFocused=', fieldFocused, fieldFocused ? '(' + (ae.getAttribute('placeholder') || ae.name || ae.type || ae.tagName) + ')' : '');
-      if (dealFormOpenRef.current || fieldFocused) {
-        console.log('[books-fix] sync poll SKIPPED — editing in progress (focused field / open form); refresh paused, no remount, input preserved');
+      console.log('[books-fix] sync poll fired; dealFormOpen=', dealFormOpenRef.current, 'fieldFocused=', fieldFocused, fieldFocused ? '(' + (ae.getAttribute('placeholder') || ae.name || ae.type || ae.tagName) + ')' : '', 'booksUiBusy=', booksUiBusy());
+      if (dealFormOpenRef.current || booksUiBusy() || fieldFocused) {
+        console.log('[books-fix] sync poll SKIPPED — editing in progress (focused field / open form / books drawer); refresh paused, no remount, input preserved');
         return;
       }
       if (!syncTimer.current) fetchCloud(false);
@@ -4408,7 +4428,7 @@ export default function App() {
     const fetchYT = () =>
       fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${YT_CHANNEL_ID}&key=${YT_API_KEY}`)
         .then(r => r.json())
-        .then(d => { const n = parseInt(d?.items?.[0]?.statistics?.subscriberCount); if (!isNaN(n)) { setYtSubs(n); setYtConnected(true); } })
+        .then(d => { const n = parseInt(d?.items?.[0]?.statistics?.subscriberCount); if (!isNaN(n)) { setYtSubs((prev) => (prev === n ? prev : n)); setYtConnected(true); } })
         .catch(() => {});
     fetchYT();
     const id = setInterval(fetchYT, 5 * 60 * 1000);
@@ -4992,23 +5012,30 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   const [sub, setSubRaw]   = useState(function () { return _ssGet('books_sub', 'inbox'); });
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError]     = useState(null);
 
   // Persist year + sub on every change so a remount restores the user's place.
   function setYear(v) { _ssSet('books_year', v); setYearRaw(v); }
   function setSub(v)  { _ssSet('books_sub',  v); setSubRaw(v);  }
 
-  const reload = async () => {
-    setLoading(true);
+  // reload(initial): refetch the year's books. Only the FIRST load blanks the
+  // UI with the full "Loading…" skeleton. Background refetches (after a save,
+  // or any future auto-refresh) keep the current table AND any open drawer
+  // mounted and just show a subtle "updating…" indicator — unmounting the
+  // sub-tab tree here used to destroy in-progress drawer work (video link →
+  // save, delete → confirm).
+  const reload = async (initial = false) => {
+    if (initial) setLoading(true); else setRefreshing(true);
     setError(null);
     try {
       const j = await booksApi('books-data', { query: { year } });
       setData({ expenses: j.expenses || [], deals: j.deals || [], vendorMemory: j.vendorMemory || [], pendingDuplicates: j.pendingDuplicates || [] });
     } catch (e) { setError(e.message); }
-    setLoading(false);
+    if (initial) setLoading(false); else setRefreshing(false);
   };
 
-  useEffect(() => { reload(); /* eslint-disable-line */ }, [year]);
+  useEffect(() => { reload(true); /* eslint-disable-line */ }, [year]);
 
   // ── SINGLE SOURCE OF TRUTH ──────────────────────────────────────────────
   // Every deal figure in Books derives from `dashboardDeals` (the Deals-tab
@@ -5119,13 +5146,18 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
       {/* ── Sub-tab body ─────────────────────────────────────────── */}
       {error && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', color:'#991B1B', padding:'10px 14px', borderRadius:8, marginBottom:16, fontSize:12 }}>Error: {error}</div>}
       {loading && <div style={{ color:BOOKS.muted, fontSize:13, padding:'20px 0' }}>Loading {year} books…</div>}
-      {!loading && !error && (
+      {!loading && (
         <>
-          {sub === 'inbox'    && <InboxTab    data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'expenses' && <ExpensesTab data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'deals'    && <DealsTab    data={data2} year={year} pipelineTotal={pipelineTotal} revenueYTD={totalRevenue} reload={reload} isMobile={isMobile} showToast={showToast} />}
-          {sub === 'audit'    && <AuditTab    data={data2} year={year} isMobile={isMobile} />}
-          {sub === 'export'   && <ExportTab   data={data2} year={year} />}
+          {refreshing && <div style={{ color:BOOKS.muted, fontSize:11, padding:'0 0 8px' }}>updating…</div>}
+          {!error && (
+            <>
+              {sub === 'inbox'    && <InboxTab    data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+              {sub === 'expenses' && <ExpensesTab data={data2} year={year} reload={reload} isMobile={isMobile} showToast={showToast} />}
+              {sub === 'deals'    && <DealsTab    data={data2} year={year} pipelineTotal={pipelineTotal} revenueYTD={totalRevenue} reload={reload} isMobile={isMobile} showToast={showToast} />}
+              {sub === 'audit'    && <AuditTab    data={data2} year={year} isMobile={isMobile} />}
+              {sub === 'export'   && <ExportTab   data={data2} year={year} />}
+            </>
+          )}
         </>
       )}
     </div>
@@ -5807,9 +5839,18 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
   const [filterUnrev, setFilterUnrev]     = useState(false);
   const [filterEntered, setFilterEntered] = useState('');
   const [search, setSearch]               = useState('');
-  const [selected, setSelected]           = useState(null);
+  // Drawer selection is keyed by stable expense_id (not the row object), so a
+  // background data refetch that replaces row objects can't close the drawer
+  // or invalidate the detail panel's working copy.
+  const [selectedId, setSelectedId]       = useState(null);
+  const selected = (data.expenses || []).find((r) => r.expense_id === selectedId) || null;
   const [showManual, setShowManual]       = useState(false);
   const [showCsvImport, setShowCsvImport] = useState(false);
+
+  // Tell the App-level cloud-sync poll when a drawer/modal is open so it pauses
+  // instead of re-rendering (and remounting) the Books tree mid-task.
+  useEffect(() => { setBooksUiBusy(!!selectedId || showManual || showCsvImport); }, [selectedId, showManual, showCsvImport]);
+  useEffect(() => () => setBooksUiBusy(false), []);
 
   // Duplicate detection (2026-10-04): count expenses sharing a vendor+amount+date key.
   const dupCounts = useMemo(() => {
@@ -5886,8 +5927,8 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
           </thead>
           <tbody>
             {filtered.map((r) => (
-              <tr key={r.expense_id} onClick={() => setSelected(r)}
-                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selected?.expense_id === r.expense_id ? BOOKS.surface : 'transparent' }}>
+              <tr key={r.expense_id} onClick={() => setSelectedId(r.expense_id)}
+                style={{ borderTop:`1px solid ${BOOKS.border}`, cursor:'pointer', background: selectedId === r.expense_id ? BOOKS.surface : 'transparent' }}>
                 <td style={tdStyle}>{fmtDate(r.date)}</td>
                 <td style={tdStyle}>{r.vendor || <span style={{ color:BOOKS.muted }}>—</span>}{dupCounts[expenseDupKey(r)] > 1 && (
                   <span title="Another expense has the same vendor, amount, and date"
@@ -5911,7 +5952,7 @@ function ExpensesTab({ data, reload, isMobile, showToast, year }) {
         </table>
       </div>
 
-      {selected && <ExpenseDetailPanel row={selected} deals={data.deals} onClose={() => setSelected(null)} reload={reload} showToast={showToast} />}
+      {selected && <ExpenseDetailPanel key={selected.expense_id} row={selected} deals={data.deals} onClose={() => setSelectedId(null)} reload={reload} showToast={showToast} />}
       {showManual && <ManualExpenseModal deals={data.deals} expenses={data.expenses} onClose={() => setShowManual(false)} reload={reload} showToast={showToast} />}
       {showCsvImport && <CsvImportModal year={year} onClose={() => setShowCsvImport(false)} reload={reload} showToast={showToast} />}
     </div>
@@ -6010,16 +6051,38 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
     setLinkedVids((prev) => prev.filter((x) => !(x.platform === v.platform && x.video_id === v.video_id)));
   }
 
-  // Picker results: text search over captions, sorted by date proximity to the
-  // expense date so videos posted near the trip bubble up first.
+  // Picker ranking (Paul, 2026-10-04): keyword/caption matching is PRIMARY.
+  // His videos often post days/weeks after the trip (editing lag — e.g. Japan
+  // videos made after return), so date-proximity-only ranking buries the right
+  // videos (it also hid every YouTube result behind the top-40 cutoff).
+  // Scoring: (1) keyword hits — tokens from vendor + purpose + notes + category
+  // matched against caption/title text; (2) date secondary — videos posted
+  // within ~90 days after the expense date (up to 7 days before for teasers),
+  // nearer = higher. The free-text search box still filters as before.
   const pickerResults = (() => {
     if (!catPosts) return [];
-    const expTime = edit.date ? new Date(edit.date + 'T12:00:00').getTime() : 0;
     const q = vidSearch.trim().toLowerCase();
+    const hay = [edit.vendor, edit.business_purpose, edit.notes, edit.category]
+      .filter(Boolean).join(' ').toLowerCase();
+    const stop = new Set(['the','and','for','with','from','your','you','our','this','that','was','were','are','has','have','had','will','would','can','not','but','what','when','where','who','how','all','any','out','off','via','per']);
+    const keywords = [...new Set(hay.split(/[^a-z0-9]+/).filter((w) => w.length > 2 && !stop.has(w)))];
+    const expDate = edit.date ? new Date(edit.date + 'T12:00:00') : null;
+    const WIN_BEFORE = 7, WIN_AFTER = 90;
+    function scoreVideo(p) {
+      const text = (p.text || '').toLowerCase();
+      let kw = 0;
+      for (const k of keywords) if (text.includes(k)) kw += 1;
+      let dateScore = 0;
+      if (expDate && p.date) {
+        const daysAfter = (new Date(p.date).getTime() - expDate.getTime()) / 86400000;
+        if (daysAfter >= -WIN_BEFORE && daysAfter <= WIN_AFTER) dateScore = 1 - Math.min(1, Math.abs(daysAfter) / WIN_AFTER);
+      }
+      return { kw, dateScore };
+    }
     return catPosts
       .filter((p) => !q || (p.text || '').toLowerCase().includes(q))
-      .map((p) => ({ p, d: expTime && p.date ? Math.abs(new Date(p.date).getTime() - expTime) : Infinity }))
-      .sort((a, b) => a.d - b.d)
+      .map((p) => ({ p, ...scoreVideo(p) }))
+      .sort((a, b) => (b.kw - a.kw) || (b.dateScore - a.dateScore))
       .slice(0, 40);
   })();
 
@@ -6142,7 +6205,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
                 </button>
               ) : (
                 <div style={{ border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:8, marginTop:4, background:BOOKS.surface }}>
-                  <input placeholder="search your videos…" value={vidSearch} onChange={(e) => setVidSearch(e.target.value)}
+                  <input aria-label="search videos" placeholder="search your videos…" value={vidSearch} onChange={(e) => setVidSearch(e.target.value)}
                     style={{ ...inputStyle, marginBottom:8 }} />
                   {catLoading && <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>loading videos…</div>}
                   {catFailed && <div style={{ fontSize:12, color:BOOKS.muted, padding:'8px 0' }}>couldn't load videos right now.</div>}
