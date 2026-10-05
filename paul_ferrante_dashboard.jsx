@@ -4979,25 +4979,62 @@ function parseLinkedDeals(row) {
   } catch (_) { return []; }
 }
 function linkedDealCount(r) { return parseLinkedDeals(r).length; }
-// useRowSyncedList — drawer link-list state that heals from a stale mount.
-// The expense drawer's `row` prop can be momentarily stale: save() fires
-// reload() without awaiting it, so a drawer opened before the refetch lands
-// initializes its link lists from the pre-save row — and the old code never
-// re-read the row, leaving linked rows invisible until a full close/reopen
-// (observed 2026-10-04: nested profit-panel round-trip ended with the parent
-// drawer's linked-campaigns section empty while the saved link was intact).
-// This hook re-syncs from the row whenever its payload changes, but never
-// clobbers the user's own unsaved link/unlink taps: the re-sync only fires
-// while the current list still matches the previous payload.
-function useRowSyncedList(parse, rowValue) {
-  const [list, setList] = useState(() => parse(rowValue));
-  const prevRef = useRef(rowValue);
-  if (prevRef.current !== rowValue) {
-    const prevList = parse(prevRef.current);
-    prevRef.current = rowValue;
-    if (JSON.stringify(prevList) === JSON.stringify(list)) setList(parse(rowValue));
-  }
-  return [list, setList];
+// useStoreDerivedList — drawer link-list state derived from the canonical
+// store row, with only unsaved taps kept locally as deltas.
+//
+// HISTORY (2026-10-04): fix rounds 2-4 kept a local snapshot of the row's
+// link list and tried to keep it in sync (useRowSyncedList: re-sync when the
+// row payload changed while the list still matched the previous payload).
+// Every sync heuristic had a hole — a stale mount, then the
+// profit-panel/nested-drawer round-trip, which left the parent drawer showing
+// an empty linked-campaigns section while the link was intact server-side.
+// CHANGE OF STRATEGY (round 5): the DISPLAYED list is derived from the store
+// row on every render; only the user's own unsaved link/unlink taps live in
+// local state:
+//
+//   displayed = parse(rowValue) − removedKeys + addedItems
+//
+// No remount, overlay open/close, or missed sync can ever show a stale list —
+// the section always reflects the store row. Deltas survive background
+// refreshes (they're independent of the row prop) and are dropped
+// automatically once the store row absorbs them (save + reload), or on save.
+function useStoreDerivedList(parse, rowValue, keyOf) {
+  const storeList = parse(rowValue);
+  const [deltas, setDeltas] = useState(() => ({ added: [], removed: new Set() }));
+  // Drop deltas the store has already absorbed (e.g. save + reload landed).
+  useEffect(() => {
+    setDeltas((d) => {
+      if (d.added.length === 0 && d.removed.size === 0) return d;
+      const keys = new Set(storeList.map(keyOf));
+      const absorbed = d.added.every((x) => keys.has(keyOf(x)))
+        && [...d.removed].every((k) => !keys.has(k));
+      return absorbed ? { added: [], removed: new Set() } : d;
+    });
+  }, [rowValue]);
+  const storeKeys = new Set(storeList.map(keyOf));
+  const removed = deltas.removed;
+  const displayed = storeList
+    .filter((x) => !removed.has(keyOf(x)))
+    .concat(deltas.added.filter((x) => !storeKeys.has(keyOf(x))));
+  const add = (item) => {
+    const k = keyOf(item);
+    setDeltas((d) => {
+      const next = new Set(d.removed);
+      next.delete(k);
+      const alreadyAdded = d.added.some((x) => keyOf(x) === k);
+      const added = alreadyAdded || storeKeys.has(k) ? d.added : [...d.added, item];
+      if (added === d.added && next.size === d.removed.size) return d;
+      return { added, removed: next };
+    });
+  };
+  const remove = (key) => {
+    setDeltas((d) => ({
+      added: d.added.filter((x) => keyOf(x) !== key),
+      removed: new Set(d.removed).add(key),
+    }));
+  };
+  const clearDeltas = () => setDeltas({ added: [], removed: new Set() });
+  return { displayed, add, remove, clearDeltas };
 }
 // Every deal id an expense is tied to: the new linked_deals JSON snapshots
 // plus the legacy single-link fields (auto/linked/linked_2). Used by the
@@ -6270,7 +6307,10 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [linkedVids, setLinkedVids] = useRowSyncedList((v) => parseLinkedVideos({ linked_videos: v }), row.linked_videos);
+  // Displayed link lists are derived from the canonical store row on every
+  // render; only unsaved taps live locally as deltas (see useStoreDerivedList).
+  const vidLinks = useStoreDerivedList((v) => parseLinkedVideos({ linked_videos: v }), row.linked_videos, (v) => v.platform + ':' + v.video_id);
+  const linkedVids = vidLinks.displayed;
   const [pickerOpen, setPickerOpen] = useState(false);
   const [catPosts, setCatPosts] = useState(null); // null = not yet loaded
   const [catLoading, setCatLoading] = useState(false);
@@ -6279,7 +6319,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   // Linked campaigns (deals): snapshot JSON column `linked_deals`, same
   // tap-to-link pattern as videos. The drawer re-resolves each snapshot
   // against the live deals prop for current stage/amount/invoice info.
-  const [linkedDeals, setLinkedDeals] = useRowSyncedList((v) => parseLinkedDeals({ linked_deals: v }), row.linked_deals);
+  const dealLinks = useStoreDerivedList((v) => parseLinkedDeals({ linked_deals: v }), row.linked_deals, (x) => x.deal_id);
+  const linkedDeals = dealLinks.displayed;
   const [dealPickerOpen, setDealPickerOpen] = useState(false);
   const [dealSearch, setDealSearch] = useState('');
   // Campaign profitability drill-down (opens DealProfitPanel for a linked deal).
@@ -6300,37 +6341,31 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
   }
 
   function addVideo(p) {
-    setLinkedVids((prev) => {
-      if (prev.some((v) => v.platform === p.platform && v.video_id === p.postId)) return prev;
-      return [...prev, {
-        platform: p.platform,
-        video_id: p.postId,
-        url: p.url || '',
-        title: (p.text || '').slice(0, 200),
-        thumbnail: p.thumbnail || '',
-        linked_at: new Date().toISOString(),
-      }];
+    vidLinks.add({
+      platform: p.platform,
+      video_id: p.postId,
+      url: p.url || '',
+      title: (p.text || '').slice(0, 200),
+      thumbnail: p.thumbnail || '',
+      linked_at: new Date().toISOString(),
     });
   }
   function removeVideo(v) {
-    setLinkedVids((prev) => prev.filter((x) => !(x.platform === v.platform && x.video_id === v.video_id)));
+    vidLinks.remove(v.platform + ':' + v.video_id);
   }
 
   function addDeal(d) {
-    setLinkedDeals((prev) => {
-      if (prev.some((x) => x.deal_id === d.deal_id)) return prev;
-      return [...prev, {
-        deal_id: d.deal_id,
-        brand: d.brand || '',
-        deal_value: Number(d.deal_value) || 0,
-        status: d.status || '',
-        platform: d.platform || '',
-        linked_at: new Date().toISOString(),
-      }];
+    dealLinks.add({
+      deal_id: d.deal_id,
+      brand: d.brand || '',
+      deal_value: Number(d.deal_value) || 0,
+      status: d.status || '',
+      platform: d.platform || '',
+      linked_at: new Date().toISOString(),
     });
   }
   function removeDeal(x) {
-    setLinkedDeals((prev) => prev.filter((y) => y.deal_id !== x.deal_id));
+    dealLinks.remove(x.deal_id);
   }
   // Live deal lookup: snapshots carry the stage/amount at link time, but the
   // drawer shows the CURRENT stage, amount, and invoice/payment info from the
@@ -6477,6 +6512,8 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
         appendReviewLog({ ...row, ...edit });
       }
       showToast && showToast('Saved');
+      vidLinks.clearDeltas();
+      dealLinks.clearDeltas();
       reload(); onClose();
     } catch (e) { alert('Save failed: ' + e.message); }
     setSaving(false);
@@ -6622,8 +6659,9 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
                   <div key={x.deal_id}
                     onClick={() => { if (live.deal_id) setProfitDealId(x.deal_id); }}
                     title={live.deal_id ? 'view campaign profit' : undefined}
-                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'8px 10px', cursor: live.deal_id ? 'pointer' : 'default' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    style={{ marginBottom:6, background:BOOKS.surface, border:`1px solid ${BOOKS.border}`, borderRadius:8, padding:'12px 14px', cursor: live.deal_id ? 'pointer' : 'default' }}>
+                    {/* minHeight keeps the whole row comfortably tappable (2026-10-04: tap target felt narrow) */}
+                    <div style={{ display:'flex', alignItems:'center', gap:8, minHeight:40 }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:12, fontWeight:700, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{live.brand || x.brand || '(untitled campaign)'}</div>
                         <div style={{ fontSize:10, color:BOOKS.muted }}>{status}{amount ? ' · ' + fmtMoney(amount) : ''}{platform ? ' · ' + platform : ''}</div>
