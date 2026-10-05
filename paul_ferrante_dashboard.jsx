@@ -6226,7 +6226,13 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast }) {
                             <div style={{ fontSize:11, fontWeight:600, color:BOOKS.ink, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(p.text || '').slice(0, 80) || '(untitled)'}</div>
                             <div style={{ fontSize:10, color:BOOKS.muted }}>{p.platform}{p.date ? ' · ' + String(p.date).slice(0, 10) : ''}</div>
                           </div>
-                          <div style={{ fontSize:11, fontWeight:700, color:already ? BOOKS.muted : SLATE, flexShrink:0 }}>{already ? 'linked ✓' : '+ link'}</div>
+                          {already
+                            ? <span style={{ fontSize:11, fontWeight:700, color:BOOKS.muted, flexShrink:0 }}>linked ✓</span>
+                            : <button type="button" aria-label="link this video"
+                                onClick={(e) => { e.stopPropagation(); addVideo(p); }}
+                                style={{ background:'none', border:'none', padding:0, margin:0, fontSize:11, fontWeight:700, color:SLATE, flexShrink:0, cursor:'pointer', fontFamily:'inherit' }}>
+                                + link
+                              </button>}
                         </div>
                       );
                     })}
