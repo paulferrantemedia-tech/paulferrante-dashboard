@@ -3926,9 +3926,18 @@ function BrandGuidelinesTab() {
 // out a multi-step flow (video link → save, delete → confirm). Same pattern as
 // dealFormOpenRef, but the drawer state lives in ExpensesTab while the poll
 // lives in App, so a module-level flag bridges them.
-let booksUiBusyFlag = false;
-function setBooksUiBusy(v) { booksUiBusyFlag = !!v; }
-function booksUiBusy() { return booksUiBusyFlag; }
+// Module-level "busy" registry: the App cloud-sync poll skips while ANY Books
+// overlay holds the UI (expense drawer, profit panel, drill-down). A Set of
+// reason tokens — NOT a single boolean — so nested overlays can't clobber each
+// other: closing the profit panel must not drop protection while the
+// underlying expense drawer is still open (that exact clobber caused a
+// poll-driven remount and a stale linked-campaigns render, 2026-10-04).
+const booksBusyReasons = new Set();
+function setBooksUiBusy(v, reason) {
+  const r = reason || 'default';
+  if (v) booksBusyReasons.add(r); else booksBusyReasons.delete(r);
+}
+function booksUiBusy() { return booksBusyReasons.size > 0; }
 
 export default function App() {
   const width = useWindowWidth();
@@ -5048,8 +5057,25 @@ function BooksTab({ isMobile, showToast, dashboardDeals = [], dashboardPaidDeals
   // Expense drill-down: null = off (normal sub-tabs),
   // {view:'cats'} = breakdown cards, {view:'list', mode, key, label} =
   // expense list filtered to one group. mode is 'category' | 'tax' |
-  // 'month' | 'quarter'.
-  const [drill, setDrill] = useState(null);
+  // 'month' | 'quarter'. Persisted to sessionStorage (like year/sub) so a
+  // background remount — e.g. the App cloud-sync poll re-rendering the Books
+  // tree — restores the exact drill view instead of collapsing it.
+  const DRILL_MODE_IDS = ['category', 'tax', 'month', 'quarter'];
+  function validDrill(v) {
+    if (!v || typeof v !== 'object') return null;
+    if (v.view === 'cats') return { view: 'cats' };
+    if (v.view === 'list' && DRILL_MODE_IDS.includes(v.mode) && typeof v.key === 'string' && v.key
+        && typeof v.label === 'string') return { view: 'list', mode: v.mode, key: v.key, label: v.label };
+    return null;
+  }
+  const [drill, setDrillRaw] = useState(() => validDrill(_ssGet('books_drill', null)));
+  function setDrill(v) { _ssSet('books_drill', v); setDrillRaw(validDrill(v)); }
+  // While the drill-down is open, hold the cloud-sync poll off — the same
+  // treatment drawers get — so a background refetch can't remount the
+  // breakdown/filter views mid-task. (Reason token, not a bare boolean, so
+  // the nested drawer/profit-panel flags can't clobber it.)
+  useEffect(() => { setBooksUiBusy(!!drill, 'drill'); }, [drill]);
+  useEffect(() => () => setBooksUiBusy(false, 'drill'), []);
   const [data, setData]    = useState({ expenses: [], deals: [], vendorMemory: [], pendingDuplicates: [] });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -5284,7 +5310,13 @@ function drillGroupLabel(mode, key) {
   return key;
 }
 function CategoryBreakdown({ expenses, onPick, onBack, isMobile }) {
-  const [mode, setMode] = useState('category');
+  // Grouping mode persists across remounts (same sessionStorage pattern as
+  // the drill view itself) so a background refresh can't reset the toggle.
+  const [mode, setModeRaw] = useState(() => {
+    const m = _ssGet('books_drill_mode', 'category');
+    return ['category', 'tax', 'month', 'quarter'].includes(m) ? m : 'category';
+  });
+  function setMode(m) { _ssSet('books_drill_mode', m); setModeRaw(m); }
   const groups = useMemo(() => {
     const m = {};
     (expenses || []).forEach((r) => {
@@ -6001,8 +6033,8 @@ function ExpensesTab({ data, reload, isMobile, showToast, year, initialCategory 
 
   // Tell the App-level cloud-sync poll when a drawer/modal is open so it pauses
   // instead of re-rendering (and remounting) the Books tree mid-task.
-  useEffect(() => { setBooksUiBusy(!!selectedId || showManual || showCsvImport); }, [selectedId, showManual, showCsvImport]);
-  useEffect(() => () => setBooksUiBusy(false), []);
+  useEffect(() => { setBooksUiBusy(!!selectedId || showManual || showCsvImport, 'drawer'); }, [selectedId, showManual, showCsvImport]);
+  useEffect(() => () => setBooksUiBusy(false, 'drawer'), []);
 
   // Duplicate detection (2026-10-04): count expenses sharing a vendor+amount+date key.
   const dupCounts = useMemo(() => {
@@ -6311,8 +6343,9 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
     const expYM = expDate.slice(0, 7);
     const hay = [edit.vendor, edit.business_purpose, edit.notes].filter(Boolean).join(' ').toLowerCase();
     const vidText = linkedVids.map((v) => v.title || '').join(' ').toLowerCase();
-    return (deals || [])
-      .filter((d) => !linkedDeals.some((x) => x.deal_id === d.deal_id))
+    const unlinked = (deals || []).filter((d) => !linkedDeals.some((x) => x.deal_id === d.deal_id));
+    const byValue = (a, b) => (Number(b.deal_value) || 0) - (Number(a.deal_value) || 0);
+    const scored = unlinked
       .map((d) => {
         let s = 0;
         const ss = String(d.shoot_start_date || '').slice(0, 10);
@@ -6326,9 +6359,15 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
         return { d, s };
       })
       .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s || (Number(b.d.deal_value) || 0) - (Number(a.d.deal_value) || 0))
+      .sort((a, b) => b.s - a.s || byValue(a.d, b.d))
       .slice(0, 3)
       .map((x) => x.d);
+    if (scored.length > 0) return scored;
+    // Best-effort fallback: nothing scored (e.g. deals have no shoot dates
+    // set and no month/keyword overlap with this expense). Surface the 3
+    // biggest unlinked campaigns so the labeled suggestions section always
+    // renders and one-tap linking stays available.
+    return unlinked.slice().sort(byValue).slice(0, 3);
   })();
 
   // One picker row renderer shared by the suggestions and the full list.
@@ -6685,7 +6724,7 @@ function ExpenseDetailPanel({ row, deals, onClose, reload, showToast, expenses =
 // ─────────────────────────────────────────────────────────────────────────────
 function DealProfitPanel({ deal, expenses, deals, onClose, reload, showToast }) {
   const [selectedId, setSelectedId] = useState(null);
-  useEffect(() => { setBooksUiBusy(true); return () => setBooksUiBusy(false); }, []);
+  useEffect(() => { setBooksUiBusy(true, 'profit-drawer'); return () => setBooksUiBusy(false, 'profit-drawer'); }, []);
   const linked = useMemo(() => expensesForDeal(expenses, deal.deal_id), [expenses, deal]);
   const totalSpend = linked.reduce((s, r) => s + toUSD(r.amount, r.currency), 0);
   const value = dealAmount(deal.deal_value);
@@ -7077,8 +7116,8 @@ function DealsTab({ data, year, pipelineTotal = 0, revenueYTD = 0, isMobile, sho
   // Campaign profitability drill-down: tapping a deal opens its profit view
   // (linked expenses + videos, total spend vs deal amount).
   const [profitDeal, setProfitDeal] = useState(null);
-  useEffect(() => { setBooksUiBusy(!!profitDeal); }, [profitDeal]);
-  useEffect(() => () => setBooksUiBusy(false), []);
+  useEffect(() => { setBooksUiBusy(!!profitDeal, 'profit-deals'); }, [profitDeal]);
+  useEffect(() => () => setBooksUiBusy(false, 'profit-deals'), []);
 
   // PHASE 4 cross-check: the board's Paid column total must equal the Books
   // Revenue YTD KPI when scoped to the same paid set. Logged for proof.
