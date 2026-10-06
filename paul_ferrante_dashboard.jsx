@@ -920,11 +920,11 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
   return (
     <div style={{ border:`1px solid ${BDR}`,borderRadius:10,overflow:'hidden',marginBottom:8 }}>
       {/* Header row */}
-      <div onClick={()=>setOpen(p=>!p)} style={{ display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:`${OCEAN}22`,transition:'background 0.15s' }}
+      <div onClick={()=>setOpen(p=>!p)} style={{ display:'flex',alignItems:'center',gap:10,padding:'12px 16px',cursor:'pointer',background:`${OCEAN}22`,transition:'background 0.15s' }}
         onMouseEnter={e=>e.currentTarget.style.background=`${OCEAN}44`}
         onMouseLeave={e=>e.currentTarget.style.background=`${OCEAN}22`}>
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:12,fontWeight:700,color:TEXT }}>{a.name}</div>
+          <div style={{ fontSize:13,fontWeight:700,color:TEXT }}>{a.name}</div>
           <div style={{ fontSize:11,color:SLATE,marginTop:2 }}>
             <span style={{ color:YELL }}>${a.curRate.toLocaleString()}</span>
             {a.transRate>a.curRate && <> → <span style={{ color:BLUE }}>${a.transRate.toLocaleString()}</span> transition → <span style={{ color:'#96C9AA' }}>${(a.nicheCeil||a.transRate).toLocaleString()}</span> market</>}
@@ -1349,7 +1349,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
   const INP = { width:'100%',background:'#FAF7EC',border:`1px solid ${BDR}`,borderRadius:8,padding:'9px 12px',color:TEXT,fontSize:13,fontFamily:'inherit',outline:'none' };
   const BTN_BLUE = { background:BLUE,color:TEXT,border:'none',borderRadius:10,padding:'12px 20px',fontWeight:800,fontSize:13,cursor:'pointer',fontFamily:'inherit' };
   const BTN_GHOST = { background:'#FFFFFF',color:'#6E6E6E',border:`1px solid ${BDR}`,borderRadius:10,padding:'10px 16px',fontWeight:600,fontSize:12,cursor:'pointer',fontFamily:'inherit' };
-  const SECTION_HDR = { fontSize:10,color:'#0A0A0A',textTransform:'uppercase',letterSpacing:'2.5px',marginBottom:14,fontWeight:700 };
+  const SECTION_HDR = { fontSize:13,color:'#0F4C5C',textTransform:'uppercase',letterSpacing:'2px',marginBottom:14,fontWeight:700 };
   const PLAT_COLORS = { TikTok:'#69C9D0', Instagram:'#C13584', YouTube:'#FF0000', UGC:YELL };
 
   const allBundles = [...PROPOSAL_BUNDLES, ...savedPkgs];
@@ -1363,10 +1363,10 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
 
         {/* Rate Alerts Banner */}
         {rateAlerts.length > 0 && (
-          <div style={{ background:`${YELL}12`,border:`1px solid ${YELL}44`,borderRadius:14,padding:16 }}>
+          <div style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:16,padding:24,boxShadow:'0 2px 12px rgba(15,76,92,0.08)' }}>
             <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12 }}>
               <div>
-                <div style={{ fontSize:12,fontWeight:800,color:YELL }}>📈 Rate Card Alert — {rateAlerts.length} deliverable{rateAlerts.length>1?'s':''} flagged</div>
+                <div style={{ fontSize:14,fontWeight:800,color:'#0F4C5C' }}>📈 Rate Card Alert — {rateAlerts.length} deliverable{rateAlerts.length>1?'s':''} flagged</div>
                 <div style={{ fontSize:10,color:SLATE,marginTop:2 }}>Click any row to see the full 6-signal breakdown · Travel/lifestyle niche premium applied</div>
               </div>
               <button onClick={copyRateHealthEmail} style={{ ...BTN_GHOST,fontSize:10,padding:'6px 12px',flexShrink:0 }}>
@@ -1458,11 +1458,11 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <button onClick={()=>{setShowSavePkg(false);setPkgName('');}} style={{ ...BTN_GHOST,padding:'9px 10px' }}>✕</button>
             </div>
           )}
-          <div style={{ display:'flex',flexWrap:'wrap',gap:10 }}>
+          <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,1fr)',gap:16 }}>
             {allBundles.map(b => (
               <button key={b.id} onClick={()=>applyBundle(b)} style={{
-                background:`${OCEAN}44`,border:`1px solid ${OCEAN}`,borderRadius:12,padding:'12px 16px',
-                cursor:'pointer',fontFamily:'inherit',textAlign:'left',flex:'0 1 auto',transition:'all 0.15s',
+                background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:16,padding:'18px',boxShadow:'0 2px 12px rgba(15,76,92,0.08)',
+                cursor:'pointer',fontFamily:'inherit',textAlign:'left',transition:'all 0.15s',
               }}
                 onMouseEnter={e=>{e.currentTarget.style.background=`${OCEAN}88`;e.currentTarget.style.borderColor=BLUE;}}
                 onMouseLeave={e=>{e.currentTarget.style.background=`${OCEAN}44`;e.currentTarget.style.borderColor=OCEAN;}}>
@@ -1513,7 +1513,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                   const qty = sel[d.id]?.qty || 1;
                   const rate = rates[d.id] || d.defaultRate;
                   return (
-                    <div key={d.id} style={{ display:'grid',gridTemplateColumns:'18px 1fr 120px 80px',alignItems:'center',gap:10,padding:'6px 0',borderBottom:`1px solid ${BDR}22` }}>
+                    <div key={d.id} style={{ display:'grid',gridTemplateColumns:'18px 1fr 120px 80px',alignItems:'center',gap:10,padding:'10px 4px',borderBottom:`1px solid ${BDR}22` }}>
                       <input type="checkbox" checked={checked} onChange={()=>toggleSel(d.id)} style={{ width:14,height:14,cursor:'pointer',accentColor:BLUE }} />
                       <div style={{ fontSize:12,color:checked?'#fff':'#888',fontWeight:checked?600:400 }}>{d.name}</div>
                       <div style={{ textAlign:'right' }}>
@@ -1524,7 +1524,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
                             {rateTs[d.id] && <div style={{ fontSize:8,color:SLATE,marginTop:2 }}>Updated {rateTs[d.id]}</div>}
                           </div>
                         ) : (
-                          <span style={{ fontSize:12,color:checked?YELL:SLATE }}>${rate.toLocaleString()}</span>
+                          <span style={{ fontSize:15,fontWeight:700,color:checked?'#0F4C5C':SLATE }}>${rate.toLocaleString()}</span>
                         )}
                       </div>
                       <div style={{ display:'flex',alignItems:'center',gap:4 }}>
@@ -1625,7 +1625,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
 
         {/* Section 7 — Generate */}
         <div style={{ display:'flex',gap:10 }}>
-          <button onClick={()=>{ if(delivSub===0){showToast('Select at least one deliverable first');return;} setShowProposal(true); }} style={{ ...BTN_BLUE,flex:1,fontSize:14,padding:'14px' }}>
+          <button onClick={()=>{ if(delivSub===0){showToast('Select at least one deliverable first');return;} setShowProposal(true); }} style={{ background:'#0F4C5C',color:'#FFFFFF',border:'none',borderRadius:12,padding:'16px',fontWeight:800,fontSize:15,cursor:'pointer',fontFamily:'inherit',flex:1 }}>
             ✦ Generate Proposal
           </button>
           {showProposal && (
