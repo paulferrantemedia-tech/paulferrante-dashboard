@@ -736,7 +736,7 @@ function LoginScreen({ onAuth }) {
 // ════════════════════════════════════════════════════════════════════
 
 const DELIVERABLES_DEF = [
-  { id:'tt_personal',  platform:'TikTok',    name:'TikTok Personal Video',              defaultRate:800  },
+  { id:'tt_personal',  platform:'TikTok',    name:'TikTok Personal Video',              defaultRate:1600 },
   { id:'tt_sponsored', platform:'TikTok',    name:'TikTok Sponsored Video',             defaultRate:1150 },
   { id:'tt_story',     platform:'TikTok',    name:'TikTok Story',                       defaultRate:345  },
   { id:'ig_reel_p',    platform:'Instagram', name:'IG Reel Personal',                   defaultRate:450  },
@@ -750,9 +750,6 @@ const DELIVERABLES_DEF = [
   { id:'ig_lib_1m',    platform:'Add-ons',   name:'Link in Bio – 1 month',              defaultRate:400  },
   { id:'yt_personal',  platform:'YouTube',   name:'YouTube Personal Video',             defaultRate:300  },
   { id:'yt_sponsored', platform:'YouTube',   name:'YouTube Sponsored Video',            defaultRate:450  },
-  { id:'yt_lib_3d',    platform:'YouTube',   name:'Link in Bio – 3 days',               defaultRate:250  },
-  { id:'yt_lib_1w',    platform:'YouTube',   name:'Link in Bio – 1 week',               defaultRate:300  },
-  { id:'yt_lib_1m',    platform:'YouTube',   name:'Link in Bio – 1 month',              defaultRate:400  },
   { id:'ugc_photo',    platform:'UGC',       name:'UGC Photo (3 images)',               defaultRate:705  },
   { id:'ugc_vid1',     platform:'UGC',       name:'UGC Video x1 (30-sec)',              defaultRate:975  },
   { id:'ugc_vid3',     platform:'UGC',       name:'UGC Video x3 (30-sec, multi-hook)',  defaultRate:2525 },
