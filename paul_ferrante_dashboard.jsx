@@ -925,10 +925,12 @@ function RateAlertPanel({ alert: a, onUpdate, onDismiss, isMobile }) {
         onMouseLeave={e=>e.currentTarget.style.background=`${OCEAN}22`}>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:13,fontWeight:700,color:TEXT }}>{a.name}</div>
-          <div style={{ fontSize:11,color:SLATE,marginTop:2 }}>
-            <span style={{ color:YELL }}>${a.curRate.toLocaleString()}</span>
-            {a.transRate>a.curRate && <> → <span style={{ color:BLUE }}>${a.transRate.toLocaleString()}</span> transition → <span style={{ color:'#96C9AA' }}>${(a.nicheCeil||a.transRate).toLocaleString()}</span> market</>}
-            {a.coh && !a.nicheFloor && <> → <span style={{ color:BLUE }}>${a.coh.suggest.toLocaleString()}</span> suggested</>}
+          <div style={{ display:'flex',alignItems:'baseline',gap:10,marginTop:4,flexWrap:'wrap' }}>
+            <span style={{ fontSize:20,fontWeight:800,color:'#0F4C5C',lineHeight:1 }}>${a.curRate.toLocaleString()}</span>
+            <span style={{ fontSize:12,color:SLATE }}>
+              {a.transRate>a.curRate && <>transition <span style={{ fontWeight:600 }}>${a.transRate.toLocaleString()}</span> → market <span style={{ fontWeight:600 }}>${(a.nicheCeil||a.transRate).toLocaleString()}</span></>}
+              {a.coh && !a.nicheFloor && <>suggested <span style={{ fontWeight:600 }}>${a.coh.suggest.toLocaleString()}</span></>}
+            </span>
           </div>
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:8,flexShrink:0 }}>
