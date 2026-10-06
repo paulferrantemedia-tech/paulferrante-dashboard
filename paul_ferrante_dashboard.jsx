@@ -1706,7 +1706,7 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
               <div style={{ display:'flex',justifyContent:'space-between',padding:'12px 0',borderTop:`1px solid ${OCEAN}55`,marginTop:8 }}>
                 <div>
                   <div style={{ fontSize:10,color:SLATE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:2 }}>Standard Value</div>
-                  <div style={{ fontSize:16,color:'#6E6E6E',textDecoration:'line-through' }}>${totalWithAddons.toLocaleString()}</div>
+                  <div style={{ fontSize:16,color:'#6E6E6E',textDecoration:discAmt>0?'line-through':'none' }}>${totalWithAddons.toLocaleString()}</div>
                 </div>
                 <div style={{ textAlign:'right' }}>
                   <div style={{ fontSize:10,color:BLUE,textTransform:'uppercase',letterSpacing:'2px',marginBottom:2 }}>Your Investment</div>
