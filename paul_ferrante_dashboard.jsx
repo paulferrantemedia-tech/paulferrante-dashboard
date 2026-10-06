@@ -1,6 +1,137 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import html2canvas from "html2canvas";
+import { AVANT_GARDE_B64, POPPINS_B64, RGG_LOGO_B64, PLATFORM_SVGS, LUCIDE_SVGS } from "./proposal-assets.js";
+
+// ── Client-facing proposal export (RGG brand template) ───────────
+// Sand background, ITC Avant Garde Bold headings, Poppins body,
+// official platform SVGs in ink, RGG logo, embedded fonts for PDF/PNG.
+const PROP_COLORS = { sand:'#E1D9AE', ink:'#0A0A0A', ocean:'#2A4A5E', slate:'#6E6E6E' };
+
+// Map dashboard deliverable IDs to client-facing names (per brand spec)
+function clientDeliverableName(d) {
+  const id = d.id;
+  if (id === 'tt_personal' || id === 'tt_sponsored') return 'tiktok video (30 to 60s)';
+  if (id === 'tt_story') return 'tiktok story';
+  if (id === 'ig_reel_p' || id === 'ig_reel_s') return 'instagram reel';
+  if (id === 'ig_story') return 'instagram story';
+  if (id === 'ig_photo') return 'instagram photo';
+  if (id === 'ig_carousel') return 'instagram carousel';
+  if (id === 'yt_personal' || id === 'yt_sponsored') return 'youtube short';
+  if (id === 'ugc_photo') return 'ugc photo set';
+  if (id === 'ugc_vid1') return 'ugc video';
+  if (id === 'ugc_vid3') return 'ugc video pack';
+  return d.name.toLowerCase();
+}
+
+function clientDeliverableDesc(d, qty) {
+  const platform = d.platform.toLowerCase();
+  const qtyStr = qty > 1 ? ` ×${qty}` : '';
+  if (d.platform === 'UGC') return `raw footage, no posting required${qtyStr}`;
+  return `one ${platform} post${qtyStr}, posted to ${platform}`;
+}
+
+function clientPlatformIcon(d) {
+  const p = d.platform.toLowerCase();
+  if (p === 'tiktok') return PLATFORM_SVGS.tiktok;
+  if (p === 'instagram') return PLATFORM_SVGS.instagram;
+  if (p === 'youtube') return PLATFORM_SVGS.youtube;
+  return LUCIDE_SVGS.camera; // UGC
+}
+
+function cleanSvgForExport(svg, color) {
+  let s = svg.replace(/fill="[^"]*"/g, `fill="${color}"`);
+  s = s.replace(/stroke="[^"]*"/g, `stroke="${color}"`);
+  s = s.replace(/\s+width="[^"]*"/g, '');
+  s = s.replace(/\s+height="[^"]*"/g, '');
+  s = s.replace(/\s+class="[^"]*"/g, '');
+  s = s.replace(/<!--[\s\S]*?-->/g, '');
+  return s;
+}
+
+function generateClientProposalHTML({ brand, date, number, deliverables, addons, paymentTerms, contactEmail, handles, personalityLine }) {
+  if (!brand || !brand.trim()) {
+    throw new Error('brand required');
+  }
+  const C = PROP_COLORS;
+  const fmt = n => '$' + n.toLocaleString('en-US');
+  const subtotal = deliverables.reduce((s, d) => s + d.price, 0);
+  const addonsTotal = addons.reduce((s, a) => s + a.price, 0);
+  const total = subtotal + addonsTotal;
+
+  const delivHtml = deliverables.map(d => `
+    <div class="deliverable">
+      <div class="plat-icon">${cleanSvgForExport(d.iconSvg, C.ink)}</div>
+      <div class="deliv-main">
+        <div class="deliv-name">${d.name}</div>
+        <div class="deliv-desc">${d.desc}</div>
+      </div>
+      <div class="deliv-price">${fmt(d.price)}</div>
+    </div>`).join('\n');
+
+  const addonsHtml = addons.map(a => `
+    <div class="deliverable">
+      <div class="plat-icon">${cleanSvgForExport(a.iconSvg, C.ink)}</div>
+      <div class="deliv-main">
+        <div class="deliv-name">${a.name}</div>
+        <div class="deliv-desc">${a.desc}</div>
+      </div>
+      <div class="deliv-price">${fmt(a.price)}</div>
+    </div>`).join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>creator partnership proposal</title>
+<style>
+@font-face{font-family:'ITC Avant Garde Gothic Pro';src:url(data:font/otf;base64,${AVANT_GARDE_B64}) format('opentype');font-weight:700;}
+@font-face{font-family:'Poppins';src:url(data:font/ttf;base64,${POPPINS_B64}) format('truetype');font-weight:400;}
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{size:letter;margin:0;}
+body{font-family:'Poppins',sans-serif;background:${C.sand};color:${C.ink};-webkit-font-smoothing:antialiased;}
+.page{width:8.5in;min-height:11in;margin:0 auto;padding:.75in;background:${C.sand};}
+.header{margin-bottom:36px;}
+.logo{width:120px;height:auto;margin-bottom:24px;display:block;}
+h1{font-family:'ITC Avant Garde Gothic Pro',sans-serif;font-weight:700;font-size:28px;line-height:1.2;color:${C.ink};margin-bottom:8px;}
+.prepared{font-size:12px;color:${C.slate};}
+.section{margin-bottom:28px;}
+.section-label{font-size:10px;text-transform:uppercase;letter-spacing:.18em;color:${C.ocean};margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid ${C.ocean};}
+.deliverable{display:flex;align-items:flex-start;padding:14px 0;border-bottom:1px solid rgba(42,74,94,.18);gap:14px;}
+.deliverable:last-child{border-bottom:none;}
+.plat-icon{width:20px;height:20px;flex-shrink:0;margin-top:2px;}
+.plat-icon svg{width:20px;height:20px;display:block;}
+.deliv-main{flex:1;min-width:0;}
+.deliv-name{font-size:14px;color:${C.ink};margin-bottom:4px;}
+.deliv-desc{font-size:11px;color:${C.slate};line-height:1.5;}
+.deliv-price{font-size:14px;color:${C.ink};white-space:nowrap;padding-left:16px;font-variant-numeric:tabular-nums;}
+.totals{margin-top:8px;padding-top:16px;border-top:1px solid ${C.ocean};}
+.total-row{display:flex;justify-content:space-between;font-size:13px;color:${C.slate};padding:5px 0;font-variant-numeric:tabular-nums;}
+.total-row.grand{margin-top:10px;padding-top:14px;border-top:1px solid rgba(42,74,94,.3);align-items:baseline;}
+.total-label{font-size:12px;color:${C.slate};}
+.total-amount{font-family:'ITC Avant Garde Gothic Pro',sans-serif;font-weight:700;font-size:32px;color:${C.ink};font-variant-numeric:tabular-nums;}
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid rgba(42,74,94,.25);font-size:10px;color:${C.slate};line-height:1.7;}
+.footer .cheeky{margin-top:8px;font-style:italic;}
+@media print{body{background:${C.sand};}}
+</style></head>
+<body><div class="page">
+<div class="header">
+<img class="logo" src="data:image/png;base64,${RGG_LOGO_B64}" alt="rgg media">
+<h1>creator partnership proposal</h1>
+<div class="prepared">prepared for ${brand.toLowerCase()} &middot; ${date.toLowerCase()} &middot; proposal #${number}</div>
+</div>
+<div class="section"><div class="section-label">deliverables</div>${delivHtml}</div>
+${addons.length ? `<div class="section"><div class="section-label">add-ons</div>${addonsHtml}</div>` : ''}
+<div class="totals">
+<div class="total-row"><span>subtotal</span><span>${fmt(subtotal)}</span></div>
+${addonsTotal ? `<div class="total-row"><span>add-ons</span><span>${fmt(addonsTotal)}</span></div>` : ''}
+<div class="total-row grand"><span class="total-label">total</span><span class="total-amount">${fmt(total)}</span></div>
+</div>
+<div class="footer">
+<div>valid 14 days from ${date.toLowerCase()} &middot; ${(paymentTerms||'net 30').toLowerCase()}</div>
+<div>${(contactEmail||'').toLowerCase()}${handles ? ' &middot; '+handles.toLowerCase() : ''}</div>
+${personalityLine ? `<div class="cheeky">${personalityLine.toLowerCase()}</div>` : ''}
+</div>
+</div></body></html>`;
+}
 
 // ─────────────────────────────────────────────────────────────
 // 🔧 API CONFIG
@@ -1103,6 +1234,105 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
     }
   };
 
+  // ── Client-facing proposal export (new RGG brand template) ──
+  const buildClientProposalData = () => {
+    if (!hdr.brand || !hdr.brand.trim()) {
+      showToast('Add a brand name first — select a deal or type one in.');
+      return null;
+    }
+    const deliverables = DELIVERABLES_DEF
+      .filter(d => sel[d.id]?.checked && d.platform !== 'Add-ons')
+      .map(d => {
+        const qty = sel[d.id]?.qty || 1;
+        const rate = rates[d.id] || d.defaultRate;
+        return {
+          name: clientDeliverableName(d),
+          desc: clientDeliverableDesc(d, qty),
+          price: rate * qty,
+          iconSvg: clientPlatformIcon(d),
+        };
+      });
+    if (!deliverables.length) {
+      showToast('Select at least one deliverable first.');
+      return null;
+    }
+    const addons = [];
+    if (usageOn && usageFee > 0) {
+      const term = usageMode === 'perpetuity' ? 'in perpetuity' : usageMode === 'custom' ? `${usageCustom} days` : `${usageMode} days`;
+      addons.push({ name:'usage rights', desc:`${term}`, price:usageFee, iconSvg:LUCIDE_SVGS.camera });
+    }
+    if (exclOn && exclFee > 0) {
+      const term = exclMode === 'custom' ? `${exclCustom} days` : `${exclMode} days`;
+      addons.push({ name:'exclusivity', desc:`${term}`, price:exclFee, iconSvg:LUCIDE_SVGS.plus_circle });
+    }
+    if (libFlat) {
+      addons.push({ name:'link in bio', desc:'24hr', price:150, iconSvg:LUCIDE_SVGS.plus_circle });
+    }
+    const dateStr = new Date(hdr.date + 'T00:00:00').toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+    const propNum = String(Date.now()).slice(-4);
+    return {
+      brand: hdr.brand, date: dateStr, number: propNum,
+      deliverables, addons,
+      paymentTerms: 'net 30',
+      contactEmail: 'partnerships@paulferrantepartners.com',
+      handles: '@_paul_ferrante_ · @paul_ferrante',
+      personalityLine: "let's make something people actually watch.",
+    };
+  };
+
+  const downloadProposalPDF = () => {
+    const data = buildClientProposalData();
+    if (!data) return;
+    try {
+      const html = generateClientProposalHTML(data);
+      const w = window.open('', '_blank');
+      if (!w) { showToast('Allow popups to download the PDF.'); return; }
+      w.document.write(html);
+      w.document.close();
+      w.document.title = `RGG-Proposal-${data.brand.replace(/\s+/g,'-')}-${hdr.date}`;
+      // Let fonts load, then trigger print dialog for Save as PDF
+      setTimeout(() => { w.focus(); w.print(); }, 800);
+      showToast('Proposal opened — choose "Save as PDF" in the print dialog.');
+    } catch (e) {
+      showToast('PDF export failed — try again');
+    }
+  };
+
+  const downloadProposalPNG = async () => {
+    const data = buildClientProposalData();
+    if (!data) return;
+    setSnapping(true);
+    try {
+      const html = generateClientProposalHTML(data);
+      // Render in hidden iframe, then capture at 3x
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:816px;height:1056px;border:0;';
+      document.body.appendChild(iframe);
+      iframe.contentDocument.write(html);
+      iframe.contentDocument.close();
+      await new Promise(r => setTimeout(r, 1200)); // let fonts render
+      const pageEl = iframe.contentDocument.querySelector('.page');
+      const canvas = await html2canvas(pageEl, {
+        backgroundColor: '#E1D9AE',
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        width: 816, height: 1056,
+      });
+      document.body.removeChild(iframe);
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `RGG-Proposal-${data.brand.replace(/\s+/g,'-')}-${hdr.date}-3x.png`;
+      a.click();
+      showToast('Proposal PNG (3x) downloaded!');
+    } catch (e) {
+      showToast('PNG export failed — try again');
+    } finally {
+      setSnapping(false);
+    }
+  };
+
   const [dealForm, setDealForm] = useState(null);
   const [dealSaved, setDealSaved] = useState(false);
 
@@ -1724,7 +1954,9 @@ function ProposalsTab({ crm, setDeals, setCrm, deals, igFollowers, ttFollowers, 
 
             {/* Actions — outside snapshot */}
             <div style={{ display:'flex',gap:10,flexWrap:'wrap',padding:'14px 16px',borderTop:`1px solid ${OCEAN}44` }}>
-              <button onClick={downloadSnapshot} disabled={snapping} style={{ ...BTN_BLUE,flex:1,opacity:snapping?0.7:1 }}>{snapping ? '⏳ Generating…' : '📸 Save as Image'}</button>
+              <button onClick={downloadProposalPDF} disabled={snapping} style={{ ...BTN_BLUE,flex:1,opacity:snapping?0.7:1 }}>📄 Export PDF</button>
+              <button onClick={downloadProposalPNG} disabled={snapping} style={{ ...BTN_BLUE,flex:1,opacity:snapping?0.7:1 }}>{snapping ? '⏳ Generating…' : '🖼️ Export PNG (3x)'}</button>
+              <button onClick={downloadSnapshot} disabled={snapping} style={{ ...BTN_GHOST,flex:1,opacity:snapping?0.7:1 }}>📸 Save as Image</button>
               <button onClick={()=>setShowPreview(true)} style={{ ...BTN_GHOST,flex:1 }}>👁 Preview</button>
               {!dealSaved
                 ? <>
