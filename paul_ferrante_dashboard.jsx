@@ -8313,7 +8313,7 @@ function ExportTab({ data, year }) {
       {/* Header */}
       <div style={{ background:'#2A4A5E',borderBottom:'1px solid #1F3A4D',padding:isMobile?'12px 16px':'14px 28px',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,zIndex:100,boxShadow:'0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-          <img src="/assets/brand/pf-logo.png" alt="PF" style={{ width:isMobile?36:44,height:isMobile?36:44,borderRadius:'50%',display:'block' }} />
+          <img src="/assets/brand/pf-logo.png?v=2" alt="PF" style={{ width:isMobile?36:44,height:isMobile?36:44,borderRadius:'50%',display:'block' }} />
           <div>
             <div style={{ fontSize:isMobile?15:18,fontWeight:800,letterSpacing:'-0.5px',color:'#FFFFFF' }}>paul_ferrante</div>
             <div style={{ fontSize:9,color:BLUE,letterSpacing:'3px',textTransform:'uppercase',marginTop:1,fontWeight:700 }}>command center</div>
