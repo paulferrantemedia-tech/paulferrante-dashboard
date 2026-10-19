@@ -181,11 +181,11 @@ async function fetchAudience(userId, token) {
     const url  = IG_BASE + '/' + userId + '/insights?metric=audience_country,audience_gender_age&period=lifetime&access_token=' + token;
     const res  = await fetch(url);
     const data = await res.json();
-    if (data.error) return null;
+    if (data.error) return { error: data.error.message || JSON.stringify(data.error) };
     const raw = (name) => (data.data || []).find(m => m.name === name)?.values?.[0]?.value || null;
     const countriesRaw = raw('audience_country');
     const genderAgeRaw = raw('audience_gender_age');
-    if (!countriesRaw && !genderAgeRaw) return null;
+    if (!countriesRaw && !genderAgeRaw) return { error: 'insights returned no audience values' };
 
     let countries = null;
     if (countriesRaw) {
@@ -220,9 +220,9 @@ async function fetchAudience(userId, token) {
       if (f + m > 0) { const malePct = Math.round((m / (f + m)) * 100); gender = { malePct, femalePct: 100 - malePct }; }
     }
 
-    if (!countries && !age && !gender) return null;
+    if (!countries && !age && !gender) return { error: 'audience values present but unparseable' };
     return { source: 'instagram', countries, age, gender };
-  } catch { return null; }
+  } catch (e) { return { error: e.message }; }
 }
 
 // ── Main IG data fetch ─────────────────────────────────────────────
@@ -282,7 +282,8 @@ async function fetchIgData(userId, token) {
   const avgSaveRate = n > 0 && avgReach > 0
     ? parseFloat((posts.reduce((s, p) => s + (p.reach > 0 ? p.saveCount / p.reach * 100 : 0), 0) / n).toFixed(2)) : 0;
 
-  const audience = await fetchAudience(userId, token);
+  const audRes   = await fetchAudience(userId, token);
+  const audience = (audRes && !audRes.error) ? audRes : null;
 
   return {
     profile: {
@@ -298,7 +299,7 @@ async function fetchIgData(userId, token) {
     // "views" metric — reach is its closest analog.
     aggregates: { total: n, avgReach, avgViews: avgReach, avgEngRate, avgLikeRate, avgSaveRate },
     audience,
-    _debug: { insightsError: firstInsightsError },
+    _debug: { insightsError: firstInsightsError, audienceError: audRes?.error || null },
     _cachedAt: Date.now(),
   };
 }
