@@ -3045,6 +3045,9 @@ function RealityCastingTab() {
   const [filters, setFilters] = useState({ market:'all', format:'all', eligibility:'all', scoreFloor:3 });
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
+  const [favIds, setFavIds] = useState(() => load('pf_casting_favorites', []));
+  useEffect(() => { localStorage.setItem('pf_casting_favorites', JSON.stringify(favIds)); }, [favIds]);
+  const toggleFav = (id) => setFavIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   // Always-visible tile model (2026-09-29): every tracked show renders a tile.
   // "Casting Now" = applications being taken right now; everything else shows
@@ -3061,7 +3064,7 @@ function RealityCastingTab() {
     ['all','All Shows'],
     ['now',`Casting Now${openList.length?` (${openList.length})`:''}`],
     ['closed',`Not Casting Now${closedList.length?` (${closedList.length})`:''}`],
-    ['watchlist','Watchlist'],
+    ['watchlist',`Watchlist${favIds.length?` (${favIds.length})`:''}`],
     ['tracker',`My Applications${applications.length?` (${applications.length})`:''}`],
   ];
 
@@ -3071,7 +3074,7 @@ function RealityCastingTab() {
     if (c.bucket === 'no') return false;
     if (activeTab === 'now' && c.castingStatus !== 'open') return false;
     if (activeTab === 'closed' && c.castingStatus === 'open') return false;
-    if (activeTab === 'watchlist' && !c.flags.includes('watchlist') && !c.flags.includes('returnee-angle')) return false;
+    if (activeTab === 'watchlist' && !favIds.includes(c.id)) return false;
     if (filters.market !== 'all' && c.market !== filters.market) return false;
     if (filters.format !== 'all' && c.formatType !== filters.format) return false;
     if (filters.eligibility === 'duo' && !c.flags.includes('duo-eligible') && !c.flags.includes('apply-with-dan')) return false;
@@ -3247,7 +3250,7 @@ function RealityCastingTab() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px,1fr))', gap:14 }}>
         {visible.length === 0 ? (
           <Card style={{ gridColumn:'1/-1', textAlign:'center', padding:40 }}>
-            <div style={{ color:SLATE, fontSize:13 }}>Nothing matches these filters. Try lowering the fit score floor or switching tabs.</div>
+            <div style={{ color:SLATE, fontSize:13 }}>{activeTab === 'watchlist' ? 'Your watchlist is empty. Tap the ☆ on any listing to add it here, and this tab becomes your apply shortlist.' : 'Nothing matches these filters. Try lowering the fit score floor or switching tabs.'}</div>
           </Card>
         ) : visible.map(c => {
           const sc = castingScoreColor(c.fitScore);
@@ -3262,7 +3265,10 @@ function RealityCastingTab() {
                       <div style={{ fontSize:14, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{c.showName}</div>
                       <div style={{ fontSize:11, color:SLATE, marginTop:2 }}>{c.network} · {c.market}</div>
                     </div>
-                    {c.dqRisk && <Tag color="#A32D2D">DQ risk</Tag>}
+                    <div style={{ display:'flex', gap:6, alignItems:'center', flexShrink:0 }}>
+                      <button onClick={(e) => { e.stopPropagation(); toggleFav(c.id); }} title={favIds.includes(c.id) ? 'Remove from watchlist' : 'Add to watchlist'} aria-label="Toggle watchlist" style={{ background:'none', border:'none', cursor:'pointer', fontSize:19, lineHeight:1, padding:2, fontFamily:'inherit', color: favIds.includes(c.id) ? '#E8A33D' : '#C3CEDA' }}>{favIds.includes(c.id) ? '★' : '☆'}</button>
+                      {c.dqRisk && <Tag color="#A32D2D">DQ risk</Tag>}
+                    </div>
                   </div>
                   <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:10 }}>
                     <Tag color={SLATE}>{CASTING_FORMAT_LABELS[c.formatType]}</Tag>
@@ -3301,6 +3307,7 @@ function RealityCastingTab() {
                 <div style={{ fontSize:18, fontWeight:700, color:TEXT, lineHeight:1.3 }}>{selected.showName}</div>
                 <div style={{ fontSize:12, color:SLATE, marginTop:4 }}>{selected.network} · {selected.market}</div>
               </div>
+              <button onClick={() => toggleFav(selected.id)} title={favIds.includes(selected.id) ? 'Remove from watchlist' : 'Add to watchlist'} aria-label="Toggle watchlist" style={{ background:'none', border:'none', cursor:'pointer', fontSize:22, lineHeight:1, padding:4, fontFamily:'inherit', color: favIds.includes(selected.id) ? '#E8A33D' : '#C3CEDA' }}>{favIds.includes(selected.id) ? '★' : '☆'}</button>
               <button onClick={() => setSelected(null)} style={{ background:'#FFFFFF', color:TEXT, border:`1px solid ${BDR}`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Close</button>
             </div>
             <div style={{ padding:24 }}>
