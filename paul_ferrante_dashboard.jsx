@@ -3732,35 +3732,20 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
 function BrandGuidelinesTab() {
   const B = { sand:'#E1D9AE', ink:'#0A0A0A', sky:'#88EAF6', ocean:'#2A4A5E', slate:'#6E6E6E', white:'#FFFFFF' };
   const DISPLAY = "'Poppins', system-ui, -apple-system, sans-serif";
+  const DIM = '#A7ADB5';        // dim copy on the dark stage
+  const FAINT = '#8B929B';      // smallest metadata on dark
+  const CARD = '#15181C';       // dark card surface
+  const LINE = '#262B31';       // hairline on dark
   const [copied, setCopied] = useState(null);
-  const [avail, setAvail]   = useState({});      // filename -> bool
-  const [iconVar, setIconVar] = useState({});    // cardKey -> variant
-  const [iconQ, setIconQ] = useState('');        // icon library search
+  const [libQ, setLibQ] = useState('');        // asset library search
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
-  const VARIANTS = ['bright-sky','sand','ink'];
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
   const PILLARS = [
-    ['travel','globe','practical travel content focused on destinations, hotels, flights, and tips that help people make confident decisions and take action.'],
-    ['lifestyle','home','day-to-day routines, habits, and real moments that feel natural, relatable, and human. the kind of content people actually see themselves in.'],
-    ['commentary','at-symbol','relatable humour, opinions, and cultural observations that spark conversation and drive shares and saves.'],
-    ['life hacks & recommendations','lightbulb','quick wins and simple ways to make everyday life easier. practical tips and recommendations i already share naturally, designed to help people save time, money, or effort.'],
-  ];
-  const LABELS = {
-    'bus':'public transport','at-symbol':'commentary (@)','four-arrows':'sidequest','speech-bubble':'story times',
-    'bookmark':'save','heart':'like','arrow-cursor':'default arrow','no-entry':'not allowed','i-beam':'text i-beam',
-    'thick-arrow':'pointer arrow','cash-stamp':'cash stamp (numberless)','hand-pointer':'hand pointer','curly-arrow':'curly arrow',
-    'circle-loop':'circle annotation','callout':'label callout','local-food':'local food','the-anxiety-list':'the anxiety list',
-    'dogs-badge':'dogs badge','skin-journey':'skin journey','dog':'dog','hourglass':'waiting / spinning',
-  };
-  const label = (slug, ctx) => (ctx && ctx[slug]) || LABELS[slug] || slug.replace(/-/g,' ');
-  const ICON_GROUPS = [
-    ['travel tips', ['airplane','suitcase','passport','globe','landmark','currency','bus']],
-    ['everyday hacks', ['coffee-cup','timer','calendar','lightbulb','book','checklist','phone','shopping-bag']],
-    ['series & recurring themes', ['asia-sidequest','four-arrows','cross-off','speech-bubble']],
-    ['interaction & utility', [['bookmark','save'],['heart','like'],['share','share'],['download','download'],['globe','translations'],['subtitle','subtitle'],['stars','review'],['cash-stamp','cash stamp (numberless)']]],
-    ['cursor arrows', ['arrow-cursor','hourglass','i-beam','no-entry']],
-    ['pointer annotations', ['thick-arrow']],
+    ['travel','practical travel content focused on destinations, hotels, flights, and tips that help people make confident decisions and take action.'],
+    ['lifestyle','day-to-day routines, habits, and real moments that feel natural, relatable, and human. the kind of content people actually see themselves in.'],
+    ['commentary','relatable humour, opinions, and cultural observations that spark conversation and drive shares and saves.'],
+    ['life hacks & recommendations','quick wins and simple ways to make everyday life easier. practical tips and recommendations i already share naturally, designed to help people save time, money, or effort.'],
   ];
 
   useEffect(() => {
@@ -3770,17 +3755,6 @@ function BrandGuidelinesTab() {
       l.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap';
       document.head.appendChild(l);
     }
-    const files = [];
-    LOGOS.forEach(([, f]) => files.push(`logo/${f}`));
-    ICON_GROUPS.forEach(([, items]) => items.forEach(it => {
-      const slug = Array.isArray(it) ? it[0] : it;
-      VARIANTS.forEach(v => files.push(`icons/${slug}-${v}`));
-    }));
-    let alive = true;
-    Promise.all([...new Set(files)].map(p =>
-      fetch(`/assets/brand/${p}.png`, { method:'HEAD' }).then(r => [p, r.ok && (r.headers.get('content-type')||'').toLowerCase().includes('image')]).catch(() => [p, false])
-    )).then(res => { if (alive) { const m = {}; res.forEach(([p, ok]) => m[p] = ok); setAvail(m); } });
-    return () => { alive = false; };
   }, []);
 
   // client-facing read-only view: #brand-share hash (hash only, no backend)
@@ -3792,11 +3766,10 @@ function BrandGuidelinesTab() {
       const r = await fetch(`/assets/brand/${rel}`); if (!r.ok) { return; }
       const blob = await r.blob(); const u = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = u; a.download = outName; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
-    } catch (e) { setAvail(a => ({ ...a, [path]: false })); }
+    } catch (e) {}
   };
 
   // one-click copy: platform glyphs are real inline SVGs, so copy actual markup.
-  // the icon library is PNG files (no SVG markup exists), so copy the real image bytes.
   const GLYPH_SVG = {
     tiktok: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="#0A0A0A"><path d="M16.5 3c.3 2 1.6 3.4 3.5 3.6v2.4c-1.3.1-2.5-.3-3.5-1v6.5c0 3.2-2.4 5.5-5.4 5.5C8.4 20 6 17.8 6 14.9c0-3 2.5-5.3 5.7-5v2.6c-.4-.1-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.6 2.6 2.6 1.5 0 2.7-1.1 2.7-2.8V3h3.4z"/></svg>',
     instagram: '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#0A0A0A" stroke="none"/></svg>',
@@ -3805,14 +3778,6 @@ function BrandGuidelinesTab() {
   };
   const flashCopied = (id) => { setCopied(id); setTimeout(() => setCopied(c => (c === id ? null : c)), 1400); };
   const copySvg = (name) => { try { navigator.clipboard.writeText(GLYPH_SVG[name]); } catch (e) {} flashCopied('svg:' + name); };
-  const copyPng = async (rel) => {
-    try {
-      const r = await fetch(`/assets/brand/${rel}`); if (!r.ok) return;
-      const blob = await r.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
-      flashCopied('png:' + rel);
-    } catch (e) {}
-  };
 
   // shareable read-only link for brands (hash only, no backend)
   const copyShareLink = () => {
@@ -3825,228 +3790,260 @@ function BrandGuidelinesTab() {
     try { window.history.replaceState(null, '', window.location.pathname + window.location.search); } catch (_) {}
   };
 
-  // icon library search: filter groups/items by slug, label, or group name
-  const iconQuery = iconQ.trim().toLowerCase();
-  const shownIconGroups = iconQuery
-    ? ICON_GROUPS.map(([g, items]) => [g, items.filter(it => {
-        const slug = Array.isArray(it) ? it[0] : it;
-        const lab = Array.isArray(it) ? it[1] : label(slug);
-        return slug.includes(iconQuery) || lab.toLowerCase().includes(iconQuery) || g.toLowerCase().includes(iconQuery);
-      })]).filter(([, items]) => items.length)
-    : ICON_GROUPS;
-  const shownIconCount = shownIconGroups.reduce((n, [, items]) => n + items.length, 0);
+  // ── the props table: paul's real video assets, served from /assets/brand/library/ ──
+  // entry: [file, label, meta, preview tone] — the end tag also carries a thumbnail
+  // (paul's display pic, shown as a circle); its download still delivers the .mov.
+  const LIB = [
+    ['numbered overlays', [
+      ['01-notepad.png','notepad','overlay · png','deep'],
+      ['02-price-tag.png','price tag','overlay · png','deep'],
+      ['03-location-bar.png','location bar','overlay · png','deep'],
+      ['04-chip.png','chip','overlay · png','deep'],
+      ['05a-speech-bubble.png','speech bubble','overlay · png','deep'],
+      ['05b-speech-bubble-dots.png','speech bubble · dots','overlay · png','deep'],
+      ['06-pin.png','map pin','overlay · png','sand'],
+      ['07a-arrow-short-straight-A.png','short straight arrow · a','overlay · png','deep'],
+      ['07a-arrow-short-straight-B.png','short straight arrow · b','overlay · png','deep'],
+      ['07b-arrow-long-straight-A.png','long straight arrow · a','overlay · png','deep'],
+      ['07b-arrow-long-straight-B.png','long straight arrow · b','overlay · png','deep'],
+      ['07c-arrow-short-curve-A.png','short curved arrow · a','overlay · png','deep'],
+      ['07c-arrow-short-curve-B.png','short curved arrow · b','overlay · png','deep'],
+      ['07d-arrow-long-curve-A.png','long curved arrow · a','overlay · png','deep'],
+      ['07d-arrow-long-curve-B.png','long curved arrow · b','overlay · png','deep'],
+      ['08a-circle-tall-A.png','tall circle · a','overlay · png','deep'],
+      ['08a-circle-tall-B.png','tall circle · b','overlay · png','deep'],
+      ['08b-circle-wide-A.png','wide circle · a','overlay · png','deep'],
+      ['08b-circle-wide-B.png','wide circle · b','overlay · png','deep'],
+      ['09-underline-A.png','underline · a','overlay · png','deep'],
+      ['09-underline-B.png','underline · b','overlay · png','deep'],
+      ['10a-check-A.png','check · a','overlay · png','deep'],
+      ['10a-check-B.png','check · b','overlay · png','deep'],
+      ['10b-cross-A.png','cross · a','overlay · png','deep'],
+      ['10b-cross-B.png','cross · b','overlay · png','deep'],
+    ]],
+    ['polaroids', [
+      ['polaroid-bright-sky.png','polaroid · bright sky','frame · png','deep'],
+      ['polaroid-deep-ocean.png','polaroid · deep ocean','frame · png','deep'],
+      ['polaroid-ink.png','polaroid · ink','frame · png','sand'],
+      ['polaroid-parchment.png','polaroid · parchment','frame · png','deep'],
+      ['polaroid-sand.png','polaroid · sand','frame · png','deep'],
+      ['polaroid-white.png','polaroid · white','frame · png','deep'],
+    ]],
+    ['calendars', [
+      ['calendar-30-mon-numbered.png','30-day calendar · mon, numbered','graphic · png','paper'],
+      ['calendar-30-mon-numbered-all-x.png','30-day calendar · mon, all crossed','graphic · png','paper'],
+      ['calendar-30-sun-blank.png','30-day calendar · sun, blank','graphic · png','paper'],
+      ['week-calendar-mon-first.png','week calendar · mon first','graphic · png','paper'],
+      ['week-calendar-sun-first.png','week calendar · sun first','graphic · png','paper'],
+    ]],
+    ['dividers & utilities', [
+      ['divider-horizontal-regular-bright-sky.png','divider · bright sky','graphic · png','deep'],
+      ['divider-horizontal-regular-ink.png','divider · ink','graphic · png','sand'],
+      ['divider-horizontal-regular-sand.png','divider · sand','graphic · png','deep'],
+      ['safe-zone.png','safe zone','graphic · png','deep'],
+      ['listicle-note-pad.jpg','listicle note pad','graphic · jpg','paper'],
+      ['end-tag.mov','end tag','video · mov','deep','paul-profile.jpg'],
+    ]],
+  ];
+  const libQuery = libQ.trim().toLowerCase();
+  const shownLib = libQuery
+    ? LIB.map(([g, items]) => [g, items.filter(([, t, m]) => t.includes(libQuery) || m.includes(libQuery) || g.includes(libQuery))]).filter(([, items]) => items.length)
+    : LIB;
+  const libCount = shownLib.reduce((n, [, items]) => n + items.length, 0);
 
-  // shared bits
-  const Section = ({ n, title, children }) => (
+  // shared bits (dark stage)
+  const Act = ({ n, title, sub, children }) => (
     <section style={{ marginBottom:64 }}>
-      <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:20 }}>
-        <span style={{ fontFamily:DISPLAY, fontSize:13, fontWeight:700, color:B.ocean, letterSpacing:1 }}>{n}</span>
-        <h2 style={{ fontFamily:DISPLAY, fontSize:24, fontWeight:700, color:B.ink, margin:0, letterSpacing:-0.3 }}>{title}</h2>
-      </div>
+      <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky, marginBottom:8 }}>{n}</div>
+      <h2 style={{ fontFamily:DISPLAY, fontSize:'clamp(26px,4.5vw,36px)', fontWeight:800, color:B.white, margin:'0 0 10px', letterSpacing:-0.5, lineHeight:1 }}>{title}</h2>
+      {sub && <p style={{ fontSize:13.5, color:DIM, lineHeight:1.55, margin:'0 0 22px', maxWidth:560 }}>{sub}</p>}
       {children}
     </section>
   );
-  const surf = { background:B.white, borderRadius:16, padding:24, border:`1px solid ${B.ink}11` };
-  const caption = { fontSize:13, color:B.slate, lineHeight:1.6 };
-  const X = ({ s=22 }) => (<span style={{ color:'#C0392B', fontWeight:800, fontSize:s, lineHeight:1 }}>✗</span>);
-  const Check = ({ s=22 }) => (<span style={{ color:B.ocean, fontWeight:800, fontSize:s, lineHeight:1 }}>✓</span>);
-  const misuseTile = () => ({ position:'relative', background:B.white, border:`1px solid ${B.ink}14`, borderRadius:10, minHeight:60, display:'flex', alignItems:'center', justifyContent:'center', padding:8, overflow:'hidden', color:B.ink });
-  const Strike = () => (<span style={{ position:'absolute', left:'8%', right:'8%', top:'50%', height:2, background:'#C0392B', transform:'rotate(-12deg)' }} />);
+  const surf = { background:CARD, borderRadius:16, padding:24, border:`1.5px solid ${LINE}` };
+  const caption = { fontSize:13, color:DIM, lineHeight:1.6 };
+  const X = ({ s=22 }) => (<span style={{ color:'#E0655F', fontWeight:800, fontSize:s, lineHeight:1 }}>✗</span>);
+  const Check = ({ s=22 }) => (<span style={{ color:B.sky, fontWeight:800, fontSize:s, lineHeight:1 }}>✓</span>);
+  const misuseTile = () => ({ position:'relative', background:CARD, border:`1px solid ${LINE}`, borderRadius:10, minHeight:60, display:'flex', alignItems:'center', justifyContent:'center', padding:8, overflow:'hidden', color:B.white });
+  const Strike = () => (<span style={{ position:'absolute', left:'8%', right:'8%', top:'50%', height:2, background:'#E0655F', transform:'rotate(-12deg)' }} />);
   const bar = (lab, pct, val) => (
     <div key={lab} style={{ marginBottom:10 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:B.ink, marginBottom:4 }}><span>{lab}</span><span style={{ color:B.slate }}>{val}</span></div>
-      <div style={{ height:8, background:`${B.ocean}22`, borderRadius:6, overflow:'hidden' }}><div style={{ width:`${pct}%`, height:'100%', background:B.ocean, borderRadius:6 }} /></div>
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, color:B.white, marginBottom:4 }}><span>{lab}</span><span style={{ color:DIM }}>{val}</span></div>
+      <div style={{ height:8, background:LINE, borderRadius:6, overflow:'hidden' }}><div style={{ width:`${pct}%`, height:'100%', background:B.sky, borderRadius:6 }} /></div>
     </div>
   );
 
   // platform glyphs (monochrome, on-brand)
-  const TikTok = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M16.5 3c.3 2 1.6 3.4 3.5 3.6v2.4c-1.3.1-2.5-.3-3.5-1v6.5c0 3.2-2.4 5.5-5.4 5.5C8.4 20 6 17.8 6 14.9c0-3 2.5-5.3 5.7-5v2.6c-.4-.1-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.6 2.6 2.6 1.5 0 2.7-1.1 2.7-2.8V3h3.4z"/></svg>);
-  const Insta = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill={c} stroke="none"/></svg>);
-  const YouTube = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="2.5" y="6" width="19" height="12" rx="3.5"/><path d="M10.5 9.2v5.6l4.6-2.8z" fill={c} stroke="none"/></svg>);
-  const Web = ({ c=B.ink, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>);
+  const TikTok = ({ c=B.sky, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill={c}><path d="M16.5 3c.3 2 1.6 3.4 3.5 3.6v2.4c-1.3.1-2.5-.3-3.5-1v6.5c0 3.2-2.4 5.5-5.4 5.5C8.4 20 6 17.8 6 14.9c0-3 2.5-5.3 5.7-5v2.6c-.4-.1-.8-.2-1.2-.2-1.5 0-2.7 1.2-2.7 2.7 0 1.5 1.2 2.6 2.6 2.6 1.5 0 2.7-1.1 2.7-2.8V3h3.4z"/></svg>);
+  const Insta = ({ c=B.sky, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill={c} stroke="none"/></svg>);
+  const YouTube = ({ c=B.sky, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><rect x="2.5" y="6" width="19" height="12" rx="3.5"/><path d="M10.5 9.2v5.6l4.6-2.8z" fill={c} stroke="none"/></svg>);
+  const Web = ({ c=B.sky, s=26 }) => (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/></svg>);
 
-  // download button helper
-  const DlBtn = ({ ok, onClick, children }) => (
-    <button onClick={() => ok && onClick()} disabled={!ok}
-      style={{ width:'100%', border:'none', borderRadius:10, padding:'9px 12px', fontSize:12, fontWeight:700, fontFamily:'inherit',
-        cursor: ok ? 'pointer' : 'not-allowed', background: ok ? B.ocean : `${B.ink}12`, color: ok ? B.white : B.slate }}>
+  // download pill (sky outline, like the concept's library buttons)
+  const DlBtn = ({ onClick, children }) => (
+    <button onClick={onClick}
+      style={{ width:'100%', border:`1.5px solid ${B.sky}`, borderRadius:999, padding:'9px 12px', fontSize:12.5, fontWeight:600, fontFamily:'inherit',
+        cursor:'pointer', background:'transparent', color:B.sky }}>
       {children}
     </button>
   );
 
-  // ── icon card with variant picker ───────────────────────────
-  const IconCard = ({ slug, lab, ro }) => {
-    const key = slug;
-    const sel = iconVar[key] || (avail[`icons/${slug}-bright-sky`] ? 'bright-sky' : (VARIANTS.find(v => avail[`icons/${slug}-${v}`]) || 'bright-sky'));
-    const selOk = avail[`icons/${slug}-${sel}`];
-    const anyOk = VARIANTS.some(v => avail[`icons/${slug}-${v}`]);
+  // ── asset library card ──────────────────────────────────────
+  const LibCard = ({ e }) => {
+    const [f, t, m, tone, thumb] = e;
     return (
-      <div style={{ ...surf, textAlign:'center', display:'flex', flexDirection:'column', alignItems:'center', padding:16 }}>
-        <div style={{ height:96, display:'flex', alignItems:'center', justifyContent:'center', width:'100%' }}>
-          {selOk ? (
-            <img src={`/assets/brand/icons/${slug}-${sel}.png`} alt={lab} style={{ width:78, height:78, objectFit:'contain' }} onError={() => setAvail(av => ({ ...av, [`icons/${slug}-${sel}`]: false }))} />
+      <div style={{ background:CARD, border:`1.5px solid ${LINE}`, borderRadius:16, padding:13, display:'flex', flexDirection:'column' }}>
+        <div style={{ borderRadius:10, height:100, display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', marginBottom:11,
+          background: tone === 'sand' ? B.sand : tone === 'paper' ? '#F4F1E2' : '#0D2B3D' }}>
+          {thumb ? (
+            <img src={`/assets/brand/library/${thumb}`} alt={t} style={{ width:78, height:78, borderRadius:'50%', objectFit:'cover' }} />
           ) : (
-            <div style={{ width:78, height:78, borderRadius:10, border:`2px dashed ${B.ink}22`, display:'flex', alignItems:'center', justifyContent:'center', color:B.slate, fontSize:10, textAlign:'center', padding:6 }}>file not added</div>
+            <img src={`/assets/brand/library/${f}`} alt={t} style={{ maxWidth:'84%', maxHeight:'84%', objectFit:'contain' }} />
           )}
         </div>
-        <div style={{ fontSize:12.5, color:B.ink, fontWeight:600, margin:'8px 0 10px', minHeight:30 }}>{lab}</div>
-        {ro ? null : (<div style={{ display:'flex', gap:4, marginBottom:8, flexWrap:'wrap', justifyContent:'center' }}>
-          {VARIANTS.map(v => {
-            const vok = avail[`icons/${slug}-${v}`];
-            const active = v === sel;
-            return (
-              <button key={v} disabled={!vok} onClick={() => vok && setIconVar(s => ({ ...s, [key]: v }))}
-                title={v}
-                style={{ fontSize:9.5, fontWeight:700, fontFamily:'inherit', border:`1px solid ${active ? B.ocean : B.ink+'22'}`, borderRadius:6, padding:'4px 6px',
-                  cursor: vok ? 'pointer' : 'not-allowed', background: active ? B.ocean : 'transparent', color: !vok ? B.ink+'44' : (active ? B.white : B.ocean) }}>
-                {v === 'bright-sky' ? 'sky' : v === 'sand' ? 'sand' : 'line'}
-              </button>
-            );
-          })}
-        </div>)}
-        <DlBtn ok={!!selOk} onClick={() => dlFile(`icons/${slug}-${sel}.png`, `rgg-${slug}-${sel}.png`)}>
-          {anyOk ? 'download' : 'file not added'}
-        </DlBtn>
-        <button onClick={() => copyPng(`icons/${slug}-${sel}.png`)} disabled={!selOk}
-          style={{ width:'100%', marginTop:6, border:`1px solid ${B.ink}22`, borderRadius:10, padding:'8px 12px', fontSize:12, fontWeight:700, fontFamily:'inherit',
-            cursor: selOk ? 'pointer' : 'not-allowed', background:'transparent', color: selOk ? B.ocean : B.slate }}>
-          {copied === 'png:icons/' + slug + '-' + sel + '.png' ? 'copied ✓' : 'copy png'}
-        </button>
+        <div style={{ fontSize:14, fontWeight:600, color:B.white, lineHeight:1.25 }}>{t}</div>
+        <div style={{ fontSize:10.5, color:FAINT, marginBottom:11 }}>{m}</div>
+        <div style={{ marginTop:'auto' }}>
+          <DlBtn onClick={() => dlFile(`library/${f}`, f)}>download</DlBtn>
+        </div>
       </div>
     );
   };
 
-  const COLORS = [
-    ['sand','#E1D9AE','default light background.'],
-    ['ink','#0A0A0A','primary dark, all text on sand.'],
-    ['bright sky','#88EAF6','hero accent, scarcity only, never body text.'],
-    ['deep ocean','#2A4A5E','secondary accent, use on sand instead of bright sky.'],
-    ['slate','#6E6E6E','supporting copy, captions, metadata.'],
+  const BANDS = [
+    ['sand','the canvas','#E1D9AE',B.sand,B.ink],
+    ['bright sky','the spark','#88EAF6',B.sky,B.ink],
+    ['deep ocean','the anchor','#2A4A5E',B.ocean,B.white],
+    ['slate','the fine print','#6E6E6E',B.slate,B.white],
+    ['white','the plate','#FFFFFF',B.white,B.ink],
+    ['ink','the voice · the stage itself','#0A0A0A','#000000',B.white],
   ];
 
   return (
-    <div style={{ background:B.sand, color:B.ink, borderRadius:20, padding:'clamp(20px,4vw,56px)', fontFamily:"'Poppins', system-ui, -apple-system, sans-serif", textTransform:'none' }}>
+    <div style={{ background:B.ink, color:B.white, borderRadius:20, padding:'clamp(20px,4vw,56px) clamp(20px,4vw,56px) 0', fontFamily:"'Poppins', system-ui, -apple-system, sans-serif", textTransform:'lowercase', overflow:'hidden' }}>
       <div style={{ maxWidth:1000, margin:'0 auto' }}>
 
         {!shareMode ? (
-          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
             <button onClick={() => setShareMode(true)}
-              style={{ background:B.ocean, color:B.white, border:'none', borderRadius:10, padding:'10px 18px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>share with brand</button>
+              style={{ background:B.sky, color:B.ink, border:'none', borderRadius:999, padding:'10px 18px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>share with brand</button>
           </div>
         ) : (
-          <div style={{ background:B.white, borderRadius:14, padding:'14px 18px', marginBottom:24, border:`1px solid ${B.ink}14`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+          <div style={{ background:CARD, borderRadius:14, padding:'14px 18px', marginBottom:24, border:`1.5px solid ${LINE}`, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
             <div>
-              <div style={{ fontWeight:800, fontSize:14, fontFamily:DISPLAY }}>read-only brand view</div>
+              <div style={{ fontWeight:800, fontSize:14, fontFamily:DISPLAY, color:B.white }}>read-only brand view</div>
               <div style={{ ...caption, fontSize:12 }}>share this link with the brand. no editing controls are shown.</div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
               <button onClick={copyShareLink}
-                style={{ background:B.ocean, color:B.white, border:'none', borderRadius:10, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+                style={{ background:B.sky, color:B.ink, border:'none', borderRadius:999, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
                 {copied === 'share' ? 'copied ✓' : 'copy share link'}
               </button>
               <button onClick={exitShareMode}
-                style={{ background:'transparent', color:B.ocean, border:`1px solid ${B.ocean}`, borderRadius:10, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>exit</button>
+                style={{ background:'transparent', color:B.sky, border:`1.5px solid ${B.sky}`, borderRadius:999, padding:'10px 16px', fontWeight:700, fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>exit</button>
             </div>
           </div>
         )}
 
-        {/* 1. COVER + STRUCTURE */}
-        <div style={{ background:B.white, borderRadius:20, padding:'56px 24px', textAlign:'center', marginBottom:48, border:`1px solid ${B.ink}11` }}>
-          <div style={{ fontFamily:DISPLAY, fontSize:'clamp(38px,7vw,64px)', fontWeight:800, color:B.ink, letterSpacing:-1.5 }}>rgg media<span style={{ color:B.sky }}>.</span></div>
-          <div style={{ ...caption, marginTop:12, letterSpacing:3, textTransform:'uppercase', fontSize:11 }}>brand guidelines · june 2026</div>
+        {/* HERO — the dark stage */}
+        <header style={{ position:'relative', padding:'34px 0 44px' }}>
+          <img src="/assets/brand/library/06-pin.png" alt="" style={{ width:64, position:'absolute', right:6, top:26, transform:'rotate(10deg)' }} />
+          <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky }}>paul ferrante · command centre</div>
+          <div style={{ fontFamily:DISPLAY, fontSize:'clamp(44px,8vw,72px)', fontWeight:800, lineHeight:0.98, letterSpacing:-1, margin:'18px 0 16px', color:B.white }}>
+            brand<br /><span style={{ color:B.sky }}>guidelines</span>
+          </div>
+          <p style={{ fontSize:14.5, lineHeight:1.6, color:DIM, maxWidth:430, margin:0 }}>the look, lit like a stage. colours, type, rules and every asset — one dark page that feels like the videos themselves.</p>
+          <div style={{ marginTop:30, fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky }}>lights down · scroll ↓</div>
           {/* structure */}
-          <div style={{ marginTop:40, display:'flex', flexDirection:'column', alignItems:'center' }}>
-            <div style={{ background:B.ink, color:B.white, padding:'10px 22px', borderRadius:12, fontWeight:700, fontFamily:DISPLAY }}>rgg media</div>
-            <div style={{ ...caption, fontSize:11 }}>the media company</div>
-            <div style={{ width:2, height:26, background:`${B.ink}33` }} />
-            <div style={{ display:'flex', gap:'clamp(20px,8vw,90px)', alignItems:'flex-start' }}>
+          <div style={{ marginTop:38, display:'flex', flexDirection:'column', alignItems:'flex-start' }}>
+            <div style={{ background:B.white, color:B.ink, padding:'10px 22px', borderRadius:12, fontWeight:700, fontFamily:DISPLAY }}>rgg media</div>
+            <div style={{ ...caption, fontSize:11, marginTop:6 }}>the media company</div>
+            <div style={{ width:2, height:24, background:LINE, marginLeft:28 }} />
+            <div style={{ display:'flex', gap:'clamp(16px,6vw,70px)', alignItems:'flex-start', flexWrap:'wrap' }}>
               {[['consulting services','agency / client work'],['paul_ferrante','the creator arm']].map(([t, s]) => (
-                <div key={t} style={{ display:'flex', flexDirection:'column', alignItems:'center', position:'relative' }}>
-                  <div style={{ width:2, height:18, background:`${B.ink}33` }} />
-                  <div style={{ background:`${B.ocean}14`, color:B.ocean, border:`1.5px solid ${B.ocean}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
+                <div key={t} style={{ display:'flex', flexDirection:'column', alignItems:'flex-start' }}>
+                  <div style={{ width:2, height:16, background:LINE, marginLeft:28 }} />
+                  <div style={{ background:CARD, color:B.sky, border:`1.5px solid ${B.sky}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
                   <div style={{ ...caption, fontSize:11, marginTop:6 }}>{s}</div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        </header>
 
-        {/* 2. BRAND STORY */}
-        <Section n="01" title="brand story & positioning">
+        {/* ACT 01 · PILLARS */}
+        <Act n="act 01 · what i make" title="content pillars">
+          <div>
+            {PILLARS.map(([t, desc], i) => (
+              <div key={t} style={{ padding:'20px 0', borderBottom:`1px solid ${LINE}`, borderTop: i === 0 ? `1px solid ${LINE}` : 'none' }}>
+                <div style={{ fontSize:12, fontWeight:800, color:B.sky, letterSpacing:1.4 }}>{String(i + 1).padStart(2, '0')}</div>
+                <div style={{ fontFamily:DISPLAY, fontSize:'clamp(21px,3.4vw,27px)', fontWeight:800, color:B.white, margin:'5px 0 6px' }}>{t}</div>
+                <p style={{ fontSize:13.5, lineHeight:1.55, color:DIM, margin:0, maxWidth:640 }}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </Act>
+
+        {/* ACT 02 · BRAND STORY */}
+        <Act n="act 02 · the story" title="brand story & positioning">
           <div style={surf}>
-            <div style={{ fontFamily:DISPLAY, fontSize:22, fontWeight:800, color:B.ink, marginBottom:14, letterSpacing:-0.5 }}>paul_ferrante<span style={{ color:B.ocean }}>.rgg</span></div>
-            <p style={{ fontSize:17, lineHeight:1.75, color:B.ink, margin:'0 0 16px' }}>
+            <div style={{ fontFamily:DISPLAY, fontSize:22, fontWeight:800, color:B.white, marginBottom:14, letterSpacing:-0.5 }}>paul_ferrante<span style={{ color:B.sky }}>.rgg</span></div>
+            <p style={{ fontSize:16, lineHeight:1.75, color:B.white, margin:'0 0 16px' }}>
               paul_ferrante is a travel and lifestyle brand that keeps things simple, fun, and grounded. you get quick, honest takes on everyday life, smart travel tips, and moments that make you laugh because they're real. the style is clean and minimal so the content stays easy to watch, with a playful tone that doesn't take itself too seriously.
             </p>
-            <p style={{ fontSize:17, lineHeight:1.75, color:B.ink, margin:0 }}>
+            <p style={{ fontSize:16, lineHeight:1.75, color:B.white, margin:0 }}>
               paul_ferrante is for people who want inspiration without the fluff, practical ideas, relatable stories, and a sense of adventure you can actually see yourself in. it's content that feels approachable, useful, and a little bit cheeky, all wrapped in a relaxed, lowercase aesthetic.
             </p>
             <div style={{ marginTop:18, display:'flex', gap:8, flexWrap:'wrap' }}>
               {['approachable','useful','selective','strictly lowercase'].map(t => (
-                <span key={t} style={{ background:`${B.ocean}18`, color:B.ocean, padding:'6px 14px', borderRadius:20, fontSize:13, fontWeight:600 }}>{t}</span>
+                <span key={t} style={{ background:'transparent', color:B.sky, border:`1.5px solid ${B.sky}`, padding:'6px 14px', borderRadius:999, fontSize:13, fontWeight:600 }}>{t}</span>
               ))}
             </div>
           </div>
-        </Section>
+        </Act>
 
-        {/* 3. CONTENT PILLARS */}
-        <Section n="02" title="content pillars">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
-            {PILLARS.map(([t, slug, desc]) => (
-              <div key={t} style={surf}>
-                <img src={`/assets/brand/icons/${slug}-bright-sky.png`} alt={t} style={{ width:52, height:52, objectFit:'contain', display:'block', margin:'0 auto 10px' }} onError={(e)=>{e.currentTarget.style.visibility='hidden';}} />
-                <div style={{ fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ink, marginBottom:8, textAlign:'center' }}>{t}</div>
-                <p style={{ fontSize:13.5, lineHeight:1.6, margin:0, color:B.ink, textAlign:'center' }}>{desc}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-
-        {/* 4. AUDIENCE */}
-        <Section n="03" title="audience">
+        {/* ACT 03 · AUDIENCE */}
+        <Act n="act 03 · the audience" title="who's watching">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14, marginBottom:16 }}>
             {[[TikTok,'tiktok','~51.6k'],[Insta,'instagram','~13.2k'],[YouTube,'youtube','~1.8k']].map(([G, name, num]) => (
               <div key={name} style={{ ...surf, textAlign:'center' }}>
-                <div style={{ display:'flex', justifyContent:'center', marginBottom:8 }}><G c={B.ocean} s={30} /></div>
-                <div style={{ fontFamily:DISPLAY, fontSize:26, fontWeight:800, color:B.ink }}>{num}</div>
+                <div style={{ display:'flex', justifyContent:'center', marginBottom:8 }}><G c={B.sky} s={30} /></div>
+                <div style={{ fontFamily:DISPLAY, fontSize:26, fontWeight:800, color:B.white }}>{num}</div>
                 <div style={{ ...caption, fontSize:12 }}>{name}</div>
               </div>
             ))}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
             <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:14 }}>top markets</div>
+              <div style={{ fontWeight:700, marginBottom:14, color:B.white }}>top markets</div>
               {bar('united states',39,'39%')}{bar('australia',38,'38%')}{bar('canada',13,'13%')}{bar('united kingdom',10,'10%')}
             </div>
             <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:14 }}>age & gender</div>
+              <div style={{ fontWeight:700, marginBottom:14, color:B.white }}>age & gender</div>
               {bar('25-44 (core)',68,'core')}{bar('gender split',53,'53% / 47%')}
               <div style={{ ...caption, marginTop:10 }}>snapshot june 2026 — the analytics tab is the live source.</div>
             </div>
           </div>
-        </Section>
+        </Act>
 
-        {/* 5. LOGO & USAGE */}
-        <Section n="04" title="logo & usage">
+        {/* ACT 04 · LOGO & USAGE */}
+        <Act n="act 04 · the mark" title="logo & usage">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:16, marginBottom:16 }}>
-            {LOGOS.map(([name, file]) => {
-              const ok = avail[`logo/${file}`] !== false;
-              return (
-                <div key={file} style={surf}>
-                  <div style={{ borderRadius:12, overflow:'hidden', marginBottom:12, border:`1px solid ${B.ink}11` }}>
-                    <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} onError={(e)=>{e.currentTarget.style.opacity=0.2;}} />
-                  </div>
-                  <div style={{ fontSize:13, fontWeight:600, marginBottom:10, textAlign:'center' }}>{name}</div>
-                  <DlBtn ok={ok} onClick={() => dlFile(`logo/${file}.png`, `${file}.png`)}>{ok ? 'download' : 'file not added'}</DlBtn>
+            {LOGOS.map(([name, file]) => (
+              <div key={file} style={surf}>
+                <div style={{ borderRadius:12, overflow:'hidden', marginBottom:12, border:`1px solid ${LINE}` }}>
+                  <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} />
                 </div>
-              );
-            })}
+                <div style={{ fontSize:13, fontWeight:600, marginBottom:10, textAlign:'center', color:B.white }}>{name}</div>
+                <DlBtn onClick={() => dlFile(`logo/${file}.png`, `${file}.png`)}>download</DlBtn>
+              </div>
+            ))}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:16 }}>
             <div style={surf}>
-              <div style={{ marginBottom:10, fontWeight:700, color:B.ocean }}>why everything is lowercase</div>
-              <p style={{ fontSize:14, lineHeight:1.65, margin:'0 0 12px' }}>rgg is a fun, casual, playful brand. the lowercase wordmark is part of that tone, so it's a rule, not a typo.</p>
-              <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9 }}>
+              <div style={{ marginBottom:10, fontWeight:700, color:B.sky }}>why everything is lowercase</div>
+              <p style={{ fontSize:14, lineHeight:1.65, margin:'0 0 12px', color:B.white }}>rgg is a fun, casual, playful brand. the lowercase wordmark is part of that tone, so it's a rule, not a typo.</p>
+              <ul style={{ margin:0, paddingLeft:18, fontSize:14, lineHeight:1.9, color:DIM }}>
                 <li>do not capitalize.</li>
                 <li>no gradients or heavy shadows.</li>
                 <li>do not crowd with other logos.</li>
@@ -4054,7 +4051,7 @@ function BrandGuidelinesTab() {
               </ul>
             </div>
             <div style={surf}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}><X /><b style={{ color:'#C0392B' }}>misuse</b></div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:14 }}><X /><b style={{ color:'#E0655F' }}>misuse</b></div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                 <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:18, textTransform:'uppercase' }}>RGG MEDIA</span><Strike/></div>
                 <div style={misuseTile()}><span style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:18, background:'linear-gradient(90deg,#88EAF6,#2A4A5E)', WebkitBackgroundClip:'text', backgroundClip:'text', color:'transparent' }}>rgg media</span><Strike/></div>
@@ -4063,104 +4060,131 @@ function BrandGuidelinesTab() {
               </div>
             </div>
           </div>
-        </Section>
+        </Act>
 
-        {/* 6. COLOR PALETTE */}
-        <Section n="05" title="color palette · click any swatch to copy">
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:16 }}>
-            {COLORS.map(([name, hex, role]) => (
-              <div key={hex} onClick={() => copyHex(hex)} title="click to copy"
-                style={{ borderRadius:16, overflow:'hidden', border:`1px solid ${B.ink}14`, cursor:'pointer', background:B.white, position:'relative' }}>
-                <div style={{ height:90, background:hex, borderBottom:`1px solid ${B.ink}10` }} />
-                <div style={{ padding:'12px 14px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <span style={{ fontWeight:700, color:B.ink, fontSize:14 }}>{name}</span>
-                    <span style={{ fontFamily:'monospace', fontSize:12, color:B.slate }}>{hex}</span>
-                  </div>
-                  <div style={{ ...caption, marginTop:6, fontSize:12 }}>{role}</div>
-                  <div style={{ marginTop:10, textAlign:'center', fontSize:11, fontWeight:700, color:B.white, background:B.ocean, borderRadius:8, padding:'6px' }}>copy hex</div>
+        {/* ACT 05 · COLOUR */}
+        <Act n="act 05 · colour" title="colour, spotlit" sub="five colours. on a black stage, each one holds its own light. tap any band to copy its hex.">
+          <div>
+            {BANDS.map(([name, role, hex, bg, fg]) => (
+              <div key={hex} onClick={() => copyHex(hex)} title="tap to copy hex"
+                style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', padding:'15px 18px', borderRadius:12, marginBottom:10, minHeight:70, background:bg, color:fg, cursor:'pointer', position:'relative',
+                  border: name === 'ink' ? `1.5px solid ${B.sky}` : 'none' }}>
+                <div>
+                  <div style={{ fontSize:16.5, fontWeight:800, lineHeight:1.1 }}>{name}</div>
+                  <div style={{ fontSize:11.5, opacity:0.85 }}>{role}</div>
                 </div>
-                {copied === hex && (<div style={{ position:'absolute', top:10, right:10, background:B.ocean, color:B.white, fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:20 }}>copied ✓</div>)}
+                <div style={{ fontSize:12, fontWeight:600, letterSpacing:0.6 }}>{hex.toLowerCase()}</div>
+                {copied === hex && (<div style={{ position:'absolute', top:10, right:10, background:B.ink, color:B.sky, fontSize:11, fontWeight:700, padding:'4px 10px', borderRadius:999 }}>copied ✓</div>)}
               </div>
             ))}
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
-            <div style={{ background:B.sand, borderRadius:16, padding:24, border:`2px dashed #C0392B` }}>
-              <span style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:700, color:B.sky }}>bright sky text on sand</span>
-              <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}><X s={18}/><span style={caption}>contrast too low. never do this.</span></div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginTop:16 }}>
+            <div style={{ background:CARD, borderRadius:16, padding:20, border:`1.5px solid ${LINE}` }}>
+              <span style={{ display:'inline-block', background:B.sand, borderRadius:10, padding:'10px 14px', fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.sky }}>bright sky text on sand</span>
+              <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}><X s={18}/><span style={caption}>contrast too low. never do this.</span></div>
             </div>
-            <div style={{ background:B.sand, borderRadius:16, padding:24, border:`2px solid ${B.ocean}` }}>
-              <span style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:700, color:B.ocean }}>deep ocean text on sand</span>
-              <div style={{ marginTop:10, display:'flex', alignItems:'center', gap:8 }}><Check s={18}/><span style={caption}>approved. use ocean for accents on sand.</span></div>
+            <div style={{ background:CARD, borderRadius:16, padding:20, border:`1.5px solid ${LINE}` }}>
+              <span style={{ display:'inline-block', background:B.sand, borderRadius:10, padding:'10px 14px', fontFamily:DISPLAY, fontSize:17, fontWeight:700, color:B.ocean }}>deep ocean text on sand</span>
+              <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}><Check s={18}/><span style={caption}>approved. use ocean for accents on sand.</span></div>
             </div>
           </div>
-        </Section>
+        </Act>
 
-        {/* 7. ICONOGRAPHY (incl. cash stamp) */}
-        <Section n="06" title="icons · video tags">
-          <p style={{ ...caption, marginTop:-8, marginBottom:18 }}>each icon downloads as an individual file for overlaying in video. pick a version: transparent, b/w (black on white), or w/b (white on black). the cash stamp lives here too, with no number baked in so you add the amount while editing.</p>
+        {/* ACT 06 · TYPE */}
+        <Act n="act 06 · type" title="type, full volume">
+          <div style={{ fontFamily:DISPLAY, fontSize:'clamp(80px,16vw,118px)', fontWeight:800, lineHeight:0.92, color:B.white }}>a<span style={{ color:B.sky }}>a</span></div>
+          <p style={{ fontSize:14.5, lineHeight:1.7, wordBreak:'break-all', margin:'12px 0 20px', color:DIM }}>abcdefghijklmnopqrstuvwxyz<br />0123456789 · ! ? &amp; ’</p>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:12 }}>
+            <div style={{ border:`1.5px solid ${LINE}`, borderRadius:14, padding:19 }}>
+              <div style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:800, color:B.white, marginBottom:5 }}>poppins extrabold</div>
+              <p style={{ fontSize:13, lineHeight:1.55, color:DIM, margin:0 }}><b style={{ color:B.sky, fontWeight:600 }}>headlines.</b> big, tight, lowercase — marquee energy, never shouting.</p>
+            </div>
+            <div style={{ border:`1.5px solid ${LINE}`, borderRadius:14, padding:19 }}>
+              <div style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:400, color:B.white, marginBottom:5 }}>poppins regular</div>
+              <p style={{ fontSize:13, lineHeight:1.55, color:DIM, margin:0 }}><b style={{ color:B.sky, fontWeight:600 }}>everything else.</b> captions, labels, body copy. keep it lowercase.</p>
+            </div>
+          </div>
+        </Act>
+
+        {/* ACT 07 · RULES */}
+        <Act n="act 07 · the rules" title="house rules">
+          <div>
+            {[
+              ['lowercase, always.','headlines, captions, buttons. everything.'],
+              ['no gradients.','flat colour only — the stage is flat black, the accents are flat colour.'],
+              ['sky is an accent.','it lights the important word. it is never body text.'],
+              ['leave room.','black space is breathing room. don\'t crowd the stage.'],
+            ].map(([b, rest], i) => (
+              <div key={b} style={{ display:'flex', gap:16, padding:'15px 0', borderBottom: i < 3 ? `1px solid ${LINE}` : 'none', alignItems:'baseline' }}>
+                <div style={{ fontFamily:DISPLAY, fontSize:19, fontWeight:800, color:B.sky, minWidth:34 }}>{String(i + 1).padStart(2, '0')}</div>
+                <p style={{ fontSize:14, lineHeight:1.55, color:B.white, margin:0 }}><b style={{ fontWeight:800 }}>{b}</b> <span style={{ color:DIM }}>{rest}</span></p>
+              </div>
+            ))}
+          </div>
+        </Act>
+
+        {/* ACT 08 · ASSET LIBRARY — the props table */}
+        <Act n="act 08 · asset library" title="the props table"
+          sub="the real files, laid out backstage. on dark cards the light overlays pop exactly like they do on footage. tap download from any computer — no drive needed.">
           {!shareMode && (
-            <input value={iconQ} onChange={e => setIconQ(e.target.value)} placeholder="search icons…"
-              style={{ width:'100%', maxWidth:420, background:B.white, border:`1px solid ${B.ink}22`, borderRadius:10, padding:'10px 14px', fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:16, display:'block' }} />
+            <input value={libQ} onChange={e => setLibQ(e.target.value)} placeholder="search assets…"
+              style={{ width:'100%', maxWidth:420, background:CARD, border:`1.5px solid ${LINE}`, borderRadius:999, padding:'11px 18px', fontSize:13, fontFamily:'inherit', outline:'none', marginBottom:16, display:'block', color:B.white }} />
           )}
-          {iconQuery && (
-            <div style={{ ...caption, marginBottom:12 }}>{shownIconCount} icon{shownIconCount === 1 ? '' : 's'} match{shownIconCount === 1 ? 'es' : ''} "{iconQ.trim()}"</div>
+          {libQuery && (
+            <div style={{ ...caption, marginBottom:12 }}>{libCount} asset{libCount === 1 ? '' : 's'} match{libCount === 1 ? 'es' : ''} "{libQ.trim()}"</div>
           )}
-          {shownIconGroups.map(([group, items]) => (
+          {shownLib.map(([group, items]) => (
             <div key={group} style={{ marginBottom:28 }}>
-              <div style={{ fontFamily:DISPLAY, fontSize:14, fontWeight:700, color:B.ocean, marginBottom:12 }}>{group}</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:14 }}>
-                {items.map(it => { const slug = Array.isArray(it) ? it[0] : it; const lab = Array.isArray(it) ? it[1] : label(slug); return <IconCard key={group+slug} slug={slug} lab={lab} ro={shareMode} />; })}
+              <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky, marginBottom:12 }}>{group}</div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:13 }}>
+                {items.map(e => <LibCard key={e[0]} e={e} />)}
               </div>
             </div>
           ))}
-          {iconQuery && shownIconGroups.length === 0 && (
-            <div style={{ ...caption, padding:'20px 0' }}>no icons match that search.</div>
+          {libQuery && shownLib.length === 0 && (
+            <div style={{ ...caption, padding:'20px 0' }}>no assets match that search.</div>
           )}
-        </Section>
+        </Act>
 
-        {/* 7. TEMPLATES & ASSETS */}
-        <Section n="07" title="templates & assets">
+        {/* ACT 09 · TEMPLATES */}
+        <Act n="act 09 · templates" title="templates & assets">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
             <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:10 }}>listicle frame</div>
-              <div style={{ background:`${B.ocean}10`, borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
-                <img src="/assets/brand/extras/listicle-template-2.png" alt="listicle template" style={{ maxHeight:240, maxWidth:'100%', objectFit:'contain' }} onError={(e)=>{e.currentTarget.style.opacity=0.25;}} />
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>listicle frame</div>
+              <div style={{ background:'#0D2B3D', borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
+                <img src="/assets/brand/extras/listicle-template-2.png" alt="listicle template" style={{ maxHeight:240, maxWidth:'100%', objectFit:'contain' }} />
               </div>
               <p style={{ ...caption, margin:'10px 0 12px' }}>transparent notes frame for listicle videos. overlay it and type your list inside.</p>
-              <DlBtn ok={true} onClick={() => dlFile('extras/listicle-template-2.png','rgg-listicle-template.png')}>download png</DlBtn>
-            </div>
-            <div style={surf}>
-              <div style={{ fontWeight:700, marginBottom:10 }}>end tag</div>
-              <div style={{ background:`${B.ocean}10`, borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
-                <video src="/assets/brand/extras/paul_ferrante-end-tag.mov" controls muted playsInline style={{ maxHeight:240, maxWidth:'100%', borderRadius:8 }} />
-              </div>
-              <p style={{ ...caption, margin:'10px 0 12px' }}>your paul_ferrante end-tag clip. preview here, or download to drop on the end of a video.</p>
-              <DlBtn ok={true} onClick={() => dlFile('extras/paul_ferrante-end-tag.mov','paul_ferrante-end-tag.mov')}>download video</DlBtn>
+              <DlBtn onClick={() => dlFile('extras/listicle-template-2.png','rgg-listicle-template.png')}>download png</DlBtn>
             </div>
           </div>
-        </Section>
+        </Act>
 
-        {/* 9. CHANNELS */}
-        <Section n="08" title="channels & contact">
+        {/* ACT 10 · CHANNELS */}
+        <Act n="act 10 · channels" title="channels & contact">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14 }}>
             {[[TikTok,'tiktok','https://www.tiktok.com/@paul_ferrante'],[Insta,'instagram','https://www.instagram.com/paul_ferrante/'],[YouTube,'youtube','https://www.youtube.com/@paul_ferrante'],[Web,'website','https://paullferrantemedia.my.canva.site']].map(([G, name, url]) => (
               <div key={url} style={{ ...surf, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                <a href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none', color:B.ink, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
-                  <G c={B.ocean} s={32} />
+                <a href={url} target="_blank" rel="noopener noreferrer" style={{ textDecoration:'none', color:B.white, display:'flex', flexDirection:'column', alignItems:'center', gap:10 }}>
+                  <G c={B.sky} s={32} />
                   <span style={{ fontWeight:600, fontSize:14 }}>{name}</span>
                 </a>
                 <button onClick={() => copySvg(name)}
-                  style={{ border:`1px solid ${B.ink}22`, borderRadius:8, padding:'6px 12px', fontSize:11, fontWeight:700, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:B.ocean }}>
+                  style={{ border:`1.5px solid ${B.sky}`, borderRadius:999, padding:'6px 14px', fontSize:11, fontWeight:600, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:B.sky }}>
                   {copied === 'svg:' + name ? 'copied ✓' : 'copy svg'}
                 </button>
               </div>
             ))}
           </div>
-          <div style={{ ...caption, textAlign:'center', marginTop:40, opacity:0.7 }}>rgg media · paulferrante · brand guidelines</div>
-        </Section>
+        </Act>
+
+        <footer style={{ padding:'10px 0 4px', textAlign:'center', borderTop:`1px solid ${LINE}` }}>
+          <div style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:20, color:B.white, marginTop:26 }}>paul <span style={{ color:B.sky }}>ferrante</span></div>
+          <div style={{ marginTop:6, color:FAINT, fontSize:11 }}>rgg media · brand guidelines · june 2026</div>
+        </footer>
 
       </div>
+      <div style={{ height:6, background:B.sky, margin:'28px calc(clamp(20px,4vw,56px) * -1) 0' }} />
     </div>
   );
 }
