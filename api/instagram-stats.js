@@ -173,19 +173,36 @@ async function fetchPostInsights(item, token) {
 }
 
 // ── Account-level audience demographics (IG insights) ─────────────
-// audience_country + audience_gender_age are lifetime insights. Fully
-// defensive: any error (token scope, Meta deprecating the metrics, odd
-// payloads) returns null and callers fall back to static values.
+// The legacy audience_country / audience_gender_age metrics are gone from
+// the Graph API; the supported replacement is follower_demographics with
+// one breakdown per call (country / age / gender), lifetime, total_value.
+// Fully defensive: a failed breakdown just drops that piece, and total
+// failure returns { error } so callers fall back to static values.
+async function fetchDemoBreakdown(userId, token, breakdown) {
+  const url  = IG_BASE + '/' + userId + '/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=' + breakdown + '&access_token=' + token;
+  const res  = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'follower_demographics error');
+  const results = (data.data || [])[0]?.total_value?.breakdowns?.[0]?.results || [];
+  const out = {};
+  for (const r of results) {
+    const dim = r?.dimension_values?.[0];
+    if (dim != null) out[dim] = r.value || 0;
+  }
+  return out;
+}
+
 async function fetchAudience(userId, token) {
   try {
-    const url  = IG_BASE + '/' + userId + '/insights?metric=audience_country,audience_gender_age&period=lifetime&access_token=' + token;
-    const res  = await fetch(url);
-    const data = await res.json();
-    if (data.error) return { error: data.error.message || JSON.stringify(data.error) };
-    const raw = (name) => (data.data || []).find(m => m.name === name)?.values?.[0]?.value || null;
-    const countriesRaw = raw('audience_country');
-    const genderAgeRaw = raw('audience_gender_age');
-    if (!countriesRaw && !genderAgeRaw) return { error: 'insights returned no audience values' };
+    let firstErr = null;
+    const attempt = async (b) => {
+      try { return await fetchDemoBreakdown(userId, token, b); }
+      catch (e) { if (!firstErr) firstErr = e.message; return null; }
+    };
+    const [countriesRaw, ageRaw, genderRaw] = await Promise.all([
+      attempt('country'), attempt('age'), attempt('gender'),
+    ]);
+    if (!countriesRaw && !ageRaw && !genderRaw) return { error: firstErr || 'insights returned no audience values' };
 
     let countries = null;
     if (countriesRaw) {
@@ -207,20 +224,17 @@ async function fetchAudience(userId, token) {
     }
 
     let age = null, gender = null;
-    if (genderAgeRaw) {
-      let tot = 0, core = 0, f = 0, m = 0;
-      for (const [k, v] of Object.entries(genderAgeRaw)) {
-        const [g, range] = String(k).split('.');
-        const n = v || 0;
-        tot += n;
-        if (range === '25-34' || range === '35-44') core += n;
-        if (g === 'F') f += n; else if (g === 'M') m += n;
-      }
+    if (ageRaw) {
+      const tot  = Object.values(ageRaw).reduce((s, v) => s + (v || 0), 0);
+      const core = (ageRaw['25-34'] || 0) + (ageRaw['35-44'] || 0);
       if (tot > 0) age = { corePct: Math.round((core / tot) * 100) };
+    }
+    if (genderRaw) {
+      const f = genderRaw['F'] || 0, m = genderRaw['M'] || 0;
       if (f + m > 0) { const malePct = Math.round((m / (f + m)) * 100); gender = { malePct, femalePct: 100 - malePct }; }
     }
 
-    if (!countries && !age && !gender) return { error: 'audience values present but unparseable' };
+    if (!countries && !age && !gender) return { error: firstErr || 'audience values present but unparseable' };
     return { source: 'instagram', countries, age, gender };
   } catch (e) { return { error: e.message }; }
 }
