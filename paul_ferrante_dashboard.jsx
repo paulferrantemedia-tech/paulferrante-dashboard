@@ -2216,7 +2216,7 @@ function castingReasoning(score, i, bucket) {
   return `${score}: ${hits.slice(0,4).join(', ') || 'partial fit'}.`;
 }
 
-const CASTING_TODAY_REF = new Date('2026-10-12');
+const CASTING_TODAY_REF = new Date('2026-10-19');
 const castingDaysFromNow = (d) => { const x = new Date(CASTING_TODAY_REF); x.setDate(x.getDate()+d); return x.toISOString().slice(0,10); };
 function makeCasting(c) {
   const r = castingFitScore({ ...c.scoreInputs, formatType:c.formatType, network:c.network });
@@ -2225,9 +2225,10 @@ function makeCasting(c) {
 // Casting status model (2026-10-12): every tracked show ALWAYS renders a tile.
 // castingStatus 'open' = applications being taken right now (verified portal or network hub).
 // castingStatus 'not-casting' = between cycles; typicalWindow says when to check back.
-// No show is ever hidden from the board. Statuses re-verified 2026-10-12 against
-// official portals and network announcements. Flips since 2026-10-05: c6 (Traitors AU S4)
-// and c15 (Amazing Race Canada S13) moved not-casting -> open.
+// No show is ever hidden from the board. Statuses re-verified 2026-10-19 against
+// official portals and network announcements. Changes since 2026-10-12: c15 (Amazing
+// Race Canada S13) gained a verified deadline (Dec 7, 2026) from its official FAQ.
+// No status flips this run.
 const SEED_CASTINGS = [
   makeCasting({ id:'c1', showName:'The Traitors US', network:'Peacock / NBC', formatType:'social-strategy', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Civilian application portal is LIVE (thetraitorsus.com) — S5 "New Blood" aired Sep 2026, S6 is celebrity (already cast). Rolling applications for future civilian seasons, no announced deadline.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
   makeCasting({ id:'c2', showName:'The Amazing Race (US)', network:'CBS', formatType:'race-travel', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'S39 premieres Sep 30, 2026; S40 not yet announced. Official portal takes rolling applications year-round — apply early. Highest-fit show on the board. Duo with Dan.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
@@ -2241,7 +2242,7 @@ const SEED_CASTINGS = [
   makeCasting({ id:'c11', showName:'Pressure Cooker', network:'Netflix', formatType:'hybrid-physical-social', market:'US', castingStatus:'not-casting', typicalWindow:'No S2 ordered', pipelineStatus:'researching', oneLineWhy:'One season (2023); a second season was never ordered. Not currently casting.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
   makeCasting({ id:'c12', showName:'The Quiz With Balls', network:'Fox', formatType:'one-off-game', market:'US', castingStatus:'not-casting', typicalWindow:'No S4 announced', pipelineStatus:'researching', oneLineWhy:'S3 aired Apr 2026; no S4 announced. Low-time one-off — confirm DQ implications before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
   makeCasting({ id:'c14', showName:'Big Brother Canada — Season 13', network:'CTV / Crave (Bell Media)', formatType:'social-strategy', market:'CA', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Casting NOW OPEN nationwide (announced Sep 22, 2026) — BigBrotherCanadaCasting.ca. CTV/Crave revival, production Spring 2027 Montréal. HARD GATE: Canadian citizen or permanent resident, 19+.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:70, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c15', showName:'The Amazing Race Canada — Season 13', network:'CTV', formatType:'race-travel', market:'CA', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'S13 casting NOW OPEN (announced ~Oct 6, 2026) — AmazingRaceCanadaCasting.ca verified live. No announced deadline. Duo with Dan. Confirm Canadian eligibility when applying.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:28, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
+  makeCasting({ id:'c15', showName:'The Amazing Race Canada — Season 13', network:'CTV', formatType:'race-travel', market:'CA', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', deadline:'2026-12-07', oneLineWhy:'S13 casting NOW OPEN (announced ~Oct 6, 2026) — AmazingRaceCanadaCasting.ca verified live. Applications close Mon Dec 7, 2026 at 11:59 p.m. PT (official FAQ; may change). Filming spring 2027; advancing teams contacted by Mar 2027. Duo with Dan. Canadian citizen/permanent resident, 19+ by Apr 1, 2027.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:28, ndaMonths:12, payTier:'high', eligibility:'duo-only' } }),
 ]; // c10 (Deal or No Deal Island) removed 2026-09-28: NBC canceled the show Dec 2025, no S3. c13 (The Challenge: Global Championship) removed 2026-09-28: not a real series.
 // ── Apply Now link resolution ───────────────────────────────────────────────
 // The seed applyLink values were AI-generated deep links and many 404 (verified:
@@ -2252,7 +2253,7 @@ const SEED_CASTINGS = [
 //   2. the network's official casting hub (verified, stable)
 // Shows that are not currently casting get NO link at all — never a hub,
 // never a search. Real casting pages or nothing.
-const CASTING_LINKS_CHECKED = '2026-10-12';
+const CASTING_LINKS_CHECKED = '2026-10-19';
 // Human-readable "last updated" label for the casting board header.
 const CASTING_CHECKED_LABEL = new Date(CASTING_LINKS_CHECKED + 'T00:00:00')
   .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -2265,7 +2266,8 @@ const NETWORK_CASTING_HUBS = {
 };
 // Verified per-show application portals. Each was loaded and confirmed to be a
 // live application form or an explicit "casting is now open" page on 2026-10-05
-// (re-confirmed open on 2026-10-12; c15 added 2026-10-12).
+// (re-confirmed open on 2026-10-19; c15 added 2026-10-12, its Dec 7, 2026 deadline
+// verified on its official FAQ on 2026-10-19).
 // The Amazing Race US portal 500'd on re-verification 2026-09-29 → verified live
 // again on 2026-10-05 ("Online applications are accepted year-round via this site").
 // c6 (Traitors AU S4) intentionally has NO per-show entry: it resolves via the
@@ -2278,7 +2280,7 @@ const SHOW_APPLY_PORTALS = {
   c4: 'https://www.squidgamecasting.com',          // Squid Game: The Challenge — "casting is now open for Season 3", verified 2026-10-05
   c7: 'https://www.bigbrothercasting.tv/',          // Big Brother US — "CASTING IS NOW OPEN", verified 2026-10-05
   c14: 'https://BigBrotherCanadaCasting.ca',         // Big Brother Canada S13 — "Casting is now open", verified 2026-10-05
-  c15: 'https://amazingracecanadacasting.ca',       // Amazing Race Canada S13 — "CASTING IS NOW OPEN", verified live 2026-10-12
+  c15: 'https://amazingracecanadacasting.ca',       // Amazing Race Canada S13 — "CASTING IS NOW OPEN", verified live 2026-10-19
 };
 // Returns { url, label, source, status, checked } or null. Verified portals render
 // as "Apply Now"; network hubs render as the hub link. Never returns a Google
