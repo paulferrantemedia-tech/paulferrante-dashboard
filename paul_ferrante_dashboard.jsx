@@ -3739,6 +3739,30 @@ function BrandGuidelinesTab() {
   const [copied, setCopied] = useState(null);
   const [libQ, setLibQ] = useState('');        // asset library search
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
+  const [liveCounts, setLiveCounts] = useState(null); // live follower counts from the platform apis
+
+  // follower counts: pull live from the same stats endpoints the analytics tab uses.
+  // any failure leaves liveCounts untouched and the cards fall back to the static values.
+  useEffect(() => {
+    const grab = (url, pick) => fetch(url, { cache: 'no-store' }).then(r => r.json()).then(d => (d && d.ok) ? pick(d) : null).catch(() => null);
+    Promise.all([
+      grab(`/api/tiktok-stats?t=${Date.now()}`,    d => d.profile?.followerCount),
+      grab(`/api/instagram-stats?t=${Date.now()}`, d => d.profile?.followersCount),
+      grab(`/api/youtube-stats?t=${Date.now()}`,   d => d.channel?.subscriberCount),
+    ]).then(([tt, ig, yt]) => {
+      const next = {};
+      if (tt > 0) next.tt = tt;
+      if (ig > 0) next.ig = ig;
+      if (yt > 0) next.yt = yt;
+      if (Object.keys(next).length) setLiveCounts(next);
+    }).catch(() => {});
+  }, []);
+  const fmtK = (n) => '~' + (n / 1000).toFixed(1) + 'k';
+  const audCounts = {
+    tiktok:    liveCounts?.tt ? fmtK(liveCounts.tt) : '~51.6k',
+    instagram: liveCounts?.ig ? fmtK(liveCounts.ig) : '~13.2k',
+    youtube:   liveCounts?.yt ? fmtK(liveCounts.yt) : '~1.8k',
+  };
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
   const PILLARS = [
@@ -4005,7 +4029,7 @@ function BrandGuidelinesTab() {
         {/* ACT 03 · AUDIENCE */}
         <Act n="act 03 · the audience" title="who's watching">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:14, marginBottom:16 }}>
-            {[[TikTok,'tiktok','~51.6k'],[Insta,'instagram','~13.2k'],[YouTube,'youtube','~1.8k']].map(([G, name, num]) => (
+            {[[TikTok,'tiktok',audCounts.tiktok],[Insta,'instagram',audCounts.instagram],[YouTube,'youtube',audCounts.youtube]].map(([G, name, num]) => (
               <div key={name} style={{ ...surf, textAlign:'center' }}>
                 <div style={{ display:'flex', justifyContent:'center', marginBottom:8 }}><G c={B.sky} s={30} /></div>
                 <div style={{ fontFamily:DISPLAY, fontSize:26, fontWeight:800, color:B.white }}>{num}</div>
@@ -4021,7 +4045,7 @@ function BrandGuidelinesTab() {
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:14, color:B.white }}>age & gender</div>
               {bar('25-44 (core)',68,'core')}{bar('gender split',53,'53% / 47%')}
-              <div style={{ ...caption, marginTop:10 }}>snapshot june 2026 — the analytics tab is the live source.</div>
+              <div style={{ ...caption, marginTop:10 }}>follower counts update automatically from the platforms — demographics snapshot june 2026.</div>
             </div>
           </div>
         </Act>
