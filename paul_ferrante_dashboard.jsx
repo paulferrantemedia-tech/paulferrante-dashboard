@@ -3740,21 +3740,26 @@ function BrandGuidelinesTab() {
   const [libQ, setLibQ] = useState('');        // asset library search
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
   const [liveCounts, setLiveCounts] = useState(null); // live follower counts from the platform apis
+  const [liveDemo, setLiveDemo] = useState(null);     // live instagram audience demographics
 
   // follower counts: pull live from the same stats endpoints the analytics tab uses.
-  // any failure leaves liveCounts untouched and the cards fall back to the static values.
+  // the instagram response also carries audience demographics when IG insights
+  // provides them. any failure leaves state untouched and the section falls
+  // back silently to the static values.
   useEffect(() => {
     const grab = (url, pick) => fetch(url, { cache: 'no-store' }).then(r => r.json()).then(d => (d && d.ok) ? pick(d) : null).catch(() => null);
+    const grabIg = fetch(`/api/instagram-stats?t=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()).catch(() => null);
     Promise.all([
-      grab(`/api/tiktok-stats?t=${Date.now()}`,    d => d.profile?.followerCount),
-      grab(`/api/instagram-stats?t=${Date.now()}`, d => d.profile?.followersCount),
-      grab(`/api/youtube-stats?t=${Date.now()}`,   d => d.channel?.subscriberCount),
-    ]).then(([tt, ig, yt]) => {
+      grab(`/api/tiktok-stats?t=${Date.now()}`,  d => d.profile?.followerCount),
+      grabIg,
+      grab(`/api/youtube-stats?t=${Date.now()}`, d => d.channel?.subscriberCount),
+    ]).then(([tt, igD, yt]) => {
       const next = {};
       if (tt > 0) next.tt = tt;
-      if (ig > 0) next.ig = ig;
+      if (igD?.ok && igD.profile?.followersCount > 0) next.ig = igD.profile.followersCount;
       if (yt > 0) next.yt = yt;
       if (Object.keys(next).length) setLiveCounts(next);
+      if (igD?.ok && igD.audience) setLiveDemo(igD.audience);
     }).catch(() => {});
   }, []);
   const fmtK = (n) => '~' + (n / 1000).toFixed(1) + 'k';
@@ -3763,6 +3768,13 @@ function BrandGuidelinesTab() {
     instagram: liveCounts?.ig ? fmtK(liveCounts.ig) : '~13.2k',
     youtube:   liveCounts?.yt ? fmtK(liveCounts.yt) : '~1.8k',
   };
+  // demographics: live instagram audience when available, else the june snapshot
+  const marketBars = (liveDemo?.countries && liveDemo.countries.length)
+    ? liveDemo.countries
+    : [{ name:'united states', pct:39 }, { name:'australia', pct:38 }, { name:'canada', pct:13 }, { name:'united kingdom', pct:10 }];
+  const coreAgePct = liveDemo?.age?.corePct ?? 68;
+  const genderPct  = liveDemo?.gender?.malePct ?? 53;
+  const genderVal  = liveDemo?.gender ? `${liveDemo.gender.malePct}% / ${liveDemo.gender.femalePct}%` : '53% / 47%';
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
   const PILLARS = [
@@ -4040,12 +4052,12 @@ function BrandGuidelinesTab() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))', gap:16 }}>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:14, color:B.white }}>top markets</div>
-              {bar('united states',39,'39%')}{bar('australia',38,'38%')}{bar('canada',13,'13%')}{bar('united kingdom',10,'10%')}
+              {marketBars.map(c => bar(c.name, c.pct, c.pct + '%'))}
             </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:14, color:B.white }}>age & gender</div>
-              {bar('25-44 (core)',68,'core')}{bar('gender split',53,'53% / 47%')}
-              <div style={{ ...caption, marginTop:10 }}>follower counts update automatically from the platforms — demographics snapshot june 2026.</div>
+              {bar('25-44 (core)',coreAgePct,'core')}{bar('gender split',genderPct,genderVal)}
+              <div style={{ ...caption, marginTop:10 }}>{liveDemo ? 'follower counts + instagram audience · update automatically' : 'follower counts update automatically from the platforms — demographics snapshot june 2026.'}</div>
             </div>
           </div>
         </Act>

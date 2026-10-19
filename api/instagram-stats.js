@@ -172,6 +172,59 @@ async function fetchPostInsights(item, token) {
   return { ins: [], err: lastErr, metricsUsed: null };
 }
 
+// ── Account-level audience demographics (IG insights) ─────────────
+// audience_country + audience_gender_age are lifetime insights. Fully
+// defensive: any error (token scope, Meta deprecating the metrics, odd
+// payloads) returns null and callers fall back to static values.
+async function fetchAudience(userId, token) {
+  try {
+    const url  = IG_BASE + '/' + userId + '/insights?metric=audience_country,audience_gender_age&period=lifetime&access_token=' + token;
+    const res  = await fetch(url);
+    const data = await res.json();
+    if (data.error) return null;
+    const raw = (name) => (data.data || []).find(m => m.name === name)?.values?.[0]?.value || null;
+    const countriesRaw = raw('audience_country');
+    const genderAgeRaw = raw('audience_gender_age');
+    if (!countriesRaw && !genderAgeRaw) return null;
+
+    let countries = null;
+    if (countriesRaw) {
+      const total = Object.values(countriesRaw).reduce((s, v) => s + (v || 0), 0);
+      if (total > 0) {
+        let names = null;
+        try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch { names = null; }
+        countries = Object.entries(countriesRaw)
+          .map(([code, n]) => {
+            let name = code;
+            try { name = (names && names.of(code)) || code; } catch { name = code; }
+            return { name: String(name).toLowerCase(), pct: Math.round(((n || 0) / total) * 100) };
+          })
+          .filter(c => c.pct > 0)
+          .sort((a, b) => b.pct - a.pct)
+          .slice(0, 4);
+        if (!countries.length) countries = null;
+      }
+    }
+
+    let age = null, gender = null;
+    if (genderAgeRaw) {
+      let tot = 0, core = 0, f = 0, m = 0;
+      for (const [k, v] of Object.entries(genderAgeRaw)) {
+        const [g, range] = String(k).split('.');
+        const n = v || 0;
+        tot += n;
+        if (range === '25-34' || range === '35-44') core += n;
+        if (g === 'F') f += n; else if (g === 'M') m += n;
+      }
+      if (tot > 0) age = { corePct: Math.round((core / tot) * 100) };
+      if (f + m > 0) { const malePct = Math.round((m / (f + m)) * 100); gender = { malePct, femalePct: 100 - malePct }; }
+    }
+
+    if (!countries && !age && !gender) return null;
+    return { source: 'instagram', countries, age, gender };
+  } catch { return null; }
+}
+
 // ── Main IG data fetch ─────────────────────────────────────────────
 async function fetchIgData(userId, token) {
   const profileRes = await fetch(`${IG_BASE}/${userId}?fields=followers_count,follows_count,media_count,name,username&access_token=${token}`);
@@ -229,6 +282,8 @@ async function fetchIgData(userId, token) {
   const avgSaveRate = n > 0 && avgReach > 0
     ? parseFloat((posts.reduce((s, p) => s + (p.reach > 0 ? p.saveCount / p.reach * 100 : 0), 0) / n).toFixed(2)) : 0;
 
+  const audience = await fetchAudience(userId, token);
+
   return {
     profile: {
       username:       profile.username,
@@ -242,6 +297,7 @@ async function fetchIgData(userId, token) {
     // aggregates.avgViews for every platform) populates for IG too. IG has no true
     // "views" metric — reach is its closest analog.
     aggregates: { total: n, avgReach, avgViews: avgReach, avgEngRate, avgLikeRate, avgSaveRate },
+    audience,
     _debug: { insightsError: firstInsightsError },
     _cachedAt: Date.now(),
   };
