@@ -4356,6 +4356,7 @@ export default function App() {
   const [dragOver,     setDragOver]     = useState(null);
   const [commFilter,   setCommFilter]   = useState('all');
   const [mobileStage,  setMobileStage]  = useState('Pitching');
+  const [expandedStages, setExpandedStages] = useState({});
   const [dealSearch,   setDealSearch]   = useState('');
   const [dealPlatform, setDealPlatform] = useState('All');
   const [dealStage,    setDealStage]    = useState('All');
@@ -8743,41 +8744,6 @@ function ExportTab({ data, year }) {
               )}
             </div>
 
-            {/* Overdue follow-ups banner (tasks + legacy reminders, active pipeline only) */}
-            {(() => {
-              const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
-              const items = [];
-              deals.forEach(d => {
-                if (canonStage(d.s) === 'Paid') return;
-                (d.tasks || []).forEach(t => {
-                  if (!t.done && t.due && t.due < todayLA) items.push({ deal:d, kind:'task', text:t.text, due:t.due, tid:t.id });
-                });
-                if (d.nextStep && d.remindDate && d.remindDate < todayLA)
-                  items.push({ deal:d, kind:'reminder', text:d.nextStep, due:d.remindDate, tid:null });
-              });
-              items.sort((a, b) => a.due < b.due ? -1 : 1);
-              if (!items.length) return null;
-              const fmtDue = k => new Date(k + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
-              return (
-                <div style={{ background:'#FDEAEA',border:'1px solid #f8717155',borderRadius:12,padding:'12px 14px',marginBottom:12 }}>
-                  <div style={{ fontSize:11,fontWeight:800,color:'#A32D2D',marginBottom:6 }}>overdue follow-ups ({items.length})</div>
-                  {items.map((it, i) => (
-                    <div key={it.kind + '-' + (it.tid || it.deal.id) + '-' + i}
-                      style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderTop:i ? '1px solid #f8717122' : 'none',fontSize:12 }}>
-                      <span style={{ fontWeight:700 }}>{it.deal.b}</span>
-                      <span style={{ color:'#6E6E6E',flex:1 }}>{it.kind === 'reminder' && <span style={{ fontSize:9,color:'#8A6A10',fontWeight:700,marginRight:4 }}>reminder</span>}{it.text}</span>
-                      <span style={{ color:'#A32D2D',fontSize:10,fontWeight:700,whiteSpace:'nowrap' }}>due {fmtDue(it.due)}</span>
-                      {it.kind === 'task'
-                        ? <button onClick={() => { setDeals(prev => prev.map(x => x.id === it.deal.id ? { ...x, tasks:(x.tasks || []).map(t => t.id === it.tid ? { ...t, done:true } : t) } : x)); showToast('Task done!'); }}
-                            style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'#1A7A40' }}>✓ done</button>
-                        : <button onClick={() => setDealModal({ ...it.deal })}
-                            style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderRadius:6,padding:'4px 10px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:BLUE }}>open</button>}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
             {/* Bulk actions bar */}
             {selDeals.length > 0 && (
               <div style={{ display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',background:`${BLUE}11`,border:`1px solid ${BLUE}44`,borderRadius:10,padding:'10px 12px',marginBottom:12 }}>
@@ -8854,27 +8820,31 @@ function ExportTab({ data, year }) {
                 );
               })()
             ) : isMobile ? (
-              /* Mobile: stage selector + card list */
+              /* Mobile: stacked stage sections — stage total up top, first 3 deals, expand for the rest (Option A layout, approved 2026-10-25) */
               <div>
-                <div style={{ display:'flex',gap:8,overflowX:'auto',paddingBottom:10,WebkitOverflowScrolling:'touch' }}>
-                  {STAGE_COLS.map(s => (
-                    <button key={s} onClick={() => setMobileStage(s)} style={{
-                      flexShrink:0,background:mobileStage===s?`${STAGE_COLORS[s]}22`:'#FFFFFF',
-                      border:`1px solid ${mobileStage===s?STAGE_COLORS[s]:BDR}`,
-                      color:mobileStage===s?STAGE_COLORS[s]:'#888',
-                      borderRadius:20,padding:'7px 16px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:'inherit',
-                    }}>{s} ({deals.filter(d=>d.s===s).length})</button>
-                  ))}
-                </div>
-                {mobileStage === 'Paid' && (() => {
-                  const pd = deals.filter(d => canonStage(d.s) === 'Paid');
-                  const cash = pd.filter(d => dealAmount(d.v) > 0);
-                  const sum = cash.reduce((s, d) => s + dealAmount(d.v), 0);
-                  return <div style={{ fontSize:10,color:SLATE,marginBottom:4 }}>
-                    {cash.length} paid ({usd(sum)}) + {pd.length - cash.length} gifted</div>;
-                })()}
-                <div style={{ display:'flex',flexDirection:'column',gap:10,marginTop:12 }}>
-                  {mobileDeals.sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
+                {STAGE_COLS.map(status => {
+                  const stageAll = deals.filter(d => d.s === status);
+                  const stageDeals = stageAll.filter(dealMatchesQuery).sort((a, b) => dealDateVal(b) - dealDateVal(a));
+                  const filtering = !!(dealSearch.trim() || dealPlatform !== 'All');
+                  if (filtering && stageDeals.length === 0) return null;
+                  const total = stageAll.reduce((s, d) => s + dealAmount(d.v), 0);
+                  const giftedN = stageAll.filter(d => dealAmount(d.v) <= 0).length;
+                  const expanded = !!expandedStages[status];
+                  const visible = expanded ? stageDeals : stageDeals.slice(0, 3);
+                  return (
+                    <div key={status} style={{ marginBottom:18 }}>
+                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-end',borderBottom:`2px solid ${YELL}`,paddingBottom:8,marginBottom:10 }}>
+                        <div>
+                          <div style={{ fontSize:14,fontWeight:800,color:'#2A4A5E' }}>{status}</div>
+                          <div style={{ fontSize:11,color:SLATE }}>{stageAll.length} deal{stageAll.length === 1 ? '' : 's'}{giftedN ? ` · ${giftedN} gifted` : ''}</div>
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                          <div style={{ fontSize:9,fontWeight:700,letterSpacing:'1px',color:SLATE,textTransform:'uppercase' }}>total in stage</div>
+                          <div style={{ fontSize:19,fontWeight:800,fontVariantNumeric:'tabular-nums',color:TEXT }}>{usd(total)}</div>
+                        </div>
+                      </div>
+                      <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+                        {visible.map(d => (
                     <div key={d.id} style={{ background:CARD,border:`1px solid ${BDR}`,borderLeft:`4px solid ${d.col}`,borderRadius:10,padding:16 }}>
                       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
                         <div style={{ display:'flex',alignItems:'flex-start',gap:8,minWidth:0 }}>
@@ -8930,11 +8900,20 @@ function ExportTab({ data, year }) {
                         )}
                       </div>
                     </div>
-                  ))}
-                  {mobileDeals.length === 0 && (
-                    <div style={{ padding:'30px',textAlign:'center',fontSize:13,color:'#6E6E6E',borderRadius:10,border:`1px dashed ${BDR}` }}>{(dealSearch || dealPlatform !== 'All') ? 'No deals match the current filters' : 'No deals in this stage'}</div>
-                  )}
-                </div>
+                        ))}
+                        {stageDeals.length === 0 && (
+                          <div style={{ padding:'18px',textAlign:'center',fontSize:12,color:'#6E6E6E',borderRadius:10,border:`1px dashed ${BDR}` }}>No deals in this stage</div>
+                        )}
+                      </div>
+                      {stageDeals.length > 3 && (
+                        <button onClick={() => setExpandedStages(p => ({ ...p, [status]:!p[status] }))}
+                          style={{ background:'none',border:'none',color:'#2A4A5E',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:'inherit',padding:'8px 0 0' }}>
+                          {expanded ? 'show less \u2212' : `show all ${stageDeals.length} ${status.toLowerCase()} +`}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               /* Desktop: drag-and-drop columns */
@@ -8947,12 +8926,12 @@ function ExportTab({ data, year }) {
                     style={{ minHeight:120,borderRadius:12,padding:'8px 6px',background:dragOver===status?`${STAGE_COLORS[status]}15`:'transparent',border:`2px dashed ${dragOver===status?STAGE_COLORS[status]:'transparent'}`,transition:'all 0.15s' }}>
                     <div style={{ fontSize:10,color:STAGE_COLORS[status],fontWeight:700,marginBottom:10,textTransform:'uppercase',letterSpacing:'1.5px',padding:'0 6px' }}>
                       {status} ({deals.filter(d=>d.s===status).length})
-                      {status === 'Paid' && (() => {
-                        const pd = deals.filter(d => canonStage(d.s) === 'Paid');
-                        const cash = pd.filter(d => dealAmount(d.v) > 0);
-                        const sum = cash.reduce((s, d) => s + dealAmount(d.v), 0);
-                        return <div style={{ textTransform:'none',letterSpacing:'0',fontWeight:400,fontSize:9,color:SLATE,marginTop:3 }}>
-                          {cash.length} paid ({usd(sum)}) + {pd.length - cash.length} gifted</div>;
+                      {(() => {
+                        const sa = deals.filter(d => d.s === status);
+                        const tot = sa.reduce((s, d) => s + dealAmount(d.v), 0);
+                        const giftedN = sa.filter(d => dealAmount(d.v) <= 0).length;
+                        return <div style={{ textTransform:'none',letterSpacing:'0',fontWeight:700,fontSize:11,color:TEXT,marginTop:3 }}>
+                          {usd(tot)} total{giftedN ? <span style={{ fontWeight:400,fontSize:9,color:SLATE }}> · {giftedN} gifted</span> : null}</div>;
                       })()}
                     </div>
                     {dealsForColumn(status).sort((a,b)=>dealDateVal(b)-dealDateVal(a)).map(d => (
@@ -9033,6 +9012,42 @@ function ExportTab({ data, year }) {
                 ))}
               </div>
             )}
+            {/* Follow-ups — below the board, aligned grid rows (Option A layout, approved 2026-10-25) */}
+            {(() => {
+              const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+              const items = [];
+              deals.forEach(d => {
+                if (canonStage(d.s) === 'Paid') return;
+                (d.tasks || []).forEach(t => {
+                  if (!t.done && t.due && t.due < todayLA) items.push({ deal:d, kind:'task', text:t.text, due:t.due, tid:t.id });
+                });
+                if (d.nextStep && d.remindDate && d.remindDate < todayLA)
+                  items.push({ deal:d, kind:'reminder', text:d.nextStep, due:d.remindDate, tid:null });
+              });
+              items.sort((a, b) => a.due < b.due ? -1 : 1);
+              if (!items.length) return null;
+              const fmtDue = k => new Date(k + 'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+              return (
+                <div style={{ background:'#FFFFFF',border:`1px solid ${BDR}`,borderTop:'4px solid #A32D2D',borderRadius:12,padding:'12px 14px',marginTop:14 }}>
+                  <div style={{ fontSize:12,fontWeight:800,color:'#A32D2D',marginBottom:2 }}>overdue follow-ups ({items.length})</div>
+                  {items.map((it, i) => (
+                    <div key={it.kind + '-' + (it.tid || it.deal.id) + '-' + i}
+                      style={{ display:'grid',gridTemplateColumns:'88px 1fr 76px',gap:10,padding:'9px 0',borderTop:i ? `1px solid ${BDR}` : 'none',alignItems:'start' }}>
+                      <span style={{ fontWeight:700,fontSize:12 }}>{it.deal.b}</span>
+                      <span style={{ color:'#4A4A4A',fontSize:12,lineHeight:1.45 }}>{it.kind === 'reminder' && <span style={{ fontSize:9,color:'#8A6A10',fontWeight:700,marginRight:4 }}>reminder</span>}{it.text}</span>
+                      <span style={{ textAlign:'right' }}>
+                        <span style={{ display:'block',color:'#A32D2D',fontSize:10,fontWeight:700,whiteSpace:'nowrap',marginBottom:5 }}>due {fmtDue(it.due)}</span>
+                        {it.kind === 'task'
+                          ? <button onClick={() => { setDeals(prev => prev.map(x => x.id === it.deal.id ? { ...x, tasks:(x.tasks || []).map(t => t.id === it.tid ? { ...t, done:true } : t) } : x)); showToast('Task done!'); }}
+                              style={{ background:'#FFFFFF',border:'1px solid #1A7A40',borderRadius:999,padding:'4px 12px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:'#1A7A40' }}>\u2713 done</button>
+                          : <button onClick={() => setDealModal({ ...it.deal })}
+                              style={{ background:BLUE,border:'none',borderRadius:999,padding:'4px 12px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:'inherit',color:TEXT }}>open</button>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
