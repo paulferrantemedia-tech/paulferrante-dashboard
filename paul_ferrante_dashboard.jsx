@@ -9017,7 +9017,7 @@ function ExportTab({ data, year }) {
               const todayLA = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
               const items = [];
               deals.forEach(d => {
-                if (canonStage(d.s) === 'Paid') return;
+                if (['Paid','Declined'].includes(canonStage(d.s))) return;
                 (d.tasks || []).forEach(t => {
                   if (!t.done && t.due && t.due < todayLA) items.push({ deal:d, kind:'task', text:t.text, due:t.due, tid:t.id });
                 });
