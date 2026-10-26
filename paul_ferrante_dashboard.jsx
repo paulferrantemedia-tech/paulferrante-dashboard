@@ -2216,7 +2216,7 @@ function castingReasoning(score, i, bucket) {
   return `${score}: ${hits.slice(0,4).join(', ') || 'partial fit'}.`;
 }
 
-const CASTING_TODAY_REF = new Date('2026-10-19');
+const CASTING_TODAY_REF = new Date('2026-10-26');
 const castingDaysFromNow = (d) => { const x = new Date(CASTING_TODAY_REF); x.setDate(x.getDate()+d); return x.toISOString().slice(0,10); };
 function makeCasting(c) {
   const r = castingFitScore({ ...c.scoreInputs, formatType:c.formatType, network:c.network });
@@ -2225,11 +2225,12 @@ function makeCasting(c) {
 // Casting status model (2026-10-12): every tracked show ALWAYS renders a tile.
 // castingStatus 'open' = applications being taken right now (verified portal or network hub).
 // castingStatus 'not-casting' = between cycles; typicalWindow says when to check back.
-// No show is ever hidden from the board. Statuses re-verified 2026-10-19 against
-// official portals and network announcements. Changes since 2026-10-12: c15 (Amazing
-// Race Canada S13) gained a verified deadline (Dec 7, 2026) from its official FAQ,
-// and c4 (Squid Game: The Challenge) moved open -> not-casting: its S3 applications
-// closed Nov 29, 2025 and filming completed Feb-Mar 2026 (see c4 note).
+// No show is ever hidden from the board. Statuses re-verified 2026-10-26 against
+// official portals and network announcements. Changes since 2026-10-19: no status
+// or deadline changes on any show (all 6 open portals re-verified live, both known
+// deadlines re-confirmed: c15 Dec 7, 2026 and c6 Dec 11, 2026); c9 (Race Across the
+// World) detail corrected: its S7 applications closed May 31, 2026 and filming runs
+// Sep-Dec 2026 (see c9 note).
 const SEED_CASTINGS = [
   makeCasting({ id:'c1', showName:'The Traitors US', network:'Peacock / NBC', formatType:'social-strategy', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Civilian application portal is LIVE (thetraitorsus.com) — S5 "New Blood" aired Sep 2026, S6 is celebrity (already cast). Rolling applications for future civilian seasons, no announced deadline.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:21, ndaMonths:12, payTier:'high', eligibility:'solo-only' } }),
   makeCasting({ id:'c2', showName:'The Amazing Race (US)', network:'CBS', formatType:'race-travel', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'S39 premieres Sep 30, 2026; S40 not yet announced. Official portal takes rolling applications year-round — apply early. Highest-fit show on the board. Duo with Dan.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:9, exposureValue:10, careerUpside:9, networkEcosystem:10, timeCommitmentDays:28, ndaMonths:12, payTier:'top', eligibility:'duo-only' } }),
@@ -2239,7 +2240,7 @@ const SEED_CASTINGS = [
   makeCasting({ id:'c6', showName:'The Traitors Australia — Season 4', network:'Channel 10', formatType:'social-strategy', market:'AU', castingStatus:'open', typicalWindow:'', pipelineStatus:'applied', deadline:'2026-12-11', oneLineWhy:'S4 renewed ~Oct 8, 2026 for 2027 — all-civilian cast, first since 2022. Casting NOW OPEN via 10.com.au/casting (apply path confirmed by Paramount ANZ release; page itself geo-blocked from US verification). Applications close Fri Dec 11, 2026; prize up to $250k; 20+, Australian citizen/resident.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:10, exposureValue:7, careerUpside:8, networkEcosystem:7, timeCommitmentDays:21, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
   makeCasting({ id:'c7', showName:'Big Brother US', network:'CBS', formatType:'social-strategy', market:'US', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'CBS renewed for S29 late Sep 2026 — casting NOW OPEN. No announced deadline; reviews start immediately. The 100-day shoot is the gate, not fit.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:10, timeCommitmentDays:100, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
   makeCasting({ id:'c8', showName:'The Mole (Netflix)', network:'Netflix', formatType:'social-strategy', market:'US', castingStatus:'not-casting', typicalWindow:'No new season announced', pipelineStatus:'researching', oneLineWhy:'Only two Netflix seasons (2022, 2024); no new season announced and not currently casting.', flags:['solo'], dqRisk:false, scoreInputs:{ brandFit:9, audienceOverlap:8, exposureValue:9, careerUpside:7, networkEcosystem:9, timeCommitmentDays:21, ndaMonths:18, payTier:'high', eligibility:'solo-only' } }),
-  makeCasting({ id:'c9', showName:'Race Across the World — Series 7', network:'BBC', formatType:'race-travel', market:'INTL', castingStatus:'not-casting', typicalWindow:'Next series typically casts spring', pipelineStatus:'researching', oneLineWhy:'S7 applications closed Jul 2026; filming Sep–Nov 2026. Watch for the next series announcement.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
+  makeCasting({ id:'c9', showName:'Race Across the World — Series 7', network:'BBC', formatType:'race-travel', market:'INTL', castingStatus:'not-casting', typicalWindow:'Next series typically casts spring', pipelineStatus:'researching', oneLineWhy:'S7 applications closed May 31, 2026 (extended from Mar 29); filming Sep–Dec 2026. Watch for the next series announcement.', flags:['duo-eligible','apply-with-dan'], dqRisk:false, scoreInputs:{ brandFit:10, audienceOverlap:8, exposureValue:7, careerUpside:6, networkEcosystem:5, timeCommitmentDays:49, ndaMonths:12, payTier:'mid', eligibility:'duo-only' } }),
   makeCasting({ id:'c11', showName:'Pressure Cooker', network:'Netflix', formatType:'hybrid-physical-social', market:'US', castingStatus:'not-casting', typicalWindow:'No S2 ordered', pipelineStatus:'researching', oneLineWhy:'One season (2023); a second season was never ordered. Not currently casting.', flags:['solo','review-format'], dqRisk:false, scoreInputs:{ brandFit:6, audienceOverlap:6, exposureValue:7, careerUpside:5, networkEcosystem:5, timeCommitmentDays:14, ndaMonths:12, payTier:'mid', eligibility:'solo-only' } }),
   makeCasting({ id:'c12', showName:'The Quiz With Balls', network:'Fox', formatType:'one-off-game', market:'US', castingStatus:'not-casting', typicalWindow:'No S4 announced', pipelineStatus:'researching', oneLineWhy:'S3 aired Apr 2026; no S4 announced. Low-time one-off — confirm DQ implications before taping.', flags:['solo','review-dq-risk'], dqRisk:true, dqRiskNotes:'One-off appearances can disqualify you from full-season reality casts for 12-24 months at some networks. Confirm with show casting.', scoreInputs:{ brandFit:5, audienceOverlap:5, exposureValue:6, careerUpside:3, networkEcosystem:4, timeCommitmentDays:3, ndaMonths:6, payTier:'low', eligibility:'solo-only' } }),
   makeCasting({ id:'c14', showName:'Big Brother Canada — Season 13', network:'CTV / Crave (Bell Media)', formatType:'social-strategy', market:'CA', castingStatus:'open', typicalWindow:'', pipelineStatus:'researching', oneLineWhy:'Casting NOW OPEN nationwide (announced Sep 22, 2026) — BigBrotherCanadaCasting.ca. CTV/Crave revival, production Spring 2027 Montréal. HARD GATE: Canadian citizen or permanent resident, 19+.', flags:['solo','long-shoot'], dqRisk:false, scoreInputs:{ brandFit:8, audienceOverlap:7, exposureValue:9, careerUpside:8, networkEcosystem:6, timeCommitmentDays:70, ndaMonths:24, payTier:'high', eligibility:'solo-only' } }),
@@ -2254,7 +2255,7 @@ const SEED_CASTINGS = [
 //   2. the network's official casting hub (verified, stable)
 // Shows that are not currently casting get NO link at all — never a hub,
 // never a search. Real casting pages or nothing.
-const CASTING_LINKS_CHECKED = '2026-10-19';
+const CASTING_LINKS_CHECKED = '2026-10-26';
 // Human-readable "last updated" label for the casting board header.
 const CASTING_CHECKED_LABEL = new Date(CASTING_LINKS_CHECKED + 'T00:00:00')
   .toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
@@ -2267,8 +2268,8 @@ const NETWORK_CASTING_HUBS = {
 };
 // Verified per-show application portals. Each was loaded and confirmed to be a
 // live application form or an explicit "casting is now open" page on 2026-10-05
-// (re-confirmed open on 2026-10-19; c15 added 2026-10-12, its Dec 7, 2026 deadline
-// verified on its official FAQ on 2026-10-19).
+// (re-confirmed open on 2026-10-26; c15 added 2026-10-12, its Dec 7, 2026 deadline
+// verified on its official FAQ on 2026-10-19 and re-confirmed 2026-10-26).
 // c4 (Squid Game) removed 2026-10-19: S3 applications closed Nov 29, 2025 (its
 // homepage still claims open, but its own UK application page says closed,
 // verified first-hand 2026-10-19) — closed shows get no Apply link.
