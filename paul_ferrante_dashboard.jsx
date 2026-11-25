@@ -4219,6 +4219,26 @@ function BrandGuidelinesTab() {
                 <DlBtn onClick={() => dlFile('bars/accent-bar-white.png','accent-bar-white.png')}>download white bar</DlBtn>
               </div>
             </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>open tag lockup</div>
+              <div style={{ background:'#0D2B3D', borderRadius:12, padding:16, marginBottom:10 }}>
+                <img src="/assets/brand/lockups/lockup-sand.png" alt="open tag lockup, no shadow" style={{ width:'100%', display:'block' }} />
+                <div style={{ fontSize:11, color:DIM, marginTop:8 }}>no shadow · dark or busy footage</div>
+              </div>
+              <div style={{ background:'#F4F1E2', borderRadius:12, padding:16 }}>
+                <img src="/assets/brand/lockups/lockup-sand-shadow.png" alt="open tag lockup, with shadow" style={{ width:'100%', display:'block' }} />
+                <div style={{ fontSize:11, color:'#6E6E6E', marginTop:8 }}>with shadow · white or light backgrounds</div>
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>the opening title lockup for every video. bar above the text, grows left to right on scale x keyframes, ease out, landing on the payoff word. font: itc avant garde gothic pro bold, capcut size 8, character -1, line 0, lowercase, left aligned. payoff line and bar take the category colour: sand for life cheat code, sky for travel, white for everything else. shadow build (light backgrounds only): black, opacity 40%, blurriness 35%, distance 4, angle -45°.</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <DlBtn onClick={() => dlFile('lockups/lockup-sand.png','lockup-sand.png')}>download sand lockup</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/lockup-sand-shadow.png','lockup-sand-shadow.png')}>download sand lockup · shadow</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/lockup-sky.png','lockup-sky.png')}>download sky lockup</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/lockup-sky-shadow.png','lockup-sky-shadow.png')}>download sky lockup · shadow</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/lockup-white.png','lockup-white.png')}>download white lockup</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/lockup-white-shadow.png','lockup-white-shadow.png')}>download white lockup · shadow</DlBtn>
+              </div>
+            </div>
           </div>
         </Act>
 
