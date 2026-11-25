@@ -4239,6 +4239,14 @@ function BrandGuidelinesTab() {
                 <DlBtn onClick={() => dlFile('lockups/lockup-white-shadow.png','lockup-white-shadow.png')}>download white lockup · shadow</DlBtn>
               </div>
             </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>auto captions</div>
+              <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
+                <img src="/assets/brand/captions/brown-caption-reference.png" alt="brown caption template on a real frame" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>the brown template in the wild · still from the muse meal app video, tuesday, november 24, 2026</div>
+              <p style={{ ...caption, margin:0 }}>capcut auto captions, template: brown (favourited). apply to all main captions on. words appear one at a time, plain white letters, no background box, no preset style. font size 5, character spacing 1, line spacing 0, centred, sitting low on the frame (about 78% down). if a caption ever lands on a bright background, fix the shot or the placement first; the style itself never changes.</p>
+            </div>
           </div>
         </Act>
 
