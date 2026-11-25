@@ -4202,6 +4202,23 @@ function BrandGuidelinesTab() {
               <p style={{ ...caption, margin:'10px 0 12px' }}>transparent notes frame for listicle videos. overlay it and type your list inside.</p>
               <DlBtn onClick={() => dlFile('extras/listicle-template-2.png','rgg-listicle-template.png')}>download png</DlBtn>
             </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>thumbnail accent bar</div>
+              <div style={{ background:'#0D2B3D', borderRadius:12, padding:16, display:'flex', flexDirection:'column', gap:14 }}>
+                {[['sand','life cheat code'],['sky','travel'],['white','everything else']].map(([c, use]) => (
+                  <div key={c}>
+                    <img src={`/assets/brand/bars/accent-bar-${c}.png`} alt={`${c} accent bar`} style={{ width:'100%', height:19, display:'block', borderRadius:2 }} />
+                    <div style={{ fontSize:11, color:DIM, marginTop:5 }}>{c} · {use}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>the bar sits above the title text on every cover and open tag. colour = the kind of video: sand for life cheat code explainers, sky for travel, white for everything else. title text is itc avant garde gothic pro bold, white with the key word in sky. bars are 286 × 19 at cover scale (these pngs are 4x, 1144 × 76).</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <DlBtn onClick={() => dlFile('bars/accent-bar-sky.png','accent-bar-sky.png')}>download sky bar</DlBtn>
+                <DlBtn onClick={() => dlFile('bars/accent-bar-sand.png','accent-bar-sand.png')}>download sand bar</DlBtn>
+                <DlBtn onClick={() => dlFile('bars/accent-bar-white.png','accent-bar-white.png')}>download white bar</DlBtn>
+              </div>
+            </div>
           </div>
         </Act>
 
