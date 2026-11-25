@@ -4221,6 +4221,10 @@ function BrandGuidelinesTab() {
             </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>open tag lockup</div>
+              <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
+                <img src="/assets/brand/lockups/hook-placement-preview.png" alt="open tag lockup placement on a real frame" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>placement reference · the muse meal app video, tuesday, november 24, 2026. bar anchored just below the collarbone, block ends around 70% down the frame, clear of the caption zone.</div>
               <div style={{ background:'#0D2B3D', borderRadius:12, padding:16, marginBottom:10 }}>
                 <img src="/assets/brand/lockups/lockup-sand.png" alt="open tag lockup, no shadow" style={{ width:'100%', display:'block' }} />
                 <div style={{ fontSize:11, color:DIM, marginTop:8 }}>no shadow · dark or busy footage</div>
@@ -4229,7 +4233,7 @@ function BrandGuidelinesTab() {
                 <img src="/assets/brand/lockups/lockup-sand-shadow.png" alt="open tag lockup, with shadow" style={{ width:'100%', display:'block' }} />
                 <div style={{ fontSize:11, color:'#6E6E6E', marginTop:8 }}>with shadow · white or light backgrounds</div>
               </div>
-              <p style={{ ...caption, margin:'10px 0 12px' }}>the opening title lockup for every video. bar above the text, grows left to right on scale x keyframes, ease out, landing on the payoff word. font: itc avant garde gothic pro bold, capcut size 8, character -1, line 0, lowercase, left aligned. payoff line and bar take the category colour: sand for life cheat code, sky for travel, white for everything else. shadow build (light backgrounds only): black, opacity 40%, blurriness 35%, distance 4, angle -45°.</p>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>the opening title lockup for every video. bar above the text, grows left to right on scale x keyframes, ease out, landing on the payoff word. font: itc avant garde gothic pro bold, capcut size 11, character -1, line 0, lowercase, left aligned. size the title so the longest line spans about two-thirds of the frame width. placement: anchor the bar just below the collarbone on talking-head frames, so the block ends around 70% down the frame, clear of the auto captions at 78%; never above the collarbone. if he is holding something at chest height, drop the block back down for that shot. payoff line and bar take the category colour: sand for life cheat code, sky for travel, white for everything else. shadow build (light backgrounds only): black, opacity 40%, blurriness 35%, distance 4, angle -45°.</p>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 <DlBtn onClick={() => dlFile('lockups/lockup-sand.png','lockup-sand.png')}>download sand lockup</DlBtn>
                 <DlBtn onClick={() => dlFile('lockups/lockup-sand-shadow.png','lockup-sand-shadow.png')}>download sand lockup · shadow</DlBtn>
