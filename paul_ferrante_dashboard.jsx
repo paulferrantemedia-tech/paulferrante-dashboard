@@ -4251,6 +4251,31 @@ function BrandGuidelinesTab() {
               <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>the brown template in the wild · still from the muse meal app video, tuesday, november 24, 2026</div>
               <p style={{ ...caption, margin:0 }}>capcut auto captions, template: brown (favourited). apply to all main captions on. words appear one at a time, plain white letters, no background box, no preset style. font size 5, character spacing 1, line spacing 0, centred, sitting low on the frame (about 78% down). if a caption ever lands on a bright background, fix the shot or the placement first; the style itself never changes.</p>
             </div>
+            <div style={{ ...surf, gridColumn:'1 / -1' }}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>edit style template · travel & life cheat code</div>
+              <p style={{ ...caption, margin:'0 0 14px' }}>the house edit for travel and life cheat code videos, modelled on jake's jacobite steam train tiktok (the "hogwarts express" video, 50 seconds · tiktok.com/t/ZPND6mMtv). the rule underneath everything: paul in frame, doing things, is the constant, and the collage rotates around him. aesthetic shots are ingredients, not the video; a room tour with nobody in it is wallpaper.</p>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:14 }}>
+                {[
+                  ['hook-arrow.jpg','the hook: big bold phrase, arrow at the thing, the answer withheld'],
+                  ['real-interaction.jpg','real interaction: ask a person a question, keep their answer'],
+                  ['tracked-label.jpg','tracked label: the name rides with the person as they move'],
+                  ['still-title.jpg','photo stills + a title treatment carry the montage sections'],
+                  ['film-clip.jpg','cut in the source: the film clip proves the claim on screen'],
+                  ['you-in-frame.jpg','you in frame: present it, react to it, thumbs up'],
+                  ['proof-insert.jpg','proof insert: every number said out loud gets its object'],
+                  ['hero-moment.jpg','the hero moment is saved for the back third, never the open'],
+                ].map(([f, t]) => (
+                  <div key={f}>
+                    <div style={{ borderRadius:12, overflow:'hidden' }}>
+                      <img src={`/assets/brand/edit-style/${f}`} alt={t} style={{ width:'100%', display:'block' }} />
+                    </div>
+                    <div style={{ fontSize:11, color:DIM, marginTop:6 }}>{t}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ ...caption, margin:'0 0 10px' }}>the shape: 1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise. 3 · facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. text runs in three tiers: small white lowercase captions for speech · big bold colour for the hook and payoff phrases, with arrows at the subject · title treatments and huge numerals for names and stats. labels on people are tracked, so the words travel with them.</p>
+              <p style={{ ...caption, margin:0 }}>plan the shots before the trip, not after it. the pre-trip checklist: the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for late · for anyone getting a tracked label, keep them fully in frame with space around them and hold the shot steady a beat · volume: this style burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.</p>
+            </div>
           </div>
         </Act>
 
