@@ -4202,8 +4202,13 @@ function BrandGuidelinesTab() {
           <p style={{ fontSize:14.5, lineHeight:1.7, wordBreak:'break-all', margin:'12px 0 20px', color:DIM }}>abcdefghijklmnopqrstuvwxyz<br />0123456789 · ! ? &amp; ’</p>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:12 }}>
             <div style={{ border:`1.5px solid ${LINE}`, borderRadius:14, padding:19 }}>
+              <div style={{ fontFamily:"'ITC Avant Garde Gothic Pro', 'Poppins', sans-serif", fontSize:20, fontWeight:700, color:B.white, marginBottom:5 }}>itc avant garde gothic pro bold</div>
+              <div style={{ fontFamily:"'ITC Avant Garde Gothic Pro', 'Poppins', sans-serif", fontSize:14.5, fontWeight:700, letterSpacing:0.4, color:DIM, marginBottom:7 }}>abcdefghijklmnopqrstuvwxyz 0123456789</div>
+              <p style={{ fontSize:13, lineHeight:1.55, color:DIM, margin:0 }}><b style={{ color:B.sky, fontWeight:600 }}>video and social headlines.</b> opening lockups, covers, step labels and video titles. always big, tight, lowercase.</p>
+            </div>
+            <div style={{ border:`1.5px solid ${LINE}`, borderRadius:14, padding:19 }}>
               <div style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:800, color:B.white, marginBottom:5 }}>poppins extrabold</div>
-              <p style={{ fontSize:13, lineHeight:1.55, color:DIM, margin:0 }}><b style={{ color:B.sky, fontWeight:600 }}>headlines.</b> big, tight, lowercase — marquee energy, never shouting.</p>
+              <p style={{ fontSize:13, lineHeight:1.55, color:DIM, margin:0 }}><b style={{ color:B.sky, fontWeight:600 }}>dashboard and documents.</b> the type this dashboard and his documents are set in. big, tight, lowercase.</p>
             </div>
             <div style={{ border:`1.5px solid ${LINE}`, borderRadius:14, padding:19 }}>
               <div style={{ fontFamily:DISPLAY, fontSize:20, fontWeight:400, color:B.white, marginBottom:5 }}>poppins regular</div>
