@@ -3786,6 +3786,7 @@ function BrandGuidelinesTab() {
   const genderVal  = liveDemo?.gender ? `${liveDemo.gender.malePct}% / ${liveDemo.gender.femalePct}%` : '53% / 47%';
 
   const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
+  const PF_LOGOS = [['on sand','pf-creator-on-sand'],['on bright sky','pf-creator-on-bright-sky'],['on white','pf-creator-on-white'],['on ink','pf-creator-on-ink']];
   const PILLARS = [
     ['travel','practical travel content focused on destinations, hotels, flights, and tips that help people make confident decisions and take action.'],
     ['lifestyle','day-to-day routines, habits, and real moments that feel natural, relatable, and human. the kind of content people actually see themselves in.'],
@@ -4075,6 +4076,18 @@ function BrandGuidelinesTab() {
         <Act n="act 04 · the mark" title="logo & usage">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:16, marginBottom:16 }}>
             {LOGOS.map(([name, file]) => (
+              <div key={file} style={surf}>
+                <div style={{ borderRadius:12, overflow:'hidden', marginBottom:12, border:`1px solid ${LINE}` }}>
+                  <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} />
+                </div>
+                <div style={{ fontSize:13, fontWeight:600, marginBottom:10, textAlign:'center', color:B.white }}>{name}</div>
+                <DlBtn onClick={() => dlFile(`logo/${file}.png`, `${file}.png`)}>download</DlBtn>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontWeight:700, marginBottom:12, color:B.white }}>pf creator</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:16, marginBottom:16 }}>
+            {PF_LOGOS.map(([name, file]) => (
               <div key={file} style={surf}>
                 <div style={{ borderRadius:12, overflow:'hidden', marginBottom:12, border:`1px solid ${LINE}` }}>
                   <img src={`/assets/brand/logo/${file}.png`} alt={name} style={{ width:'100%', display:'block' }} />
