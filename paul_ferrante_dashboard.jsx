@@ -3897,15 +3897,46 @@ function BrandGuidelinesTab() {
     : LIB;
   const libCount = shownLib.reduce((n, [, items]) => n + items.length, 0);
 
+  // collapsible guideline categories + legend nav
+  const [openActs, setOpenActs] = useState({});
+  const ACTS = [
+    ['bg-act-01','content pillars'],
+    ['bg-act-02','brand story & positioning'],
+    ['bg-act-03',"who's watching"],
+    ['bg-act-04','logo & usage'],
+    ['bg-act-05','colour, spotlit'],
+    ['bg-act-06','type, full volume'],
+    ['bg-act-07','house rules'],
+    ['bg-act-08','the props table'],
+    ['bg-act-09','templates & assets'],
+    ['bg-act-10','channels & contact'],
+  ];
+  const jumpToAct = (id) => {
+    setOpenActs(p => ({ ...p, [id]: true }));
+    setTimeout(() => { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior:'smooth', block:'start' }); }, 80);
+  };
+
   // shared bits (dark stage)
-  const Act = ({ n, title, sub, children }) => (
-    <section style={{ marginBottom:64 }}>
-      <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky, marginBottom:8 }}>{n}</div>
-      <h2 style={{ fontFamily:DISPLAY, fontSize:'clamp(26px,4.5vw,36px)', fontWeight:800, color:B.white, margin:'0 0 10px', letterSpacing:-0.5, lineHeight:1 }}>{title}</h2>
-      {sub && <p style={{ fontSize:13.5, color:DIM, lineHeight:1.55, margin:'0 0 22px', maxWidth:560 }}>{sub}</p>}
-      {children}
-    </section>
-  );
+  const Act = ({ n, title, sub, children }) => {
+    const actId = 'bg-act-' + n.slice(4, 6);
+    const open = openActs[actId] ?? (n.slice(4, 6) === '01');
+    return (
+      <section id={actId} style={{ marginBottom: open ? 64 : 30, scrollMarginTop:20 }}>
+        <div onClick={() => setOpenActs(p => ({ ...p, [actId]: !open }))} title={open ? 'collapse section' : 'expand section'}
+          style={{ cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:16 }}>
+          <div>
+            <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky, marginBottom:8 }}>{n}</div>
+            <h2 style={{ fontFamily:DISPLAY, fontSize:'clamp(26px,4.5vw,36px)', fontWeight:800, color:B.white, margin:'0 0 10px', letterSpacing:-0.5, lineHeight:1 }}>{title}</h2>
+          </div>
+          <span style={{ color:B.sky, fontSize:22, fontWeight:800, lineHeight:1, marginTop:16, flexShrink:0 }}>{open ? '▾' : '▸'}</span>
+        </div>
+        {open && (<>
+          {sub && <p style={{ fontSize:13.5, color:DIM, lineHeight:1.55, margin:'0 0 22px', maxWidth:560 }}>{sub}</p>}
+          {children}
+        </>)}
+      </section>
+    );
+  };
   const surf = { background:CARD, borderRadius:16, padding:24, border:`1.5px solid ${LINE}` };
   const caption = { fontSize:13, color:DIM, lineHeight:1.6 };
   const X = ({ s=22 }) => (<span style={{ color:'#E0655F', fontWeight:800, fontSize:s, lineHeight:1 }}>✗</span>);
@@ -4016,6 +4047,19 @@ function BrandGuidelinesTab() {
             </div>
           </div>
         </header>
+
+        {/* LEGEND · jump to a section (expands it if collapsed) */}
+        <nav style={{ marginBottom:44 }}>
+          <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.6, color:B.sky, marginBottom:12 }}>jump to</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {ACTS.map(([id, label]) => (
+              <button key={id} onClick={() => jumpToAct(id)}
+                style={{ background:'transparent', border:`1.5px solid ${LINE}`, borderRadius:999, padding:'8px 15px', fontSize:12.5, fontWeight:600, fontFamily:'inherit', cursor:'pointer', color:B.white }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </nav>
 
         {/* ACT 01 · PILLARS */}
         <Act n="act 01 · what i make" title="content pillars">
