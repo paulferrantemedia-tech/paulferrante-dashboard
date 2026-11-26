@@ -3756,7 +3756,7 @@ const FORMATS = [
       ['nuances: the smooth 0.5 moves', 'the floaty moves are shot, not edited; the cuts are hard cuts. frame-checked: his carriage pan has natural motion blur mid-pan, his push-in on the taxi driver shifts perspective (he is walking toward the man), and the closing shot opens from a tight face to the whole carriage in one take. do it like this: 1 · shoot the move as one take: start on the person or the pov, then pan, walk in, or pull back to the view. never shoot two static shots and glue them with a transition. 2 · use 0.5 (ultrawide) for these moves, subject near the centre; the wide field of view makes hand shake look tiny and the phone’s stabilization reads as glide. 3 · move at half the speed you think you need: pans from the waist with feet planted, push-ins heel-toe. 4 · tight to wide inside one shot: zoom slowly with the on-screen dial while recording (the phone blends the 0.5 to 1x lens switch) or physically step back. 5 · cut while the camera is already moving, and start the next shot moving the same direction. 6 · capcut stabilize is a rescue for a shaky clip only; it is not where this look comes from.'],
       ['shoot list', 'plan the shots before the trip, not after it. the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for the back third · volume: this format burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.'],
     ], stills:true },
-  { id:'24-hours-in', name:'24 hours in', img:'24-hours-in.jpg', tag:'one place, one day · the itinerary is the video',
+  { id:'24-hours-in', name:'24 hours in', img:'24-hours-in-title.jpg', tag:'one place, one day · the itinerary is the video',
     ref:'reference: @camberplaces, “how to spend 24 hours in big bear” (74 seconds).',
     sections:[
       ['the shape', 'title build first: over the hero shot of the place, small caption words build, then the place name lands huge with a guide card beside it. then the stops in day order: where to stay, lunch, shops, dinner, drinks, next-morning coffee and breakfast, one walk or activity. eight stops in 74 seconds in the reference. it closes on: “and that was it, our 24 hours in ___.” no hard call to action.'],
@@ -3766,11 +3766,12 @@ const FORMATS = [
       ['how it differs from wait for it', 'wait for it withholds one payoff to the end; this format distributes it, every stop is a small reveal, and the curiosity is what comes next on the list. the reference creators stay behind the camera; paul’s version keeps paul in frame, reacting and eating, per his own brand.'],
       ['shoot list', 'the stay: sign, exterior, room, view, two or three detail shots (bathroom, chair, deck). every stop: one establishing shot clean enough to carry the name title and card, then three to five detail shots, and one tight food shot per food stop. one verdict per stop. a hero wide of the place for the title build and a closing scenic shot. about 40-50 usable clips for a 70-80 second cut.'],
     ] },
-  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go.jpg', tag:'3 things i wish i knew before going to ___',
+  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go-hook.jpg', tag:'3 things i wish i knew before going to ___',
     ref:'paul’s travel series. episodes: japan (37s, 546,974 plays), italy (62s), sorrento (49s), australia (28s).',
     sections:[
       ['the shape', 'the hook names the place and the count, and the hook text types on at the payoff word in sky blue. then the tips in order; every tip gets its proof visual, the actual thing happening, not a generic pretty shot. faces before landmarks. close on the strongest tip or a one-line verdict.'],
       ['the rules', 'target about 28-40 seconds (japan 37s, australia 28s; italy at 62s is the long outlier). voiceover gaps near zero. captions one word at a time, brand font, plain white, no outline, centred about 78% down (the brown system). no shot repeats. no punch-in zooms or hard crops. colour matched light and bright before assembly, not after.'],
+      ['the edit, step by step', '1 · colour match every clip light and bright first, before any assembly. 2 · lay the voiceover down as one unlinked track and cut the gaps between lines to near zero. 3 · cut each tip to its proof visual; a tip is only as long as its proof takes. 4 · build the hook text so it finishes typing on exactly at the payoff word, in sky blue. 5 · auto captions on (brown), one word at a time, about 78% down; check no caption lands on a bright shot. 6 · scan the timeline for repeated shots and punch-in zooms; both are banned in this series, replace or re-crop. 7 · final pass at full size: a face before the landmark in every tip, and the hook fully readable inside the first two seconds.'],
       ['how it is judged', 'at seven days, on shares + saves per 1,000 views first (japan: 49.6 per 1k). not on day one, and never on views alone.'],
     ] },
   { id:'storytime', name:'storytime', img:'storytime.jpg', tag:'one story, told to camera',
@@ -3778,6 +3779,7 @@ const FORMATS = [
     sections:[
       ['the structure', 'break every story into four beats: claim, specifics, turn, button. connect the beats with “but” or “therefore”, never flat “and then” sequencing. the turn is where the story changes direction; the button is the line it lands on. when feej drafts one, the hinge words are bolded so the turns are visible on the page.'],
       ['delivery', 'low-fi and direct to camera: seated, car, gym walk, getting ready, or dog walk. the hook still stacks in the first two seconds (on-screen text, spoken hook, payoff up front) even in the casual formats.'],
+      ['the edit', 'one take, minimal surgery. cut only on the beats: trim anything that is not claim, specifics, turn or button. captions on (brown), and the hook text goes on inside the first two seconds even though the delivery is casual. never cover a cut with b-roll; the face is the format. if the story runs long, cut a whole beat, not seconds off every line.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from a real storytime when one is cut.'],
     ] },
   { id:'low-fi-five', name:'low-fi five', img:'low-fi-five.jpg', tag:'the low-effort lane · five formats, phone only',
@@ -3785,6 +3787,7 @@ const FORMATS = [
     sections:[
       ['the five', 'car debriefs · gym walks · storytimes · getting ready · dog walks.'],
       ['the job', 'one to two a week, filling the funny and wildcard slots in the four-a-week grid. no lighting rig, no shot list, no second shooter: the constraint is the format. the hook still stacks in the first two seconds (on-screen text, spoken hook, payoff up front).'],
+      ['the edit', 'almost none, on purpose. trim the head and tail, captions on (brown), hook text inside the first two seconds, post. if a low-fi video needs more than ten minutes in capcut, it is not low-fi anymore.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from a real low-fi video when one is cut.'],
     ] },
   { id:'open-loop', name:'open loop series', img:'open-loop.jpg', tag:'a journey in episodes · the payoff is the finale',
@@ -3792,6 +3795,7 @@ const FORMATS = [
     sections:[
       ['the rules', 'name the end up front (“4 haircuts left”). every episode carries a micro-payoff so it stands alone, while the big payoff stays deferred to the end of the series. honest day-one framing: never an expert claim, never a results claim before it is earned. episodes land on natural checkpoints, not a weekly quota. only series about things paul is already doing.'],
       ['how it differs', 'a life cheat code video completes in one video; an open loop builds follow and return loyalty across episodes.'],
+      ['the edit, per episode', 'open on the series name and the count (“4 haircuts left, cut two”) so a first-time viewer gets the premise inside two seconds. one micro-payoff lands before the halfway point. end on the checkpoint, not a fake cliffhanger: show the state of the thing exactly as it is. captions on (brown). keep a running folder per series so episode footage never mixes.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from the current series when one is cut.'],
     ] },
 ];
@@ -3806,6 +3810,13 @@ function BrandGuidelinesTab() {
   const [copied, setCopied] = useState(null);
   const [libQ, setLibQ] = useState('');        // asset library search
   const [formatOpen, setFormatOpen] = useState(null); // formats library: open breakdown panel
+  const formatPanelRef = useRef(null);
+  // On a phone the formats grid is tall, so an opened panel sits below the
+  // fold and a tap looks like it did nothing (Paul, 2026-11-26). Scroll the
+  // panel into view every time one opens.
+  useEffect(() => {
+    if (formatOpen && formatPanelRef.current) formatPanelRef.current.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, [formatOpen]);
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
   const [liveCounts, setLiveCounts] = useState(null); // live follower counts from the platform apis
   const [liveDemo, setLiveDemo] = useState(null);     // live instagram audience demographics
@@ -4335,7 +4346,7 @@ function BrandGuidelinesTab() {
                 ))}
               </div>
               {curFormat && (
-                <div style={{ marginTop:18, borderTop:`1px solid ${LINE}`, paddingTop:16 }}>
+                <div ref={formatPanelRef} style={{ marginTop:18, borderTop:`1px solid ${LINE}`, paddingTop:16, scrollMarginTop:14 }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, marginBottom:6 }}>
                     <div style={{ fontWeight:700, fontSize:17, color:B.white }}>{curFormat.name}</div>
                     <button onClick={() => setFormatOpen(null)} style={{ border:`1.5px solid ${LINE}`, borderRadius:999, padding:'5px 13px', fontSize:11, fontWeight:600, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:DIM }}>close ✕</button>
