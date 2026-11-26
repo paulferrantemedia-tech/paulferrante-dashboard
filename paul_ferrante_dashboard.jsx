@@ -3774,13 +3774,13 @@ const FORMATS = [
       ['the edit, step by step', '1 · colour match every clip light and bright first, before any assembly. 2 · lay the voiceover down as one unlinked track and cut the gaps between lines to near zero. 3 · cut each tip to its proof visual; a tip is only as long as its proof takes. 4 · build the hook text so it finishes typing on exactly at the payoff word, in sky blue. 5 · auto captions on (brown), one word at a time, about 78% down; check no caption lands on a bright shot. 6 · scan the timeline for repeated shots and punch-in zooms; both are banned in this series, replace or re-crop. 7 · final pass at full size: a face before the landmark in every tip, and the hook fully readable inside the first two seconds.'],
       ['how it is judged', 'at seven days, on shares + saves per 1,000 views first (japan: 49.6 per 1k). not on day one, and never on views alone.'],
     ] },
-  { id:'storytime', name:'storytime', img:'storytime.jpg', tag:'one story, told to camera',
+  { id:'storytime', name:'storytime', img:'storytime-fiance.jpg', tag:'one story, told to camera',
     ref:'paul’s narrative format. the proposal cliff story is banked for this format.',
     sections:[
       ['the structure', 'break every story into four beats: claim, specifics, turn, button. connect the beats with “but” or “therefore”, never flat “and then” sequencing. the turn is where the story changes direction; the button is the line it lands on. when feej drafts one, the hinge words are bolded so the turns are visible on the page.'],
       ['delivery', 'low-fi and direct to camera: seated, car, gym walk, getting ready, or dog walk. the hook still stacks in the first two seconds (on-screen text, spoken hook, payoff up front) even in the casual formats.'],
       ['the edit', 'one take, minimal surgery. cut only on the beats: trim anything that is not claim, specifics, turn or button. captions on (brown), and the hook text goes on inside the first two seconds even though the delivery is casual. never cover a cut with b-roll; the face is the format. if the story runs long, cut a whole beat, not seconds off every line.'],
-      ['example frame', 'a placeholder tile for now: swap in a frame from a real storytime when one is cut.'],
+      ['example frame', 'the tile is the "how i met my fiancé" cover (376k views): paul close to camera, mid-story, the whole hook carried as on-screen text. one face, one story, nothing else in frame.'],
     ] },
   { id:'low-fi-five', name:'low-fi five', img:'low-fi-five.jpg', tag:'the low-effort lane · five formats, phone only',
     ref:'paul’s five locked low-fi formats.',
@@ -3790,17 +3790,74 @@ const FORMATS = [
       ['the edit', 'almost none, on purpose. trim the head and tail, captions on (brown), hook text inside the first two seconds, post. if a low-fi video needs more than ten minutes in capcut, it is not low-fi anymore.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from a real low-fi video when one is cut.'],
     ] },
-  { id:'open-loop', name:'open loop series', img:'open-loop.jpg', tag:'a journey in episodes · the payoff is the finale',
+  { id:'open-loop', name:'open loop series', img:'open-loop-bleph.jpg', tag:'a journey in episodes · the payoff is the finale',
     ref:'paul’s serialized journeys: 4 haircuts left (hair repair), the skin laundry journey, the posture fix.',
     sections:[
       ['the rules', 'name the end up front (“4 haircuts left”). every episode carries a micro-payoff so it stands alone, while the big payoff stays deferred to the end of the series. honest day-one framing: never an expert claim, never a results claim before it is earned. episodes land on natural checkpoints, not a weekly quota. only series about things paul is already doing.'],
       ['how it differs', 'a life cheat code video completes in one video; an open loop builds follow and return loyalty across episodes.'],
       ['the edit, per episode', 'open on the series name and the count (“4 haircuts left, cut two”) so a first-time viewer gets the premise inside two seconds. one micro-payoff lands before the halfway point. end on the checkpoint, not a fake cliffhanger: show the state of the thing exactly as it is. captions on (brown). keep a running folder per series so episode footage never mixes.'],
-      ['example frame', 'a placeholder tile for now: swap in a frame from the current series when one is cut.'],
+      ['example frame', 'the tile is the upper bleph progress cover: an extreme close-up of the eye, the state of the thing filling the whole frame, the series name and the count as the title (month three). the frame itself is the update.'],
     ] },
 ];
 
-function BrandGuidelinesTab() {
+// ── Formats tab ─────────────────────────────────────────────────────────────
+// Paul picked this design from mockups (2026-11-26): formats live in their
+// own tab, not as a panel under the guidelines grid. A tile row sits at the
+// top; tapping one fills the page underneath with the full breakdown. The
+// brand guidelines tiles jump straight here via App's openFormat.
+function FormatsTab({ sel, onSelect, onBack }) {
+  const B = { sand:'#E1D9AE', ink:'#0A0A0A', sky:'#88EAF6', ocean:'#2A4A5E', slate:'#6E6E6E', white:'#FFFFFF' };
+  const DISPLAY = "'Poppins', system-ui, -apple-system, sans-serif";
+  const DIM = '#A7ADB5';
+  const CARD = '#15181C';
+  const LINE = '#262B31';
+  const f = FORMATS.find(x => x.id === sel) || FORMATS[0];
+  return (
+    <div style={{ background:'#0E1114', borderRadius:18, padding:24, color:B.white }}>
+      <div onClick={onBack} style={{ color:B.sky, fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:14, display:'inline-block' }}>← brand guidelines</div>
+      <div style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:26, marginBottom:4 }}>formats</div>
+      <p style={{ fontSize:13, color:DIM, lineHeight:1.6, margin:'0 0 18px', maxWidth:560 }}>every format in the library, with its full breakdown: the shape, the text system, the edit, and the shoot list. tap a tile to open it here.</p>
+      <div style={{ display:'flex', gap:10, overflowX:'auto', paddingBottom:10, WebkitOverflowScrolling:'touch' }}>
+        {FORMATS.map(x => (
+          <div key={x.id} onClick={() => onSelect(x.id)} style={{ cursor:'pointer', flexShrink:0, width:84 }}>
+            <div style={{ borderRadius:10, overflow:'hidden', outline: x.id === f.id ? `2px solid ${B.sky}` : 'none' }}>
+              <img src={`/assets/brand/formats/${x.img}`} alt={x.name} style={{ width:84, height:150, objectFit:'cover', display:'block' }} />
+            </div>
+            <div style={{ fontSize:11, fontWeight: x.id === f.id ? 700 : 500, color: x.id === f.id ? B.white : DIM, marginTop:5, lineHeight:1.3 }}>{x.name}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background:CARD, border:`1.5px solid ${LINE}`, borderRadius:16, padding:24, marginTop:14 }}>
+        <div style={{ display:'flex', gap:18, flexWrap:'wrap', marginBottom:16 }}>
+          <img src={`/assets/brand/formats/${f.img}`} alt={f.name} style={{ width:150, borderRadius:12, display:'block' }} />
+          <div style={{ flex:1, minWidth:220 }}>
+            <div style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:24, marginBottom:4 }}>{f.name}</div>
+            <div style={{ fontSize:12, color:DIM, marginBottom:10 }}>{f.tag}</div>
+            <p style={{ fontSize:13, color:DIM, lineHeight:1.6, margin:0 }}>{f.ref}</p>
+          </div>
+        </div>
+        {f.sections.map(([h, body]) => (
+          <div key={h} style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, fontWeight:700, letterSpacing:'2.2px', color:B.sky, marginBottom:5 }}>{h}</div>
+            <p style={{ fontSize:13.5, color:'#C7D5DE', lineHeight:1.65, margin:0, maxWidth:640 }}>{body}</p>
+          </div>
+        ))}
+        {f.stills && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(120px, 1fr))', gap:8, marginTop:6 }}>
+            {f.stills.map(([src, label]) => (
+              <div key={src}>
+                <img src={src} alt={label} style={{ width:'100%', borderRadius:8, display:'block' }} />
+                <div style={{ fontSize:10, color:DIM, marginTop:3 }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BrandGuidelinesTab({ onOpenFormat }) {
   const B = { sand:'#E1D9AE', ink:'#0A0A0A', sky:'#88EAF6', ocean:'#2A4A5E', slate:'#6E6E6E', white:'#FFFFFF' };
   const DISPLAY = "'Poppins', system-ui, -apple-system, sans-serif";
   const DIM = '#A7ADB5';        // dim copy on the dark stage
@@ -3809,14 +3866,6 @@ function BrandGuidelinesTab() {
   const LINE = '#262B31';       // hairline on dark
   const [copied, setCopied] = useState(null);
   const [libQ, setLibQ] = useState('');        // asset library search
-  const [formatOpen, setFormatOpen] = useState(null); // formats library: open breakdown panel
-  const formatPanelRef = useRef(null);
-  // On a phone the formats grid is tall, so an opened panel sits below the
-  // fold and a tap looks like it did nothing (Paul, 2026-11-26). Scroll the
-  // panel into view every time one opens.
-  useEffect(() => {
-    if (formatOpen && formatPanelRef.current) formatPanelRef.current.scrollIntoView({ behavior:'smooth', block:'start' });
-  }, [formatOpen]);
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
   const [liveCounts, setLiveCounts] = useState(null); // live follower counts from the platform apis
   const [liveDemo, setLiveDemo] = useState(null);     // live instagram audience demographics
@@ -3961,7 +4010,6 @@ function BrandGuidelinesTab() {
       ['end-tag.mov','end tag','video · mov','deep','paul-profile.jpg'],
     ]],
   ];
-  const curFormat = FORMATS.find(f => f.id === formatOpen) || null;
   const libQuery = libQ.trim().toLowerCase();
   const shownLib = libQuery
     ? LIB.map(([g, items]) => [g, items.filter(([, t, m]) => t.includes(libQuery) || m.includes(libQuery) || g.includes(libQuery))]).filter(([, items]) => items.length)
@@ -4333,11 +4381,11 @@ function BrandGuidelinesTab() {
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
             <div style={{ ...surf, gridColumn:'1 / -1' }}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>formats</div>
-              <p style={{ ...caption, margin:'0 0 14px' }}>every format paul shoots, as a library. the front is just the example frame and the name; tap a format and the full breakdown opens here: the shape, the text system, the shoot list, and the nuances spelled out as exact steps.</p>
+              <p style={{ ...caption, margin:'0 0 14px' }}>every format paul shoots, as a library. tap a format and its full breakdown opens in the formats tab: the shape, the text system, the shoot list, and the nuances spelled out as exact steps.</p>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:13 }}>
                 {FORMATS.map(f => (
-                  <div key={f.id} onClick={() => setFormatOpen(formatOpen === f.id ? null : f.id)} style={{ cursor:'pointer' }}>
-                    <div style={{ borderRadius:12, overflow:'hidden', outline: formatOpen === f.id ? `2px solid ${B.sky}` : 'none' }}>
+                  <div key={f.id} onClick={() => onOpenFormat && onOpenFormat(f.id)} style={{ cursor:'pointer' }}>
+                    <div style={{ borderRadius:12, overflow:'hidden' }}>
                       <img src={`/assets/brand/formats/${f.img}`} alt={f.name} style={{ width:'100%', aspectRatio:'9/16', objectFit:'cover', display:'block' }} />
                     </div>
                     <div style={{ fontSize:12, fontWeight:600, color:B.white, marginTop:7 }}>{f.name}</div>
@@ -4345,43 +4393,6 @@ function BrandGuidelinesTab() {
                   </div>
                 ))}
               </div>
-              {curFormat && (
-                <div ref={formatPanelRef} style={{ marginTop:18, borderTop:`1px solid ${LINE}`, paddingTop:16, scrollMarginTop:14 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, marginBottom:6 }}>
-                    <div style={{ fontWeight:700, fontSize:17, color:B.white }}>{curFormat.name}</div>
-                    <button onClick={() => setFormatOpen(null)} style={{ border:`1.5px solid ${LINE}`, borderRadius:999, padding:'5px 13px', fontSize:11, fontWeight:600, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:DIM }}>close ✕</button>
-                  </div>
-                  <div style={{ fontSize:11, color:DIM, marginBottom:14 }}>{curFormat.tag}</div>
-                  <p style={{ ...caption, margin:'0 0 14px' }}>{curFormat.ref}</p>
-                  {curFormat.sections.map(([h, p]) => (
-                    <div key={h} style={{ marginBottom:14 }}>
-                      <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.2, color:B.sky, marginBottom:6 }}>{h}</div>
-                      <p style={{ ...caption, margin:0 }}>{p}</p>
-                    </div>
-                  ))}
-                  {curFormat.stills && (
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginTop:4 }}>
-                      {[
-                        ['hook-arrow.jpg','the hook: big bold phrase, arrow at the thing, the answer withheld'],
-                        ['real-interaction.jpg','real interaction: ask a person a question, keep their answer'],
-                        ['tracked-label.jpg','tracked label: the name rides with the person as they move'],
-                        ['still-title.jpg','photo stills + a title treatment carry the montage sections'],
-                        ['film-clip.jpg','cut in the source: the film clip proves the claim on screen'],
-                        ['you-in-frame.jpg','you in frame: present it, react to it, thumbs up'],
-                        ['proof-insert.jpg','proof insert: every number said out loud gets its object'],
-                        ['hero-moment.jpg','the hero moment is saved for the back third, never the open'],
-                      ].map(([f2, t]) => (
-                        <div key={f2}>
-                          <div style={{ borderRadius:12, overflow:'hidden' }}>
-                            <img src={`/assets/brand/edit-style/${f2}`} alt={t} style={{ width:'100%', display:'block' }} />
-                          </div>
-                          <div style={{ fontSize:11, color:DIM, marginTop:6 }}>{t}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>listicle frame</div>
@@ -4615,6 +4626,8 @@ export default function App() {
   const [ttConnected, setTtConnected] = useState(false);
   const [flash,       setFlash]       = useState(null);
   const [tab,          setTab]          = useState('overview');
+  const [fmtSel,       setFmtSel]       = useState('wait-for-it'); // formats tab: selected format
+  const openFormat = (id) => { setFmtSel(id); setTab('formats'); setTimeout(() => window.scrollTo(0, 0), 40); };
   // Deep links: #pitch=<ids> opens the Discovery pitch view, #brand-share opens
   // Brand Guidelines in read-only share mode. The tabs parse the hash themselves.
   useEffect(() => {
@@ -8610,7 +8623,7 @@ function ExportTab({ data, year }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // END BOOKS TAB
 // ═══════════════════════════════════════════════════════════════════════════
-  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['discovery','Discovery'],['crm','CRM'],['deliverables','Deliverables'],['brand','Brand Guidelines'],['reality-casting','Reality TV Casting']];
+  const TABS = [['overview','Overview'],['analytics','Analytics'],['audience','Audience'],['revenue','Revenue'],['books','Books'],['deals','Deals'],['proposals','Proposals'],['content-intel','Content Intel'],['discovery','Discovery'],['crm','CRM'],['deliverables','Deliverables'],['brand','Brand Guidelines'],['formats','Formats'],['reality-casting','Reality TV Casting']];
 
   return (
     <div style={{ background:BG, minHeight:'100vh', color:TEXT, fontFamily:"'Poppins', system-ui, -apple-system, sans-serif" }}>
@@ -11971,7 +11984,8 @@ function ExportTab({ data, year }) {
         {tab === 'books' && <BooksTab isMobile={isMobile} showToast={showToast} dashboardDeals={deals} dashboardPaidDeals={paidDeals} dashboardTotalRevenue={totalRevenue} onOpenDeal={(d) => setDealModal({ ...d })} />}
         {/* ══ DISCOVERY ════════════════════════════════ */}
         {tab === 'discovery' && <DiscoveryTab crm={crm} deals={deals} showToast={showToast} isMobile={isMobile} />}
-        {tab === 'brand' && <BrandGuidelinesTab />}
+        {tab === 'brand' && <BrandGuidelinesTab onOpenFormat={openFormat} />}
+        {tab === 'formats' && <FormatsTab sel={fmtSel} onSelect={setFmtSel} onBack={() => setTab('brand')} />}
 
         </div>
       </div>
