@@ -4337,6 +4337,14 @@ function BrandGuidelinesTab() {
               <p style={{ ...caption, margin:'0 0 10px' }}>the shape: 1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise. 3 · facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. text runs in three tiers: small white lowercase captions for speech · big bold colour for the hook and payoff phrases, with arrows at the subject · title treatments and huge numerals for names and stats. labels on people are tracked, so the words travel with them.</p>
               <p style={{ ...caption, margin:0 }}>plan the shots before the trip, not after it. the pre-trip checklist: the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for late · for anyone getting a tracked label, keep them fully in frame with space around them and hold the shot steady a beat · volume: this style burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.</p>
             </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>text template · step labels (name to come)</div>
+              <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
+                <img src="/assets/brand/text-templates/step-label-closet.jpg" alt="step label text template on a real frame" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>in the wild · still from the closet app video, posted as an instagram reel</div>
+              <p style={{ ...caption, margin:0 }}>the step label treatment for walkthrough videos. the label ("step 1") sits in white, itc avant garde gothic pro bold, lowercase, with a thin white rule running right from the text. the step descriptor ("closet photo inventory") stacks directly underneath in sky blue (116, 230, 240), same font and weight, lowercase, with tight leading so the label and descriptor read as one block. the block sits over the footage, mid-frame. as used in the closet app video.</p>
+            </div>
           </div>
         </Act>
 
