@@ -4310,6 +4310,22 @@ function BrandGuidelinesTab() {
               </div>
             </div>
             <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>end lockup · follow for more</div>
+              <div style={{ background:'#0D2B3D', borderRadius:12, padding:16, marginBottom:10 }}>
+                <img src="/assets/brand/lockups/end-lockup-life-cheat.png" alt="end lockup, life cheat codes in sand" style={{ width:'100%', display:'block' }} />
+                <div style={{ fontSize:11, color:DIM, marginTop:8 }}>life cheat code · line two in sand</div>
+              </div>
+              <div style={{ background:'#0D2B3D', borderRadius:12, padding:16 }}>
+                <img src="/assets/brand/lockups/end-lockup-travel.png" alt="end lockup, travel tips in sky" style={{ width:'100%', display:'block' }} />
+                <div style={{ fontSize:11, color:DIM, marginTop:8 }}>travel · line two in sky</div>
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>the closing lockup, centred at the end of every video. his profile photo on the sky disc with the thin green ring, and the white check badge overlapping the bottom of the photo. two lines of text sit under it: itc avant garde gothic pro bold, lowercase, centred. line one never changes: 'follow for more' in white. line two swaps its words and its colour with the kind of video: 'life cheat codes' in sand on life cheat code videos, 'travel tips' in sky on travel videos, and white for everything else, with the wording following the same pattern. the text carries the standard shadow (black, opacity 40%, blurriness 35%, distance 4, angle -45°) so it holds up on light footage.</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <DlBtn onClick={() => dlFile('lockups/end-lockup-life-cheat.png','end-lockup-life-cheat.png')}>download life cheat lockup</DlBtn>
+                <DlBtn onClick={() => dlFile('lockups/end-lockup-travel.png','end-lockup-travel.png')}>download travel lockup</DlBtn>
+              </div>
+            </div>
+            <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>auto captions</div>
               <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
                 <img src="/assets/brand/captions/brown-caption-reference.png" alt="brown caption template on a real frame" style={{ width:'100%', display:'block' }} />
