@@ -4037,10 +4037,14 @@ function BrandGuidelinesTab() {
             <div style={{ ...caption, fontSize:11, marginTop:6 }}>the media company</div>
             <div style={{ width:2, height:24, background:LINE, marginLeft:28 }} />
             <div style={{ display:'flex', gap:'clamp(16px,6vw,70px)', alignItems:'flex-start', flexWrap:'wrap' }}>
-              {[['consulting services','agency / client work'],['paul_ferrante','the creator arm']].map(([t, s]) => (
+              {[['consulting services','agency / client work',null],['paul_ferrante','the creator arm','https://paulferrante-media-kit.vercel.app']].map(([t, s, url]) => (
                 <div key={t} style={{ display:'flex', flexDirection:'column', alignItems:'flex-start' }}>
                   <div style={{ width:2, height:16, background:LINE, marginLeft:28 }} />
-                  <div style={{ background:CARD, color:B.sky, border:`1.5px solid ${B.sky}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
+                  {url ? (
+                    <a href={url} target="_blank" rel="noreferrer" style={{ background:CARD, color:B.sky, border:`1.5px solid ${B.sky}`, padding:'10px 18px', borderRadius:12, fontWeight:700, textDecoration:'none' }}>{t}</a>
+                  ) : (
+                    <div style={{ background:CARD, color:B.sky, border:`1.5px solid ${B.sky}`, padding:'10px 18px', borderRadius:12, fontWeight:700 }}>{t}</div>
+                  )}
                   <div style={{ ...caption, fontSize:11, marginTop:6 }}>{s}</div>
                 </div>
               ))}
