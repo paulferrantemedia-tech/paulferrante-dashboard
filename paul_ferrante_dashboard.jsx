@@ -4310,6 +4310,22 @@ function BrandGuidelinesTab() {
               </div>
             </div>
             <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>title slide · interlocked hero</div>
+              <div style={{ borderRadius:12, overflow:'hidden' }}>
+                <img src="/assets/brand/title-slide/title-slide-sky.jpg" alt="title slide with the hero phrase an app in sky blue" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, margin:'6px 0 10px' }}>hero in sky</div>
+              <div style={{ borderRadius:12, overflow:'hidden' }}>
+                <img src="/assets/brand/title-slide/title-slide-sand.jpg" alt="title slide with the hero phrase built me in sand" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, marginTop:6 }}>hero in sand</div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>the title slide for the opening of a video, built as one interlocking block instead of stacked lines. a small white lead line sits on top ('one prompt'). directly under it, the hero phrase, one to three words, set huge in the hero colour and spanning most of the frame width ('an app', 'built me'). the rest of the title follows in medium white, tucked directly underneath the hero with tight leading so nothing reads as a separate line. everything is itc avant garde gothic pro bold, lowercase, centred. the hero takes the category colour: sand for life cheat code, sky blue for travel, white for everything else. the lead and supporting lines always stay white. the sky hero is the signature variant, shown in the top example. placement: mid-frame, on the chest of a talking-head frame, ending well clear of the caption zone at the bottom of the frame.</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <DlBtn onClick={() => dlFile('title-slide/title-slide-sky.jpg','title-slide-sky.jpg')}>download sky title slide</DlBtn>
+                <DlBtn onClick={() => dlFile('title-slide/title-slide-sand.jpg','title-slide-sand.jpg')}>download sand title slide</DlBtn>
+              </div>
+            </div>
+            <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>end lockup · follow for more</div>
               <div style={{ background:'#0D2B3D', borderRadius:12, padding:16, marginBottom:10 }}>
                 <img src="/assets/brand/lockups/end-lockup-life-cheat.png" alt="end lockup, life cheat codes in sand" style={{ width:'100%', display:'block' }} />
