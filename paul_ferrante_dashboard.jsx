@@ -4285,6 +4285,19 @@ function BrandGuidelinesTab() {
                 <DlBtn onClick={() => dlFile('bars/accent-bar-white.png','accent-bar-white.png')}>download white bar</DlBtn>
               </div>
             </div>
+            <div style={{ ...surf, gridColumn:'1 / -1' }}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>social covers · thumbnails</div>
+              <div style={{ display:'flex', justifyContent:'center' }}>
+                <div style={{ width:'100%', maxWidth:440 }}>
+                  <div style={{ borderRadius:12, overflow:'hidden' }}>
+                    <img src="/assets/brand/covers/feed-grid-covers.jpg" alt="paul's tiktok feed grid showing the cover system across his videos" style={{ width:'100%', display:'block' }} />
+                  </div>
+                  <div style={{ fontSize:11, color:DIM, marginTop:6 }}>the system in the wild · his tiktok feed grid, november 2026</div>
+                </div>
+              </div>
+              <p style={{ ...caption, margin:'10px 0 12px' }}>every cover is built from the video itself, never a stock still. canvas 1080 × 1350. the frame comes from the actual video: eyes open and flattering, audited at full resolution for burned-in captions; if any text survives, crop or reposition until it is gone. every frame gets the same enhance pass: autocontrast cutoff 1, colour 1.08, sharpness 1.15. the accent bar sits above the text (see thumbnail accent bar), and the text block sits at the top of the frame by default, always clear of his face. type is itc avant garde gothic pro bold, fitted to the frame width, lowercase, one to two lines, punchy. the text is white, and the payoff word or line takes the category colour: sand #e1d9ae for life cheat code, sky blue for travel, white for everything else.</p>
+              <DlBtn onClick={() => dlFile('covers/feed-grid-covers.jpg','feed-grid-covers.jpg')}>download feed grid</DlBtn>
+            </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>open tag lockup</div>
               <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
