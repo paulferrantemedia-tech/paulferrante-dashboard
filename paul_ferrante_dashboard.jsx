@@ -3785,7 +3785,7 @@ function BrandGuidelinesTab() {
   const genderPct  = liveDemo?.gender?.malePct ?? 53;
   const genderVal  = liveDemo?.gender ? `${liveDemo.gender.malePct}% / ${liveDemo.gender.femalePct}%` : '53% / 47%';
 
-  const LOGOS = [['on white','rgg-media-on-white'],['on bright sky','rgg-media-on-bright-sky'],['on ink','rgg-media-on-ink']];
+  const LOGOS = [['on white','rgg-media-on-white-v2'],['on bright sky','rgg-media-on-bright-sky-v2'],['on ink','rgg-media-on-ink-v2']];
   const PF_LOGOS = [['on sand','pf-creator-on-sand'],['on bright sky','pf-creator-on-bright-sky'],['on white','pf-creator-on-white'],['on ink','pf-creator-on-ink']];
   const PILLARS = [
     ['travel','practical travel content focused on destinations, hotels, flights, and tips that help people make confident decisions and take action.'],
