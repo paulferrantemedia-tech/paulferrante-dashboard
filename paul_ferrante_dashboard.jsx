@@ -3738,6 +3738,64 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
 // Fully self-contained styling (its own palette + inline styles) so nothing
 // leaks into other tabs. No writes to any Command Center data.
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Formats library (Act 09): Paul's video formats as a tap-in library.
+// Each format gets a 9:16 example thumbnail + name on the front; the full
+// breakdown (shape, text system, shoot list, nuances as exact steps) lives in
+// the panel that opens under the grid. Format names describe the kind of
+// video, never the creator a format was learned from (Paul, 2026-11-26: the
+// house edit is "wait for it", not "Jake style"; Jake is the reference inside
+// that page only). Nuances rule (Paul, 2026-11-26): non-obvious techniques
+// are spelled out as exact do-this instructions, never hints.
+const FORMATS = [
+  { id:'wait-for-it', name:'wait for it', img:'wait-for-it.jpg', tag:'one place or subject · the payoff is withheld to the end',
+    ref:'reference: jake’s hogwarts express tiktok (the jacobite steam train, 50 seconds) and his etihad black friday video. jake is the example inside this page, never the name of the format.',
+    sections:[
+      ['the shape', '1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise, kept in. 3 · the fact run: facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. the rule underneath everything: paul in frame, doing things, is the constant, and the collage rotates around him. aesthetic shots are ingredients, not the video; a room tour with nobody in it is wallpaper.'],
+      ['text system', 'three tiers. 1 · small white lowercase captions carry the sentence (the brown auto captions, unchanged). 2 · big bold colour for the hook and payoff phrases, with arrows at the subject; the small lead line steps down a size as the hero word lands under it. 3 · title treatments and huge numerals for names and stats. labels on people are tracked, so the words travel with them: when you shoot someone who will get a tracked label, keep them fully in frame with space around them and hold the shot steady a beat.'],
+      ['the pop words, in capcut', 'there is no template for this; capcut templates animate whole blocks in fixed positions and cost more tweaking than building it once. build one text clip with the animation set to in: a pop / scale-in set very short, about 0.1 seconds. frame-checked at full frame rate: his words snap in at full size within a frame or two; a 0.3 second spring reads noticeably softer than his. duplicate that clip for every pop word (duplication carries the font, styling and animation), retype, drag it into place, resize hero words and numbers bigger. stagger each clip’s start to the spoken word, and extend every clip’s end to the same finish point, so each new word pops in below the last and the whole list stays on screen, stacking down. pop words land only on key words: list items, numbers, the payoff. five to ten per video, never every word. save the project as a master and duplicate it per video; per video the only real work is placement.'],
+      ['nuances: the smooth 0.5 moves', 'the floaty moves are shot, not edited; the cuts are hard cuts. frame-checked: his carriage pan has natural motion blur mid-pan, his push-in on the taxi driver shifts perspective (he is walking toward the man), and the closing shot opens from a tight face to the whole carriage in one take. do it like this: 1 · shoot the move as one take: start on the person or the pov, then pan, walk in, or pull back to the view. never shoot two static shots and glue them with a transition. 2 · use 0.5 (ultrawide) for these moves, subject near the centre; the wide field of view makes hand shake look tiny and the phone’s stabilization reads as glide. 3 · move at half the speed you think you need: pans from the waist with feet planted, push-ins heel-toe. 4 · tight to wide inside one shot: zoom slowly with the on-screen dial while recording (the phone blends the 0.5 to 1x lens switch) or physically step back. 5 · cut while the camera is already moving, and start the next shot moving the same direction. 6 · capcut stabilize is a rescue for a shaky clip only; it is not where this look comes from.'],
+      ['shoot list', 'plan the shots before the trip, not after it. the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for the back third · volume: this format burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.'],
+    ], stills:true },
+  { id:'24-hours-in', name:'24 hours in', img:'24-hours-in.jpg', tag:'one place, one day · the itinerary is the video',
+    ref:'reference: @camberplaces, “how to spend 24 hours in big bear” (74 seconds).',
+    sections:[
+      ['the shape', 'title build first: over the hero shot of the place, small caption words build, then the place name lands huge with a guide card beside it. then the stops in day order: where to stay, lunch, shops, dinner, drinks, next-morning coffee and breakfast, one walk or activity. eight stops in 74 seconds in the reference. it closes on: “and that was it, our 24 hours in ___.” no hard call to action.'],
+      ['the signature device', 'every stop is introduced the same way: the place name in big display text, plus a listing card graphic composited over the footage: a photo of the place, its name, a one-line description, and category tags (pool / boutique hotel / scenic views). build the card once, reuse it at every stop. that repetition is what makes it feel like a format instead of a montage.'],
+      ['text system', 'small white lowercase word-by-word captions, centred, carry the voiceover. big rounded bold display names for each place, white or tinted per stop. the listing card does the rest.'],
+      ['the honesty rule', 'a micro-verdict at almost every stop, including a mild negative when it is true: the reference flat-out calls one dish disappointing, which is exactly what makes its favourites believable. name your favourites out loud (“our favourite place to stay”). one honest verdict per stop, said in the voiceover.'],
+      ['how it differs from wait for it', 'wait for it withholds one payoff to the end; this format distributes it, every stop is a small reveal, and the curiosity is what comes next on the list. the reference creators stay behind the camera; paul’s version keeps paul in frame, reacting and eating, per his own brand.'],
+      ['shoot list', 'the stay: sign, exterior, room, view, two or three detail shots (bathroom, chair, deck). every stop: one establishing shot clean enough to carry the name title and card, then three to five detail shots, and one tight food shot per food stop. one verdict per stop. a hero wide of the place for the title build and a closing scenic shot. about 40-50 usable clips for a 70-80 second cut.'],
+    ] },
+  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go.jpg', tag:'3 things i wish i knew before going to ___',
+    ref:'paul’s travel series. episodes: japan (37s, 546,974 plays), italy (62s), sorrento (49s), australia (28s).',
+    sections:[
+      ['the shape', 'the hook names the place and the count, and the hook text types on at the payoff word in sky blue. then the tips in order; every tip gets its proof visual, the actual thing happening, not a generic pretty shot. faces before landmarks. close on the strongest tip or a one-line verdict.'],
+      ['the rules', 'target about 28-40 seconds (japan 37s, australia 28s; italy at 62s is the long outlier). voiceover gaps near zero. captions one word at a time, brand font, plain white, no outline, centred about 78% down (the brown system). no shot repeats. no punch-in zooms or hard crops. colour matched light and bright before assembly, not after.'],
+      ['how it is judged', 'at seven days, on shares + saves per 1,000 views first (japan: 49.6 per 1k). not on day one, and never on views alone.'],
+    ] },
+  { id:'storytime', name:'storytime', img:'storytime.jpg', tag:'one story, told to camera',
+    ref:'paul’s narrative format. the proposal cliff story is banked for this format.',
+    sections:[
+      ['the structure', 'break every story into four beats: claim, specifics, turn, button. connect the beats with “but” or “therefore”, never flat “and then” sequencing. the turn is where the story changes direction; the button is the line it lands on. when feej drafts one, the hinge words are bolded so the turns are visible on the page.'],
+      ['delivery', 'low-fi and direct to camera: seated, car, gym walk, getting ready, or dog walk. the hook still stacks in the first two seconds (on-screen text, spoken hook, payoff up front) even in the casual formats.'],
+      ['example frame', 'a placeholder tile for now: swap in a frame from a real storytime when one is cut.'],
+    ] },
+  { id:'low-fi-five', name:'low-fi five', img:'low-fi-five.jpg', tag:'the low-effort lane · five formats, phone only',
+    ref:'paul’s five locked low-fi formats.',
+    sections:[
+      ['the five', 'car debriefs · gym walks · storytimes · getting ready · dog walks.'],
+      ['the job', 'one to two a week, filling the funny and wildcard slots in the four-a-week grid. no lighting rig, no shot list, no second shooter: the constraint is the format. the hook still stacks in the first two seconds (on-screen text, spoken hook, payoff up front).'],
+      ['example frame', 'a placeholder tile for now: swap in a frame from a real low-fi video when one is cut.'],
+    ] },
+  { id:'open-loop', name:'open loop series', img:'open-loop.jpg', tag:'a journey in episodes · the payoff is the finale',
+    ref:'paul’s serialized journeys: 4 haircuts left (hair repair), the skin laundry journey, the posture fix.',
+    sections:[
+      ['the rules', 'name the end up front (“4 haircuts left”). every episode carries a micro-payoff so it stands alone, while the big payoff stays deferred to the end of the series. honest day-one framing: never an expert claim, never a results claim before it is earned. episodes land on natural checkpoints, not a weekly quota. only series about things paul is already doing.'],
+      ['how it differs', 'a life cheat code video completes in one video; an open loop builds follow and return loyalty across episodes.'],
+      ['example frame', 'a placeholder tile for now: swap in a frame from the current series when one is cut.'],
+    ] },
+];
+
 function BrandGuidelinesTab() {
   const B = { sand:'#E1D9AE', ink:'#0A0A0A', sky:'#88EAF6', ocean:'#2A4A5E', slate:'#6E6E6E', white:'#FFFFFF' };
   const DISPLAY = "'Poppins', system-ui, -apple-system, sans-serif";
@@ -3747,6 +3805,7 @@ function BrandGuidelinesTab() {
   const LINE = '#262B31';       // hairline on dark
   const [copied, setCopied] = useState(null);
   const [libQ, setLibQ] = useState('');        // asset library search
+  const [formatOpen, setFormatOpen] = useState(null); // formats library: open breakdown panel
   const [shareMode, setShareMode] = useState(false); // client-facing read-only view
   const [liveCounts, setLiveCounts] = useState(null); // live follower counts from the platform apis
   const [liveDemo, setLiveDemo] = useState(null);     // live instagram audience demographics
@@ -3891,6 +3950,7 @@ function BrandGuidelinesTab() {
       ['end-tag.mov','end tag','video · mov','deep','paul-profile.jpg'],
     ]],
   ];
+  const curFormat = FORMATS.find(f => f.id === formatOpen) || null;
   const libQuery = libQ.trim().toLowerCase();
   const shownLib = libQuery
     ? LIB.map(([g, items]) => [g, items.filter(([, t, m]) => t.includes(libQuery) || m.includes(libQuery) || g.includes(libQuery))]).filter(([, items]) => items.length)
@@ -4260,6 +4320,58 @@ function BrandGuidelinesTab() {
         {/* ACT 09 · TEMPLATES */}
         <Act n="act 09 · templates" title="templates & assets">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16 }}>
+            <div style={{ ...surf, gridColumn:'1 / -1' }}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>formats</div>
+              <p style={{ ...caption, margin:'0 0 14px' }}>every format paul shoots, as a library. the front is just the example frame and the name; tap a format and the full breakdown opens here: the shape, the text system, the shoot list, and the nuances spelled out as exact steps.</p>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:13 }}>
+                {FORMATS.map(f => (
+                  <div key={f.id} onClick={() => setFormatOpen(formatOpen === f.id ? null : f.id)} style={{ cursor:'pointer' }}>
+                    <div style={{ borderRadius:12, overflow:'hidden', outline: formatOpen === f.id ? `2px solid ${B.sky}` : 'none' }}>
+                      <img src={`/assets/brand/formats/${f.img}`} alt={f.name} style={{ width:'100%', aspectRatio:'9/16', objectFit:'cover', display:'block' }} />
+                    </div>
+                    <div style={{ fontSize:12, fontWeight:600, color:B.white, marginTop:7 }}>{f.name}</div>
+                    <div style={{ fontSize:11, color:DIM }}>{f.tag}</div>
+                  </div>
+                ))}
+              </div>
+              {curFormat && (
+                <div style={{ marginTop:18, borderTop:`1px solid ${LINE}`, paddingTop:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:12, marginBottom:6 }}>
+                    <div style={{ fontWeight:700, fontSize:17, color:B.white }}>{curFormat.name}</div>
+                    <button onClick={() => setFormatOpen(null)} style={{ border:`1.5px solid ${LINE}`, borderRadius:999, padding:'5px 13px', fontSize:11, fontWeight:600, fontFamily:'inherit', cursor:'pointer', background:'transparent', color:DIM }}>close ✕</button>
+                  </div>
+                  <div style={{ fontSize:11, color:DIM, marginBottom:14 }}>{curFormat.tag}</div>
+                  <p style={{ ...caption, margin:'0 0 14px' }}>{curFormat.ref}</p>
+                  {curFormat.sections.map(([h, p]) => (
+                    <div key={h} style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:11, fontWeight:600, letterSpacing:2.2, color:B.sky, marginBottom:6 }}>{h}</div>
+                      <p style={{ ...caption, margin:0 }}>{p}</p>
+                    </div>
+                  ))}
+                  {curFormat.stills && (
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginTop:4 }}>
+                      {[
+                        ['hook-arrow.jpg','the hook: big bold phrase, arrow at the thing, the answer withheld'],
+                        ['real-interaction.jpg','real interaction: ask a person a question, keep their answer'],
+                        ['tracked-label.jpg','tracked label: the name rides with the person as they move'],
+                        ['still-title.jpg','photo stills + a title treatment carry the montage sections'],
+                        ['film-clip.jpg','cut in the source: the film clip proves the claim on screen'],
+                        ['you-in-frame.jpg','you in frame: present it, react to it, thumbs up'],
+                        ['proof-insert.jpg','proof insert: every number said out loud gets its object'],
+                        ['hero-moment.jpg','the hero moment is saved for the back third, never the open'],
+                      ].map(([f2, t]) => (
+                        <div key={f2}>
+                          <div style={{ borderRadius:12, overflow:'hidden' }}>
+                            <img src={`/assets/brand/edit-style/${f2}`} alt={t} style={{ width:'100%', display:'block' }} />
+                          </div>
+                          <div style={{ fontSize:11, color:DIM, marginTop:6 }}>{t}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>listicle frame</div>
               <div style={{ background:'#0D2B3D', borderRadius:12, padding:12, display:'flex', justifyContent:'center' }}>
@@ -4337,31 +4449,6 @@ function BrandGuidelinesTab() {
               </div>
               <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>the brown template in the wild · still from the muse meal app video, tuesday, november 24, 2026</div>
               <p style={{ ...caption, margin:0 }}>capcut auto captions, template: brown (favourited). apply to all main captions on. words appear one at a time, plain white letters, no background box, no preset style. font size 5, character spacing 1, line spacing 0, centred, sitting low on the frame (about 78% down). if a caption ever lands on a bright background, fix the shot or the placement first; the style itself never changes.</p>
-            </div>
-            <div style={{ ...surf, gridColumn:'1 / -1' }}>
-              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>edit style template · travel & life cheat code</div>
-              <p style={{ ...caption, margin:'0 0 14px' }}>the house edit for travel and life cheat code videos, modelled on jake's jacobite steam train tiktok (the "hogwarts express" video, 50 seconds · tiktok.com/t/ZPND6mMtv). the rule underneath everything: paul in frame, doing things, is the constant, and the collage rotates around him. aesthetic shots are ingredients, not the video; a room tour with nobody in it is wallpaper.</p>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:14 }}>
-                {[
-                  ['hook-arrow.jpg','the hook: big bold phrase, arrow at the thing, the answer withheld'],
-                  ['real-interaction.jpg','real interaction: ask a person a question, keep their answer'],
-                  ['tracked-label.jpg','tracked label: the name rides with the person as they move'],
-                  ['still-title.jpg','photo stills + a title treatment carry the montage sections'],
-                  ['film-clip.jpg','cut in the source: the film clip proves the claim on screen'],
-                  ['you-in-frame.jpg','you in frame: present it, react to it, thumbs up'],
-                  ['proof-insert.jpg','proof insert: every number said out loud gets its object'],
-                  ['hero-moment.jpg','the hero moment is saved for the back third, never the open'],
-                ].map(([f, t]) => (
-                  <div key={f}>
-                    <div style={{ borderRadius:12, overflow:'hidden' }}>
-                      <img src={`/assets/brand/edit-style/${f}`} alt={t} style={{ width:'100%', display:'block' }} />
-                    </div>
-                    <div style={{ fontSize:11, color:DIM, marginTop:6 }}>{t}</div>
-                  </div>
-                ))}
-              </div>
-              <p style={{ ...caption, margin:'0 0 10px' }}>the shape: 1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise. 3 · facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. text runs in three tiers: small white lowercase captions for speech · big bold colour for the hook and payoff phrases, with arrows at the subject · title treatments and huge numerals for names and stats. labels on people are tracked, so the words travel with them.</p>
-              <p style={{ ...caption, margin:0 }}>plan the shots before the trip, not after it. the pre-trip checklist: the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for late · for anyone getting a tracked label, keep them fully in frame with space around them and hold the shot steady a beat · volume: this style burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.</p>
             </div>
             <div style={surf}>
               <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>text template · step labels (name to come)</div>
