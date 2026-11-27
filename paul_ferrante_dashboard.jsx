@@ -3747,7 +3747,7 @@ function OverviewDeltaLayer({ snapshots, igFollowers, ttFollowers, ytSubs, igAna
 // that page only). Nuances rule (Paul, 2026-11-26): non-obvious techniques
 // are spelled out as exact do-this instructions, never hints.
 const FORMATS = [
-  { id:'wait-for-it', name:'wait for it', img:'wait-for-it.jpg', tag:'one place or subject · the payoff is withheld to the end',
+  { id:'wait-for-it', name:'wait for it', img:'wait-for-it.jpg', example:'https://www.tiktok.com/t/ZPND6mMtv/', tag:'one place or subject · the payoff is withheld to the end',
     ref:'reference: jake’s hogwarts express tiktok (the jacobite steam train, 50 seconds) and his etihad black friday video. jake is the example inside this page, never the name of the format.',
     sections:[
       ['the shape', '1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise, kept in. 3 · the fact run: facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. the rule underneath everything: paul in frame, doing things, is the constant, and the collage rotates around him. aesthetic shots are ingredients, not the video; a room tour with nobody in it is wallpaper.'],
@@ -3759,7 +3759,7 @@ const FORMATS = [
       { after:'nuances: the smooth 0.5 moves', src:'/assets/brand/formats/demos/pull-back-clean.gif', label:'the pull-back, rolling: starts tight on his face, then opens out to the whole seat and table in the same shot. one take: zoom out on the dial or step back while it rolls, never a cut.' },
       { after:'nuances: the smooth 0.5 moves', src:'/assets/brand/formats/demos/push-in-clean.gif', label:'the push-in, rolling: he walks toward the taxi driver and the man grows in frame. heel-toe, half the speed you think, one take.' },
     ] },
-  { id:'24-hours-in', name:'24 hours in', img:'24-hours-in-title.jpg', tag:'one place, one day · the itinerary is the video',
+  { id:'24-hours-in', name:'24 hours in', img:'24-hours-in-title.jpg', example:'https://www.tiktok.com/t/ZPNUKQoTX/', tag:'one place, one day · the itinerary is the video',
     ref:'reference: @camberplaces, “how to spend 24 hours in big bear” (74 seconds).',
     sections:[
       ['the shape', 'title build first: over the hero shot of the place, small caption words build, then the place name lands huge with a guide card beside it. then the stops in day order: where to stay, lunch, shops, dinner, drinks, next-morning coffee and breakfast, one walk or activity. eight stops in 74 seconds in the reference. it closes on: “and that was it, our 24 hours in ___.” no hard call to action.'],
@@ -3769,7 +3769,7 @@ const FORMATS = [
       ['how it differs from wait for it', 'wait for it withholds one payoff to the end; this format distributes it, every stop is a small reveal, and the curiosity is what comes next on the list. the reference creators stay behind the camera; paul’s version keeps paul in frame, reacting and eating, per his own brand.'],
       ['shoot list', 'the stay: sign, exterior, room, view, two or three detail shots (bathroom, chair, deck). every stop: one establishing shot clean enough to carry the name title and card, then three to five detail shots, and one tight food shot per food stop. one verdict per stop. a hero wide of the place for the title build and a closing scenic shot. about 40-50 usable clips for a 70-80 second cut.'],
     ] },
-  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go-cover.jpg', tag:'3 things i wish i knew before going to ___',
+  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go-cover.jpg', example:'https://www.instagram.com/reel/DgG12Y0Rdak/', tag:'3 things i wish i knew before going to ___',
     ref:'paul’s travel series. episodes: japan (37s, 546,974 plays), italy (62s), sorrento (49s), australia (28s).',
     sections:[
       ['the shape', 'the hook names the place and the count, and the hook text types on at the payoff word in sky blue. then the tips in order; every tip gets its proof visual, the actual thing happening, not a generic pretty shot. faces before landmarks. close on the strongest tip or a one-line verdict.'],
@@ -3777,7 +3777,7 @@ const FORMATS = [
       ['the edit, step by step', '1 · colour match every clip light and bright first, before any assembly. 2 · lay the voiceover down as one unlinked track and cut the gaps between lines to near zero. 3 · cut each tip to its proof visual; a tip is only as long as its proof takes. 4 · build the hook text so it finishes typing on exactly at the payoff word, in sky blue. 5 · auto captions on (brown), one word at a time, about 78% down; check no caption lands on a bright shot. 6 · scan the timeline for repeated shots and punch-in zooms; both are banned in this series, replace or re-crop. 7 · final pass at full size: a face before the landmark in every tip, and the hook fully readable inside the first two seconds.'],
       ['how it is judged', 'at seven days, on shares + saves per 1,000 views first (japan: 49.6 per 1k). not on day one, and never on views alone.'],
     ] },
-  { id:'storytime', name:'storytime', img:'storytime-fiance.jpg', tag:'one story, told to camera',
+  { id:'storytime', name:'storytime', img:'storytime-fiance-cover.jpg', example:'https://www.instagram.com/reel/C3_a66MPe27/', tag:'one story, told to camera',
     ref:'paul’s narrative format. the proposal cliff story is banked for this format.',
     sections:[
       ['the structure', 'break every story into four beats: claim, specifics, turn, button. connect the beats with “but” or “therefore”, never flat “and then” sequencing. the turn is where the story changes direction; the button is the line it lands on. when feej drafts one, the hinge words are bolded so the turns are visible on the page.'],
@@ -3793,7 +3793,7 @@ const FORMATS = [
       ['the edit', 'almost none, on purpose. trim the head and tail, captions on (brown), hook text inside the first two seconds, post. if a low-fi video needs more than ten minutes in capcut, it is not low-fi anymore.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from a real low-fi video when one is cut.'],
     ] },
-  { id:'open-loop', name:'open loop series', img:'open-loop-bleph-cover.jpg', tag:'a journey in episodes · the payoff is the finale',
+  { id:'open-loop', name:'open loop series', img:'open-loop-bleph-cover.jpg', example:'https://www.instagram.com/reel/De2U631yEHl/', tag:'a journey in episodes · the payoff is the finale',
     ref:'paul’s serialized journeys: 4 haircuts left (hair repair), the skin laundry journey, the posture fix.',
     sections:[
       ['the rules', 'name the end up front (“4 haircuts left”). every episode carries a micro-payoff so it stands alone, while the big payoff stays deferred to the end of the series. honest day-one framing: never an expert claim, never a results claim before it is earned. episodes land on natural checkpoints, not a weekly quota. only series about things paul is already doing.'],
@@ -3837,6 +3837,9 @@ function FormatsTab({ sel, onSelect, onBack }) {
             <div style={{ fontFamily:DISPLAY, fontWeight:800, fontSize:24, marginBottom:4 }}>{f.name}</div>
             <div style={{ fontSize:12, color:DIM, marginBottom:10 }}>{f.tag}</div>
             <p style={{ fontSize:13, color:DIM, lineHeight:1.6, margin:0 }}>{f.ref}</p>
+            {f.example && (
+              <a href={f.example} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:12, background:B.sky, color:'#0A0A0A', fontSize:12.5, fontWeight:700, padding:'8px 14px', borderRadius:8, textDecoration:'none' }}>watch the example ↗</a>
+            )}
           </div>
         </div>
         {f.sections.map(([h, body]) => (
