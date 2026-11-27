@@ -3753,9 +3753,12 @@ const FORMATS = [
       ['the shape', '1 · hook with the payoff withheld (his price lands at 0:33, not 0:03). 2 · a real moment early: a question, a correction, a surprise, kept in. 3 · the fact run: facts in voiceover, every claim shown with its exact visual. 4 · the payoff, over proof footage. 5 · one practical tip. 6 · verdict + a question for the comments. pace: a new visual every 1-2 seconds, about 30 cuts in 50 seconds. the rule underneath everything: paul in frame, doing things, is the constant, and the collage rotates around him. aesthetic shots are ingredients, not the video; a room tour with nobody in it is wallpaper.'],
       ['text system', 'three tiers. 1 · small white lowercase captions carry the sentence (the brown auto captions, unchanged). 2 · big bold colour for the hook and payoff phrases, with arrows at the subject; the small lead line steps down a size as the hero word lands under it. 3 · title treatments and huge numerals for names and stats. labels on people are tracked, so the words travel with them: when you shoot someone who will get a tracked label, keep them fully in frame with space around them and hold the shot steady a beat.'],
       ['the pop words, in capcut', 'there is no template for this; capcut templates animate whole blocks in fixed positions and cost more tweaking than building it once. build one text clip with the animation set to in: a pop / scale-in set very short, about 0.1 seconds. frame-checked at full frame rate: his words snap in at full size within a frame or two; a 0.3 second spring reads noticeably softer than his. duplicate that clip for every pop word (duplication carries the font, styling and animation), retype, drag it into place, resize hero words and numbers bigger. stagger each clip’s start to the spoken word, and extend every clip’s end to the same finish point, so each new word pops in below the last and the whole list stays on screen, stacking down. pop words land only on key words: list items, numbers, the payoff. five to ten per video, never every word. save the project as a master and duplicate it per video; per video the only real work is placement.'],
-      ['nuances: the smooth 0.5 moves', 'the floaty moves are shot, not edited; the cuts are hard cuts. frame-checked: his carriage pan has natural motion blur mid-pan, his push-in on the taxi driver shifts perspective (he is walking toward the man), and the closing shot opens from a tight face to the whole carriage in one take. do it like this: 1 · shoot the move as one take: start on the person or the pov, then pan, walk in, or pull back to the view. never shoot two static shots and glue them with a transition. 2 · use 0.5 (ultrawide) for these moves, subject near the centre; the wide field of view makes hand shake look tiny and the phone’s stabilization reads as glide. 3 · move at half the speed you think you need: pans from the waist with feet planted, push-ins heel-toe. 4 · tight to wide inside one shot: zoom slowly with the on-screen dial while recording (the phone blends the 0.5 to 1x lens switch) or physically step back. 5 · cut while the camera is already moving, and start the next shot moving the same direction. 6 · capcut stabilize is a rescue for a shaky clip only; it is not where this look comes from.'],
+      ['nuances: the smooth 0.5 moves', 'the floaty moves are shot, not edited; the cuts are hard cuts. frame-checked: his carriage pan has natural motion blur mid-pan, his push-in on the taxi driver shifts perspective (he is walking toward the man), and the closing shot opens from a tight face to the whole carriage in one take. do it like this: 1 · shoot the move as one take: start on the person or the pov, then pan, walk in, or pull back to the view. never shoot two static shots and glue them with a transition. 2 · use 0.5 (ultrawide) for these moves, subject near the centre; the wide field of view makes hand shake look tiny and the phone’s stabilization reads as glide. 3 · move at half the speed you think you need: pans from the waist with feet planted, push-ins heel-toe. 4 · tight to wide inside one shot: zoom slowly with the on-screen dial while recording (the phone blends the 0.5 to 1x lens switch) or physically step back. 5 · cut while the camera is already moving, and start the next shot moving the same direction. 6 · capcut stabilize is a rescue for a shaky clip only; it is not where this look comes from. the two loops right under this section show the moves rolling: the pull-back and the push-in.'],
       ['shoot list', 'plan the shots before the trip, not after it. the hero item close + wide, with one clean shot an arrow can point at · paul reacting on selfie cam, first impressions kept raw · at least one real interaction with staff or a local, their answer kept in · pov + exterior establishing of every place and vehicle · a proof insert for every number said out loud (ticket, menu, price tag, the item itself) · stills and screenshots for montage cutaways · the hero moment from two angles, saved for the back third · volume: this format burns a clip every 1-2 seconds, so a 50 second video needs 25-35 usable clips. shoot far more than the script seems to need.'],
-    ], stills:true },
+    ], stills:true, demos:[
+      { after:'nuances: the smooth 0.5 moves', src:'/assets/brand/formats/demos/pull-back.gif', label:'the pull-back, rolling: starts tight on his face, then opens to the whole carriage in one take. no cut, no effect: he steps back on 0.5 while the shot keeps rolling.' },
+      { after:'nuances: the smooth 0.5 moves', src:'/assets/brand/formats/demos/push-in.gif', label:'the push-in, rolling: he walks toward the taxi driver and the man grows in frame. heel-toe, half the speed you think, one take.' },
+    ] },
   { id:'24-hours-in', name:'24 hours in', img:'24-hours-in-title.jpg', tag:'one place, one day · the itinerary is the video',
     ref:'reference: @camberplaces, “how to spend 24 hours in big bear” (74 seconds).',
     sections:[
@@ -3840,9 +3843,40 @@ function FormatsTab({ sel, onSelect, onBack }) {
           <div key={h} style={{ marginBottom:14 }}>
             <div style={{ fontSize:10, fontWeight:700, letterSpacing:'2.2px', color:B.sky, marginBottom:5 }}>{h}</div>
             <p style={{ fontSize:13.5, color:'#C7D5DE', lineHeight:1.65, margin:0, maxWidth:640 }}>{body}</p>
+            {f.demos && f.demos.some(d => d.after === h) && (
+              <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginTop:12 }}>
+                {f.demos.filter(d => d.after === h).map(d => (
+                  <div key={d.src} style={{ width:230, maxWidth:'100%' }}>
+                    <img src={d.src} alt={d.label} style={{ width:'100%', borderRadius:10, display:'block' }} />
+                    <div style={{ fontSize:11, color:DIM, marginTop:6, lineHeight:1.5 }}>{d.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
-        {f.stills && (
+        {f.stills === true && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginTop:4 }}>
+            {[
+              ['hook-arrow.jpg','the hook: big bold phrase, arrow at the thing, the answer withheld'],
+              ['real-interaction.jpg','real interaction: ask a person a question, keep their answer'],
+              ['tracked-label.jpg','tracked label: the name rides with the person as they move'],
+              ['still-title.jpg','photo stills + a title treatment carry the montage sections'],
+              ['film-clip.jpg','cut in the source: the film clip proves the claim on screen'],
+              ['you-in-frame.jpg','you in frame: present it, react to it, thumbs up'],
+              ['proof-insert.jpg','proof insert: every number said out loud gets its object'],
+              ['hero-moment.jpg','the hero moment is saved for the back third, never the open'],
+            ].map(([f2, t]) => (
+              <div key={f2}>
+                <div style={{ borderRadius:12, overflow:'hidden' }}>
+                  <img src={`/assets/brand/edit-style/${f2}`} alt={t} style={{ width:'100%', display:'block' }} />
+                </div>
+                <div style={{ fontSize:11, color:DIM, marginTop:6 }}>{t}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {Array.isArray(f.stills) && (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(120px, 1fr))', gap:8, marginTop:6 }}>
             {f.stills.map(([src, label]) => (
               <div key={src}>
