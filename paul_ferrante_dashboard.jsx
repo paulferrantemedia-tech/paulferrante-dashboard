@@ -3769,7 +3769,7 @@ const FORMATS = [
       ['how it differs from wait for it', 'wait for it withholds one payoff to the end; this format distributes it, every stop is a small reveal, and the curiosity is what comes next on the list. the reference creators stay behind the camera; paul’s version keeps paul in frame, reacting and eating, per his own brand.'],
       ['shoot list', 'the stay: sign, exterior, room, view, two or three detail shots (bathroom, chair, deck). every stop: one establishing shot clean enough to carry the name title and card, then three to five detail shots, and one tight food shot per food stop. one verdict per stop. a hero wide of the place for the title build and a closing scenic shot. about 40-50 usable clips for a 70-80 second cut.'],
     ] },
-  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go-hook.jpg', tag:'3 things i wish i knew before going to ___',
+  { id:'know-before-you-go', name:'know before you go', img:'know-before-you-go-cover.jpg', tag:'3 things i wish i knew before going to ___',
     ref:'paul’s travel series. episodes: japan (37s, 546,974 plays), italy (62s), sorrento (49s), australia (28s).',
     sections:[
       ['the shape', 'the hook names the place and the count, and the hook text types on at the payoff word in sky blue. then the tips in order; every tip gets its proof visual, the actual thing happening, not a generic pretty shot. faces before landmarks. close on the strongest tip or a one-line verdict.'],
@@ -3793,7 +3793,7 @@ const FORMATS = [
       ['the edit', 'almost none, on purpose. trim the head and tail, captions on (brown), hook text inside the first two seconds, post. if a low-fi video needs more than ten minutes in capcut, it is not low-fi anymore.'],
       ['example frame', 'a placeholder tile for now: swap in a frame from a real low-fi video when one is cut.'],
     ] },
-  { id:'open-loop', name:'open loop series', img:'open-loop-bleph.jpg', tag:'a journey in episodes · the payoff is the finale',
+  { id:'open-loop', name:'open loop series', img:'open-loop-bleph-cover.jpg', tag:'a journey in episodes · the payoff is the finale',
     ref:'paul’s serialized journeys: 4 haircuts left (hair repair), the skin laundry journey, the posture fix.',
     sections:[
       ['the rules', 'name the end up front (“4 haircuts left”). every episode carries a micro-payoff so it stands alone, while the big payoff stays deferred to the end of the series. honest day-one framing: never an expert claim, never a results claim before it is earned. episodes land on natural checkpoints, not a weekly quota. only series about things paul is already doing.'],
