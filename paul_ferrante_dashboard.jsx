@@ -4517,6 +4517,23 @@ function BrandGuidelinesTab({ onOpenFormat }) {
               <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>in the wild · still from the closet app video, posted as an instagram reel</div>
               <p style={{ ...caption, margin:0 }}>the step label treatment for walkthrough videos. the label ("step 1") sits in white, itc avant garde gothic pro bold, lowercase, with a thin white rule running right from the text. the step descriptor ("closet photo inventory") stacks directly underneath in sky blue (116, 230, 240), same font and weight, lowercase, with tight leading so the label and descriptor read as one block. the block sits over the footage, mid-frame. as used in the closet app video.</p>
             </div>
+            <div style={surf}>
+              <div style={{ fontWeight:700, marginBottom:10, color:B.white }}>timestamp clock · bedside window</div>
+              <div style={{ borderRadius:12, overflow:'hidden', marginBottom:10 }}>
+                <img src="/assets/brand/clock/timestamp-clock-colors.jpg" alt="timestamp clock sticker in all seven brand colours" style={{ width:'100%', display:'block' }} />
+              </div>
+              <div style={{ fontSize:11, color:DIM, marginBottom:10 }}>the seven brand colours · the time is a sample; the sticker files below are blank</div>
+              <p style={{ ...caption, margin:'0 0 12px' }}>the timestamp device for routine and day-structure videos: a wide, narrow bedside-clock window with a hairline inset, an indicator dot and a single base bar. the time is set inside the blank sticker in itc avant garde gothic pro bold, lowercase, and it is always the real, unrounded time. face colour follows the category system: sand on life cheat code videos, sky on travel, ink or white anywhere else, with bright sky, deep ocean and slate as alternates. keep it small, in a corner, clear of the captions. first used on the stay-young video, friday, november 27, 2026.</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-ink.png','timestamp-clock-ink.png')}>download ink clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-sand.png','timestamp-clock-sand.png')}>download sand clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-sky.png','timestamp-clock-sky.png')}>download sky clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-bright-sky.png','timestamp-clock-bright-sky.png')}>download bright sky clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-deep-ocean.png','timestamp-clock-deep-ocean.png')}>download deep ocean clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-slate.png','timestamp-clock-slate.png')}>download slate clock (blank)</DlBtn>
+                <DlBtn onClick={() => dlFile('clock/timestamp-clock-white.png','timestamp-clock-white.png')}>download white clock (blank)</DlBtn>
+              </div>
+            </div>
           </div>
         </Act>
 
